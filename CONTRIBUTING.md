@@ -4,7 +4,7 @@ Thanks for being here. This project is meant to be easy to contribute to. If any
 
 ## Clone to green tests
 
-Four commands. Go 1.22+ is the only prerequisite.
+Four commands. Go 1.25+ is the only prerequisite — see [ADR-0004](docs/adr/0004-go-version-floor.md) for why the floor is there.
 
 ```bash
 git clone https://github.com/premhiru/spendlease.git
