@@ -1,0 +1,66 @@
+name: Bug report
+description: Something behaves differently than documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If this is a security vulnerability — a credential leak, an enforcement
+        bypass, or ledger tampering — please **stop** and report it privately via
+        [a security advisory](https://github.com/premhiru/spendlease/security/advisories/new) instead.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. spendlease serve
+        2. spendlease keys principal create --name test
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `spendlease version`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Principal mode
+      options: [observe, enforce, not applicable]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: store
+    attributes:
+      label: Datastore
+      options: [SQLite, PostgreSQL]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Please check for and remove any key material before pasting.
+      render: shell
