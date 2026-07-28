@@ -8,3 +8,6 @@ ADRs are immutable once merged. To change a decision, add a new ADR that superse
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
 | [0002](0002-project-name-and-module-path.md) | Project name and Go module path | Accepted |
+| [0003](0003-money-as-int64-nanodollars.md) | Money as int64 nanodollars | Accepted |
+| [0004](0004-go-version-floor.md) | Go version floor is 1.25 | Accepted |
+| [0005](0005-ledger-integrity.md) | How ledger immutability is actually enforced | Accepted |

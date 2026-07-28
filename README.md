@@ -174,8 +174,8 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 |---|---|---|
 | 1 | Scaffold, CI, container, contributor docs | ✅ shipped |
 | — | Release and docs publishing | ✅ shipped |
-| 2 | Store interface, SQLite, schema, ledger immutability | ⬜ next |
-| 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ⬜ |
+| 2 | Store interface, SQLite, schema, ledger immutability | ✅ shipped |
+| 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ⬜ next |
 | 4 | Price book, cost calculation, token estimation | ⬜ |
 | 5 | Ledger writes, attribution, hash chaining | ⬜ |
 | 6 | Dashboard | ⬜ |
@@ -183,7 +183,9 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 8 | Leases, scoping, revocation set, kill switch | ⬜ |
 | 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
 
-**What runs today:** the CLI command surface (`version`, `help`, and flag validation for `serve`, `demo`, `keys`), the container image, and CI. `serve` does not listen, `demo` does not simulate, and `keys` does not mint anything — each prints that it is not implemented. There is no datastore and no gateway yet.
+**What runs today:** the CLI command surface (`version`, `help`, and flag validation for `serve`, `demo`, `keys`), the container image, CI, and the storage layer — a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
+
+**What does not:** `serve` still does not listen, `demo` does not simulate, and `keys` does not mint anything. The store is complete and tested but nothing is wired to it yet; that starts with the gateway in phase 3.
 
 ## Contributing
 

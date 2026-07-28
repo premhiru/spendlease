@@ -62,3 +62,6 @@ nav:
       - Overview: adr/README.md
       - 1. Record architecture decisions: adr/0001-record-architecture-decisions.md
       - 2. Project name and module path: adr/0002-project-name-and-module-path.md
+      - 3. Money as int64 nanodollars: adr/0003-money-as-int64-nanodollars.md
+      - 4. Go version floor is 1.25: adr/0004-go-version-floor.md
+      - 5. Ledger integrity: adr/0005-ledger-integrity.md
