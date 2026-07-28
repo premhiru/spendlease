@@ -43,10 +43,12 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # Test helpers deliberately ignore errors from setup that cannot fail.
+      # Test helpers deliberately ignore errors from setup that cannot fail,
+      # and close response bodies via t.Cleanup, which bodyclose cannot see.
       - path: _test\.go
         linters:
           - errcheck
+          - bodyclose
 
 formatters:
   enable:

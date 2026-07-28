@@ -53,10 +53,12 @@ func TestRun(t *testing.T) {
 			wantErr:  "takes no arguments",
 		},
 		{
-			name:     "serve accepts flags",
-			args:     []string{"serve", "-addr", ":8080"},
-			wantCode: 0,
-			wantOut:  "not implemented yet",
+			// Validated before anything is opened or bound, so this test does
+			// not need a listener or a database.
+			name:     "serve rejects an invalid log level",
+			args:     []string{"serve", "-log-level", "chatty"},
+			wantCode: 2,
+			wantErr:  "not debug, info, warn or error",
 		},
 		{
 			name:     "serve rejects unknown flags",
@@ -74,7 +76,7 @@ func TestRun(t *testing.T) {
 			name:     "keys requires a subcommand",
 			args:     []string{"keys"},
 			wantCode: 2,
-			wantErr:  "expected one of principal, run, lease, revoke",
+			wantErr:  "expected one of principal, provider, master",
 		},
 		{
 			name:     "keys rejects an unknown subcommand",
@@ -83,10 +85,23 @@ func TestRun(t *testing.T) {
 			wantErr:  `unknown subcommand "nonsense"`,
 		},
 		{
-			name:     "keys accepts a known subcommand",
+			name:     "keys principal requires an action",
 			args:     []string{"keys", "principal"},
-			wantCode: 0,
-			wantOut:  "keys principal",
+			wantCode: 2,
+			wantErr:  "expected one of create, list, set-mode",
+		},
+		{
+			// Deferred rather than unknown, and the message says which.
+			name:     "keys lease says it is not implemented yet",
+			args:     []string{"keys", "lease"},
+			wantCode: 2,
+			wantErr:  "not implemented yet",
+		},
+		{
+			name:     "keys master requires generate",
+			args:     []string{"keys", "master"},
+			wantCode: 2,
+			wantErr:  "expected `keys master generate`",
 		},
 	}
 

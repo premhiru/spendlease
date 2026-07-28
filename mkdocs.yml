@@ -65,3 +65,5 @@ nav:
       - 3. Money as int64 nanodollars: adr/0003-money-as-int64-nanodollars.md
       - 4. Go version floor is 1.25: adr/0004-go-version-floor.md
       - 5. Ledger integrity: adr/0005-ledger-integrity.md
+      - 6. Provider routing: adr/0006-provider-routing.md
+      - 7. Credential vault and master key: adr/0007-credential-vault-and-master-key.md
