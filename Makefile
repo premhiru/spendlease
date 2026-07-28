@@ -12,7 +12,7 @@ LDFLAGS     := -s -w \
 	-X main.commit=$(COMMIT) \
 	-X main.date=$(DATE)
 
-GOLANGCI_VERSION := v2.6.2
+GOLANGCI_VERSION := v2.12.2
 
 .DEFAULT_GOAL := help
 
