@@ -1,0 +1,35 @@
+# Build artefacts
+/bin/
+/dist/
+coverage.out
+coverage.html
+
+# Local state — these can contain encrypted vendor credentials. Never commit.
+*.db
+*.db-shm
+*.db-wal
+/data/
+spendlease.key
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# SDK build output
+/sdk/python/dist/
+/sdk/python/build/
+/sdk/python/*.egg-info/
+/sdk/python/.venv/
+__pycache__/
+/sdk/typescript/dist/
+/sdk/typescript/node_modules/
+
+# Docs site build
+/site/

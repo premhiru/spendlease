@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please skim the
+        [out-of-scope list](https://github.com/premhiru/spendlease/blob/main/README.md#what-it-does-not-do)
+        first. Several genuinely good ideas live there permanently, and we would
+        rather say so up front than after you have written the code.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you unable to do today? Please describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How you are working around it now
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I have read the out-of-scope list and believe this is not on it.
+          required: true

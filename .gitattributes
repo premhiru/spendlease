@@ -1,0 +1,18 @@
+# Normalise everything to LF in the repository and in working copies.
+# Without this, a Windows checkout gives the Makefile and the shell steps in
+# CI CRLF endings, and both break on Linux in ways that are tedious to debug.
+* text=auto eol=lf
+
+# Files that must never be touched.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.db binary
+
+# Generated or vendored content should not clutter diffs or language stats.
+LICENSE          linguist-vendored
+docs/**          linguist-documentation
+pricing/*.yaml   linguist-generated=false

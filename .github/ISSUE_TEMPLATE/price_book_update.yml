@@ -1,0 +1,65 @@
+name: Price book update
+description: A vendor price is wrong, out of date, or missing a model.
+title: "pricing: "
+labels: ["pricing", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you — this is the most valuable kind of report this project gets.
+
+        If you are willing to open the PR yourself, please do; it is a one-line
+        YAML change and needs no Go. See
+        [CONTRIBUTING](https://github.com/premhiru/spendlease/blob/main/CONTRIBUTING.md#price-book-updates).
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      placeholder: openai, anthropic, ...
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: gpt-4o
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Vendor pricing page
+      description: A link to the vendor's public pricing page. A price without a source cannot be reviewed.
+    validations:
+      required: true
+
+  - type: input
+    id: effective
+    attributes:
+      label: Effective date
+      description: The date the price actually takes effect, not today's date.
+      placeholder: 2026-07-01
+    validations:
+      required: true
+
+  - type: textarea
+    id: rates
+    attributes:
+      label: Correct rates
+      description: USD per 1M tokens.
+      value: |
+        input_per_1m:
+        output_per_1m:
+        default_max_tokens:
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: What is in the price book now
+      description: Leave blank if the model is missing entirely.

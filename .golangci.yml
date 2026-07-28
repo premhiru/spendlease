@@ -1,0 +1,58 @@
+# golangci-lint v2 configuration.
+# Keep this list boring. Lint rules that contributors have to argue with are a
+# tax on the exact people we most want contributing.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck      # unchecked errors are the bug class this project can least afford
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - revive        # style, including the "every exported symbol is documented" rule
+    - bodyclose     # the gateway proxies HTTP; leaked response bodies leak connections
+    - rowserrcheck
+    - misspell
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+        - name: package-comments
+        - name: error-strings
+        - name: context-as-argument
+        - name: indent-error-flow
+    errcheck:
+      check-type-assertions: true
+      # Writes to an already-chosen output stream are the one place ignoring an
+      # error is correct: there is nowhere left to report the failure to, and a
+      # CLI that panics because stdout is a closed pipe is worse than one that
+      # does not. Every other unchecked error stays an error.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+  exclusions:
+    generated: lax
+    rules:
+      # Test helpers deliberately ignore errors from setup that cannot fail.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/premhiru/spendlease
