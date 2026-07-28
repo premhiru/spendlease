@@ -14,16 +14,21 @@ This is **IAM for machine spend**, closer to `sts:AssumeRole` than to Expensify.
 
 ## Quickstart
 
+> [!WARNING]
+> **This does not work yet.** `spendlease` is pre-v0.1. `serve` currently starts, logs its configuration and exits without listening, so there is nothing at `localhost:4000` to open. Everything below describes v0.1 as designed and is the specification the build is working towards. Track what has actually shipped in [Status](#status).
+>
+> The published image is tagged `:edge` (latest `main`) and by version. There is deliberately no `:latest` tag until a release can serve a request — pulling an untagged image and getting a stub would be worse than a missing tag.
+
 No signup, no config file, no database to provision.
 
 ```bash
-docker run -p 4000:4000 ghcr.io/premhiru/spendlease
+docker run -p 4000:4000 ghcr.io/premhiru/spendlease:edge
 ```
 
 Open <http://localhost:4000>. The dashboard is live and empty. To fill it without wiring up your own application first:
 
 ```bash
-docker exec -it $(docker ps -q -f ancestor=ghcr.io/premhiru/spendlease) spendlease demo
+docker exec -it $(docker ps -q -f ancestor=ghcr.io/premhiru/spendlease:edge) spendlease demo
 ```
 
 `spendlease demo` spawns a simulated agent fleet against a mock provider, including one agent deliberately stuck in a retry loop. Watch it climb the table, then hit **Revoke** and watch it stop mid-flight.
@@ -163,7 +168,22 @@ Full site: **<https://premhiru.github.io/spendlease>**
 
 ## Status
 
-Pre-v0.1 and under active construction. The README above describes v0.1 as designed; features land phase by phase and `main` stays working throughout. Check the [milestones](https://github.com/premhiru/spendlease/milestones) for what has actually shipped.
+Pre-v0.1 and under active construction. Everything above describes v0.1 as designed and is the specification the build works towards; this table is what actually exists today. `main` stays working at every step.
+
+| Phase | | |
+|---|---|---|
+| 1 | Scaffold, CI, container, contributor docs | ✅ shipped |
+| — | Release and docs publishing | ✅ shipped |
+| 2 | Store interface, SQLite, schema, ledger immutability | ⬜ next |
+| 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ⬜ |
+| 4 | Price book, cost calculation, token estimation | ⬜ |
+| 5 | Ledger writes, attribution, hash chaining | ⬜ |
+| 6 | Dashboard | ⬜ |
+| 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ |
+| 8 | Leases, scoping, revocation set, kill switch | ⬜ |
+| 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
+
+**What runs today:** the CLI command surface (`version`, `help`, and flag validation for `serve`, `demo`, `keys`), the container image, and CI. `serve` does not listen, `demo` does not simulate, and `keys` does not mint anything — each prints that it is not implemented. There is no datastore and no gateway yet.
 
 ## Contributing
 

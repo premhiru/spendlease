@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    name: Publish container image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` deliberately only moves on a stable tag. A prerelease must
+      # never become the image a stranger gets from `docker run ghcr.io/...`
+      # with no tag -- see the note in the README quickstart. A hyphen in the
+      # tag name is what marks a prerelease: v0.1.0-alpha.1.
+      - name: Decide whether latest moves
+        id: flavor
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" != *-* ]]; then
+            echo "value=latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=edge,branch=main
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+          flavor: ${{ steps.flavor.outputs.value }}
+          labels: |
+            org.opencontainers.image.title=spendlease
+            org.opencontainers.image.description=Spend authorization gateway for AI agents
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_type == 'tag' && github.ref_name || 'edge' }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ github.event.repository.updated_at }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Pulling the image we just pushed is the only proof that matters.
+      - name: Verify the published image runs
+        run: |
+          tag=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          docker run --rm "$tag" version
+
+  binaries:
+    name: Attach binaries to release
+    # Only tags produce a GitHub release; main pushes just refresh :edge.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          ext=""
+          [ "$GOOS" = "windows" ] && ext=".exe"
+          name="spendlease_${GITHUB_REF_NAME}_${GOOS}_${GOARCH}${ext}"
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA::7} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o "dist/${name}" ./cmd/spendlease
+          (cd dist && sha256sum "${name}" > "${name}.sha256")
+
+      - name: Upload to the release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          # Anything with a hyphen in the version is a prerelease: v0.1.0-alpha.1.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
