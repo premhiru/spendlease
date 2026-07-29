@@ -16,10 +16,11 @@ This is **IAM for machine spend**, closer to `sts:AssumeRole` than to Expensify.
 
 ## Quickstart
 
-> [!WARNING]
-> **This does not work yet.** `spendlease` is pre-v0.1. `serve` currently starts, logs its configuration and exits without listening, so there is nothing at `localhost:4000` to open. Everything below describes v0.1 as designed and is the specification the build is working towards. Track what has actually shipped in [Status](#status).
->
-> The published image is tagged `:edge` (latest `main`) and by version. There is deliberately no `:latest` tag until a release can serve a request — pulling an untagged image and getting a stub would be worse than a missing tag.
+> [!NOTE]
+> The gateway, dashboard, accounting and budget enforcement work today. Lease
+> issuance, the kill switch and `spendlease demo` arrive in the remaining
+> phases; use a principal key (`slk_`) for requests until leases land. Track
+> the exact boundary in [Status](#status).
 
 No signup, no config file, no database to provision.
 
@@ -30,10 +31,12 @@ docker run -p 4000:4000 ghcr.io/premhiru/spendlease:edge
 Open <http://localhost:4000>. The dashboard is live and empty. To fill it without wiring up your own application first:
 
 ```bash
-docker exec -it $(docker ps -q -f ancestor=ghcr.io/premhiru/spendlease:edge) spendlease demo
+spendlease keys principal create --name checkout-agent
+spendlease keys provider set openai --key "$OPENAI_API_KEY"
 ```
 
-`spendlease demo` spawns a simulated agent fleet against a mock provider, including one agent deliberately stuck in a retry loop. Watch it climb the table, then hit **Revoke** and watch it stop mid-flight.
+Use the shown-once `slk_` principal key in the integration below. The
+zero-credential simulated fleet command, `spendlease demo`, arrives in phase 9.
 
 Prefer a binary?
 
@@ -42,7 +45,8 @@ go install github.com/premhiru/spendlease/cmd/spendlease@latest
 spendlease serve
 ```
 
-State lands in a single SQLite file (`./spendlease.db` by default). Point `--store` at a PostgreSQL URL when you outgrow it; the schema is identical.
+State lands in a single SQLite file (`./spendlease.db` by default). The
+optional PostgreSQL backend is planned but not implemented yet.
 
 ## Integration
 
@@ -53,7 +57,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key=os.environ["SPENDLEASE_LEASE_TOKEN"],  # sll_... , not your OpenAI key
+    api_key=os.environ["SPENDLEASE_PRINCIPAL_KEY"],  # slk_... temporarily; never your OpenAI key
 )
 ```
 
@@ -62,16 +66,15 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({
   baseURL: "http://localhost:4000",
-  apiKey: process.env.SPENDLEASE_LEASE_TOKEN,
+  apiKey: process.env.SPENDLEASE_PRINCIPAL_KEY,
 });
 ```
 
-Your real vendor keys stay in the gateway's encrypted vault. The agent never holds one. To mint a lease:
+Your real vendor keys stay in the gateway's encrypted vault. The agent never
+holds one. Until short-lived leases land in phase 8, create a principal key:
 
 ```bash
-spendlease keys principal create --name checkout-agent          # -> slk_...  (shown once)
-spendlease keys run create --principal checkout-agent --budget 25.00
-spendlease keys lease issue --run <run-id> --ttl 15m --provider openai   # -> sll_...  (shown once)
+spendlease keys principal create --name checkout-agent  # -> slk_... (shown once)
 ```
 
 Every new principal starts in **observe mode**: everything passes through, nothing is blocked, all of it is recorded. Flip to enforcement when you trust the numbers, with one API call or one toggle in the dashboard.
@@ -184,19 +187,27 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 4 | Price book, cost calculation, token estimation | ✅ shipped |
 | 5 | Ledger writes, attribution, hash chaining | ✅ shipped |
 | 6 | Dashboard | ✅ shipped |
-| 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ next |
-| 8 | Leases, scoping, revocation set, kill switch | ⬜ |
+| 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ✅ shipped |
+| 8 | Leases, scoping, revocation set, kill switch | ⬜ next |
 | 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
 
 **What runs today:** `spendlease serve` starts a working reverse proxy. It authenticates agents by principal key, swaps that key for the real vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or Anthropic by path, streams SSE responses through unbuffered, and logs every request with per-principal and per-provider attribution. `spendlease keys principal` and `spendlease keys provider` manage identities and vendor credentials. Underneath sits a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
 
 The price book prices any request exactly — 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
 
-**Spend is now recorded.** Every successful request produces an append-only, hash-chained ledger entry attributed to a principal and a run, priced from the token counts the vendor reported — including streamed responses on both vendors. Failed requests are not charged. Entries the gateway could not price exactly are marked `estimated` and say why. This is **observe mode**: everything is recorded, nothing is blocked.
+**Spend is reserved and settled.** Before egress, each request holds a priced
+upper bound against its run and every budgeted ancestor in one atomic
+transaction. Enforce mode returns a structured `402` before contacting the
+vendor when the hold does not fit. Observe mode records the same would-block
+decision but forwards it. Successful responses settle actual usage; provider
+errors release the hold; disconnects settle partial usage; and a background
+sweeper reclaims abandoned reservations after their TTL.
 
 **The dashboard is live** at `http://localhost:4000` — one table, sorted by spend descending, with a one-click observe/enforce toggle and a badge on every agent whose run exceeded its budget. That badge is the point of observe mode: each of those requests was served, and would not have been under enforcement.
 
-**What does not:** **nothing is capped.** There is no reservation, no budget enforcement and no `402` — the "would have been blocked" badge is a report, not an action. Leases are stored but not issued; agents authenticate with the long-lived principal key. `demo` does not exist.
+**What does not:** Leases are stored but not issued, scoped or accepted for
+authentication yet; agents temporarily authenticate with the long-lived
+principal key. The kill switch and `demo` do not exist.
 
 ## Contributing
 

@@ -668,6 +668,214 @@ func TestPendingReservationTotalIsZeroWhenEmpty(t *testing.T) {
 	}
 }
 
+func pendingReservation(runID, amount string) store.Reservation {
+	now := time.Now()
+	return store.Reservation{
+		ID: store.NewReservationID(), RunID: runID,
+		Amount: money.MustParseUSD(amount), Status: store.ReservationPending,
+		ExpiresAt: now.Add(time.Minute), CreatedAt: now,
+	}
+}
+
+func TestTryReserveAllowsExactExhaustionAndRejectsTheNextRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "exact-budget")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("1.00"))
+	appendEntry(t, s, p, r, "0.40")
+	if err := s.CreateReservation(ctx, pendingReservation(r.ID, "0.20")); err != nil {
+		t.Fatalf("seed hold: %v", err)
+	}
+
+	exact := pendingReservation(r.ID, "0.40")
+	d, err := s.TryReserve(ctx, exact, true)
+	if err != nil {
+		t.Fatalf("exact reserve: %v", err)
+	}
+	if !d.Allowed || d.WouldBlock {
+		t.Fatalf("exact reserve decision = %+v, want allowed", d)
+	}
+
+	next := pendingReservation(r.ID, "0.01")
+	d, err = s.TryReserve(ctx, next, true)
+	if err != nil {
+		t.Fatalf("next reserve: %v", err)
+	}
+	if d.Allowed || !d.WouldBlock {
+		t.Fatalf("next reserve decision = %+v, want blocked", d)
+	}
+	if d.Remaining != 0 || d.Shortfall != money.MustParseUSD("0.01") {
+		t.Errorf("remaining/shortfall = %s/%s, want 0.00/0.01", d.Remaining, d.Shortfall)
+	}
+	if _, err := s.GetReservation(ctx, next.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("blocked reservation was persisted: %v", err)
+	}
+}
+
+func TestTryReserveObserveModeRecordsWhatWouldBlock(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "observe-budget")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("0.10"))
+	res := pendingReservation(r.ID, "0.25")
+
+	d, err := s.TryReserve(ctx, res, false)
+	if err != nil {
+		t.Fatalf("TryReserve: %v", err)
+	}
+	if !d.Allowed || !d.WouldBlock {
+		t.Fatalf("decision = %+v, want allowed and would-block", d)
+	}
+	if got, err := s.GetReservation(ctx, res.ID); err != nil || got.Status != store.ReservationPending {
+		t.Fatalf("observe reservation = (%+v, %v), want pending", got, err)
+	}
+}
+
+func TestTryReserveCountsDescendantsAgainstParent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "parent-budget")
+	parent := seedRun(t, s, p.ID, "", money.MustParseUSD("1.00"))
+	childA := seedRun(t, s, p.ID, parent.ID, money.MustParseUSD("1.00"))
+	childB := seedRun(t, s, p.ID, parent.ID, money.MustParseUSD("1.00"))
+	if err := s.CreateReservation(ctx, pendingReservation(childA.ID, "0.75")); err != nil {
+		t.Fatalf("seed sibling hold: %v", err)
+	}
+
+	d, err := s.TryReserve(ctx, pendingReservation(childB.ID, "0.50"), true)
+	if err != nil {
+		t.Fatalf("TryReserve: %v", err)
+	}
+	if d.Allowed || d.RunID != parent.ID {
+		t.Fatalf("decision = %+v, want parent %s to block", d, parent.ID)
+	}
+	if d.Held != money.MustParseUSD("0.75") || d.Shortfall != money.MustParseUSD("0.25") {
+		t.Errorf("held/shortfall = %s/%s, want 0.75/0.25", d.Held, d.Shortfall)
+	}
+}
+
+func TestConcurrentReservationsCannotOversubscribeRun(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "concurrent-budget")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("1.00"))
+
+	const requests = 20
+	results := make(chan bool, requests)
+	errs := make(chan error, requests)
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d, err := s.TryReserve(ctx, pendingReservation(r.ID, "0.10"), true)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- d.Allowed
+		}()
+	}
+	wg.Wait()
+	close(results)
+	close(errs)
+	for err := range errs {
+		t.Errorf("TryReserve: %v", err)
+	}
+
+	allowed := 0
+	for ok := range results {
+		if ok {
+			allowed++
+		}
+	}
+	if allowed != 10 {
+		t.Errorf("allowed %d concurrent reservations, want exactly 10", allowed)
+	}
+	if total, err := s.PendingReservationTotal(ctx, r.ID); err != nil || total != money.MustParseUSD("1.00") {
+		t.Errorf("pending total = (%s, %v), want 1.00", total, err)
+	}
+}
+
+func TestSettleReservationIsAtomicAndIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "settlement")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("1.00"))
+	res := pendingReservation(r.ID, "0.50")
+	if _, err := s.TryReserve(ctx, res, true); err != nil {
+		t.Fatalf("TryReserve: %v", err)
+	}
+	entry := ledger.Entry{
+		RunID: r.ID, PrincipalID: p.ID, Provider: "openai", Model: "gpt-4o",
+		InputTokens: 10, OutputTokens: 20, Cost: money.MustParseUSD("0.12"),
+	}
+
+	first, err := s.SettleReservation(ctx, res.ID, entry)
+	if err != nil {
+		t.Fatalf("first settle: %v", err)
+	}
+	second, err := s.SettleReservation(ctx, res.ID, entry)
+	if err != nil {
+		t.Fatalf("idempotent settle: %v", err)
+	}
+	if second.Seq != first.Seq || second.Hash != first.Hash {
+		t.Errorf("second settlement created a different entry: first=%+v second=%+v", first, second)
+	}
+	entries, _ := s.LedgerEntries(ctx, store.LedgerFilter{})
+	if len(entries) != 1 {
+		t.Errorf("ledger has %d entries, want 1", len(entries))
+	}
+	got, _ := s.GetReservation(ctx, res.ID)
+	if got.Status != store.ReservationSettled || got.ResolvedAt == nil {
+		t.Errorf("reservation after settle = %+v", got)
+	}
+}
+
+func TestExpiredReservationCanStillRecordLateUsageOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "late-settlement")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("1.00"))
+	res := pendingReservation(r.ID, "0.50")
+	res.ExpiresAt = time.Now().Add(-time.Second)
+	if err := s.CreateReservation(ctx, res); err != nil {
+		t.Fatalf("CreateReservation: %v", err)
+	}
+	if _, err := s.ExpirePendingReservations(ctx, time.Now()); err != nil {
+		t.Fatalf("expire: %v", err)
+	}
+
+	entry := ledger.Entry{
+		RunID: r.ID, PrincipalID: p.ID, Provider: "openai", Model: "gpt-4o",
+		InputTokens: 10, OutputTokens: 20, Cost: money.MustParseUSD("0.12"),
+	}
+	first, err := s.SettleReservation(ctx, res.ID, entry)
+	if err != nil {
+		t.Fatalf("late settle: %v", err)
+	}
+	second, err := s.SettleReservation(ctx, res.ID, entry)
+	if err != nil || second.Seq != first.Seq {
+		t.Fatalf("late settlement retry = (%+v, %v), want seq %d", second, err, first.Seq)
+	}
+	got, _ := s.GetReservation(ctx, res.ID)
+	if got.Status != store.ReservationExpired {
+		t.Errorf("late settlement changed expired status to %q", got.Status)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Ledger
 // ---------------------------------------------------------------------------

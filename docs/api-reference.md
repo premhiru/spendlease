@@ -3,8 +3,8 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v0.1. Budget enforcement and the `402` response are not built yet. This
-> page documents what is implemented, not what is planned.
+> Pre-v0.1. Lease authentication is not built yet. This page documents what is
+> implemented, not what is planned.
 
 ## Authentication
 
@@ -32,6 +32,18 @@ X-Spendlease-Run: run_...
 ```
 
 Naming a run that does not exist, or one belonging to a different principal, returns `400 unknown_run` before the request is forwarded.
+
+## Budget authorization
+
+Every proxy request creates a bounded reservation before it reaches the
+vendor. The gateway estimates input tokens, uses the request's output ceiling
+or the price book's `default_max_tokens`, and atomically checks settled spend
+plus pending holds against the run and every budgeted ancestor.
+
+Observe-mode principals always pass; a would-block decision is logged. An
+enforce-mode request that does not fit returns `402 budget_exceeded` and the
+vendor is not contacted. See [reserve and settle](reserve-and-settle.md) for
+the formula, concurrency guarantee and lifecycle.
 
 ## Accounting
 
@@ -138,6 +150,8 @@ Every spendlease-generated error is JSON with the same shape, and carries `X-Spe
 |---|---|---|
 | `unauthenticated` | 401 | No credential, a malformed one, or one that is not recognised |
 | `unknown_route` | 404 | No provider claims this path |
+| `unknown_run` | 400 | The requested run is missing or belongs to another principal |
+| `budget_exceeded` | 402 | The reservation exceeds the run or an ancestor's remaining budget |
 | `provider_credential_missing` | 503 | No vendor key stored, or it could not be decrypted |
 | `upstream_unavailable` | 502 | The vendor could not be reached |
 | `internal` | 500 | The gateway itself failed |

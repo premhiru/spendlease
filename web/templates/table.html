@@ -37,7 +37,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
           <div class="agent-id">{{ .ID }}</div>
           {{ if .OverBudget }}
           <div class="badge"
-               title="This run exceeded its budget. Nothing blocked it, because budgets are not enforced yet.">
+               title="This run exceeded its budget while the principal was in observe mode.">
             would have been blocked
           </div>
           {{ end }}

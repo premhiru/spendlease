@@ -48,6 +48,12 @@ type Store struct {
 	// key on seq and the unique index on hash would turn the race into a
 	// failed insert rather than a forked chain.
 	appendMu sync.Mutex
+
+	// reserveMu serialises budget decisions, releases, expiry and settlement
+	// within this process. The decision itself still runs in a transaction;
+	// the mutex prevents two goroutines using separate deferred transactions
+	// from reading the same balance before either writes its hold.
+	reserveMu sync.Mutex
 }
 
 // Options configures a SQLite store.
@@ -218,6 +224,18 @@ func (s *Store) SetPrincipalMode(ctx context.Context, id string, m store.Mode) e
 func (s *Store) CreateRun(ctx context.Context, r store.Run) error {
 	if !r.Status.Valid() {
 		return fmt.Errorf("%w: status %q is not active or closed", store.ErrConflict, r.Status)
+	}
+	if r.ParentRunID != "" {
+		parent, err := s.GetRun(ctx, r.ParentRunID)
+		if err != nil {
+			return err
+		}
+		if parent.PrincipalID != r.PrincipalID {
+			return fmt.Errorf("%w: parent run belongs to a different principal", store.ErrConflict)
+		}
+		if parent.Status != store.RunActive {
+			return fmt.Errorf("%w: parent run %s is closed", store.ErrConflict, parent.ID)
+		}
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO runs (id, principal_id, parent_run_id, budget_nanos, status, created_at, closed_at)
@@ -451,16 +469,151 @@ func (s *Store) RevokeLeasesForPrincipal(ctx context.Context, principalID string
 
 // CreateReservation inserts a pending hold.
 func (s *Store) CreateReservation(ctx context.Context, r store.Reservation) error {
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+
+	return s.createReservation(ctx, s.db, r)
+}
+
+type execer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func (s *Store) createReservation(ctx context.Context, db execer, r store.Reservation) error {
 	if !r.Status.Valid() {
 		return fmt.Errorf("%w: reservation status %q is not recognised", store.ErrConflict, r.Status)
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := db.ExecContext(ctx,
 		`INSERT INTO reservations (id, run_id, lease_id, amount_nanos, status, expires_at, created_at, resolved_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.ID, r.RunID, r.LeaseID, int64(r.Amount), string(r.Status),
+		r.ID, r.RunID, nullString(r.LeaseID), int64(r.Amount), string(r.Status),
 		formatTime(r.ExpiresAt), formatTime(r.CreatedAt), nullTime(r.ResolvedAt),
 	)
 	return wrap(err, "creating reservation")
+}
+
+// TryReserve checks every applicable budget and conditionally inserts a hold
+// in one transaction.
+func (s *Store) TryReserve(ctx context.Context, r store.Reservation, enforce bool) (store.BudgetDecision, error) {
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+
+	decision := store.BudgetDecision{RunID: r.RunID, Requested: r.Amount}
+	if r.Status != store.ReservationPending {
+		return decision, fmt.Errorf("%w: a new reservation must be pending", store.ErrConflict)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return decision, wrap(err, "beginning budget decision")
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type node struct {
+		id     string
+		budget money.Nanos
+		status store.RunStatus
+	}
+	rows, err := tx.QueryContext(ctx, `
+		WITH RECURSIVE ancestors(id, parent_run_id, budget_nanos, status, depth) AS (
+			SELECT id, parent_run_id, budget_nanos, status, 0 FROM runs WHERE id = ?
+			UNION ALL
+			SELECT r.id, r.parent_run_id, r.budget_nanos, r.status, a.depth + 1
+			FROM runs r JOIN ancestors a ON r.id = a.parent_run_id
+		)
+		SELECT id, budget_nanos, status FROM ancestors ORDER BY depth`, r.RunID)
+	if err != nil {
+		return decision, wrap(err, "reading run budget chain")
+	}
+
+	var chain []node
+	for rows.Next() {
+		var n node
+		var budget int64
+		var status string
+		if err := rows.Scan(&n.id, &budget, &status); err != nil {
+			_ = rows.Close()
+			return decision, wrap(err, "reading run budget chain")
+		}
+		n.budget = money.Nanos(budget)
+		n.status = store.RunStatus(status)
+		chain = append(chain, n)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return decision, wrap(err, "iterating run budget chain")
+	}
+	if err := rows.Close(); err != nil {
+		return decision, wrap(err, "closing run budget chain")
+	}
+	if len(chain) == 0 {
+		return decision, fmt.Errorf("%w: run %s", store.ErrNotFound, r.RunID)
+	}
+
+	for _, n := range chain {
+		if n.status != store.RunActive {
+			return decision, fmt.Errorf("%w: run %s is %s", store.ErrConflict, n.id, n.status)
+		}
+		if n.budget == 0 {
+			continue
+		}
+
+		spent, held, err := subtreeUsage(ctx, tx, n.id)
+		if err != nil {
+			return decision, err
+		}
+		remaining := n.budget
+		if spent >= remaining {
+			remaining = 0
+		} else {
+			remaining -= spent
+		}
+		if held >= remaining {
+			remaining = 0
+		} else {
+			remaining -= held
+		}
+
+		if r.Amount > remaining && !decision.WouldBlock {
+			decision.WouldBlock = true
+			decision.RunID = n.id
+			decision.Budget = n.budget
+			decision.Spent = spent
+			decision.Held = held
+			decision.Remaining = remaining
+			decision.Shortfall = r.Amount - remaining
+		}
+	}
+
+	decision.Allowed = !enforce || !decision.WouldBlock
+	if decision.Allowed {
+		if err := s.createReservation(ctx, tx, r); err != nil {
+			return decision, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return decision, wrap(err, "committing budget decision")
+	}
+	return decision, nil
+}
+
+func subtreeUsage(ctx context.Context, tx *sql.Tx, runID string) (money.Nanos, money.Nanos, error) {
+	var spent, held int64
+	err := tx.QueryRowContext(ctx, `
+		WITH RECURSIVE subtree(id) AS (
+			SELECT id FROM runs WHERE id = ?
+			UNION ALL
+			SELECT r.id FROM runs r JOIN subtree s ON r.parent_run_id = s.id
+		)
+		SELECT
+			COALESCE((SELECT SUM(cost_nanos) FROM ledger WHERE run_id IN (SELECT id FROM subtree)), 0),
+			COALESCE((SELECT SUM(amount_nanos) FROM reservations
+			          WHERE status = 'pending' AND run_id IN (SELECT id FROM subtree)), 0)`, runID).
+		Scan(&spent, &held)
+	if err != nil {
+		return 0, 0, wrap(err, "calculating subtree budget usage")
+	}
+	return money.Nanos(spent), money.Nanos(held), nil
 }
 
 // GetReservation returns a reservation by ID.
@@ -471,13 +624,15 @@ func (s *Store) GetReservation(ctx context.Context, id string) (store.Reservatio
 
 	var r store.Reservation
 	var status, expires, created string
+	var lease sql.NullString
 	var resolved sql.NullString
 	var amount int64
 
-	if err := row.Scan(&r.ID, &r.RunID, &r.LeaseID, &amount, &status, &expires, &created, &resolved); err != nil {
+	if err := row.Scan(&r.ID, &r.RunID, &lease, &amount, &status, &expires, &created, &resolved); err != nil {
 		return store.Reservation{}, wrap(err, "reading reservation")
 	}
 
+	r.LeaseID = lease.String
 	r.Amount = money.Nanos(amount)
 	r.Status = store.ReservationStatus(status)
 
@@ -500,6 +655,9 @@ func (s *Store) GetReservation(ctx context.Context, id string) (store.Reservatio
 // succeeding quietly. A double settle would release the same budget twice,
 // and silently tolerating it would make that bug invisible.
 func (s *Store) ResolveReservation(ctx context.Context, id string, status store.ReservationStatus, at time.Time) error {
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+
 	if !status.Valid() || status == store.ReservationPending {
 		return fmt.Errorf("%w: %q is not a terminal reservation status", store.ErrConflict, status)
 	}
@@ -529,6 +687,9 @@ func (s *Store) ResolveReservation(ctx context.Context, id string, status store.
 
 // ExpirePendingReservations reclaims every pending hold whose TTL has passed.
 func (s *Store) ExpirePendingReservations(ctx context.Context, now time.Time) (int, error) {
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE reservations SET status = 'expired', resolved_at = ?
 		 WHERE status = 'pending' AND expires_at <= ?`,
@@ -555,6 +716,80 @@ func (s *Store) PendingReservationTotal(ctx context.Context, runID string) (mone
 	return money.Nanos(total.Int64), nil
 }
 
+// SettleReservation atomically appends a charge and resolves its hold.
+func (s *Store) SettleReservation(
+	ctx context.Context,
+	reservationID string,
+	e ledger.Entry,
+) (ledger.Entry, error) {
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+	s.appendMu.Lock()
+	defer s.appendMu.Unlock()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ledger.Entry{}, wrap(err, "beginning reservation settlement")
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var existingSeq int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT ledger_seq FROM reservation_settlements WHERE reservation_id = ?`,
+		reservationID).Scan(&existingSeq)
+	if err == nil {
+		return ledgerEntryBySeq(ctx, tx, existingSeq)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return ledger.Entry{}, wrap(err, "checking prior reservation settlement")
+	}
+
+	var runID, status string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT run_id, status FROM reservations WHERE id = ?`, reservationID).
+		Scan(&runID, &status); err != nil {
+		return ledger.Entry{}, wrap(err, "reading reservation for settlement")
+	}
+	if e.RunID != runID {
+		return ledger.Entry{}, fmt.Errorf("%w: reservation %s belongs to run %s, not %s",
+			store.ErrConflict, reservationID, runID, e.RunID)
+	}
+	if status != string(store.ReservationPending) && status != string(store.ReservationExpired) {
+		return ledger.Entry{}, fmt.Errorf("%w: reservation %s is already %s",
+			store.ErrConflict, reservationID, status)
+	}
+
+	sealed, err := appendLedgerTx(ctx, tx, e)
+	if err != nil {
+		return ledger.Entry{}, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO reservation_settlements (reservation_id, ledger_seq, created_at)
+		 VALUES (?, ?, ?)`, reservationID, sealed.Seq, formatTime(time.Now())); err != nil {
+		return ledger.Entry{}, wrap(err, "linking reservation settlement")
+	}
+	if status == string(store.ReservationPending) {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE reservations SET status = 'settled', resolved_at = ? WHERE id = ?`,
+			formatTime(time.Now()), reservationID); err != nil {
+			return ledger.Entry{}, wrap(err, "resolving settled reservation")
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return ledger.Entry{}, wrap(err, "committing reservation settlement")
+	}
+	return sealed, nil
+}
+
+func ledgerEntryBySeq(ctx context.Context, tx *sql.Tx, seq int64) (ledger.Entry, error) {
+	return scanEntry(tx.QueryRowContext(ctx,
+		`SELECT seq, run_id, principal_id, provider, model,
+		        input_tokens, output_tokens, cost_nanos, estimated,
+		        created_at, prev_hash, hash
+		 FROM ledger WHERE seq = ?`, seq))
+}
+
 // ---------------------------------------------------------------------------
 // Ledger
 // ---------------------------------------------------------------------------
@@ -564,20 +799,31 @@ func (s *Store) AppendLedger(ctx context.Context, e ledger.Entry) (ledger.Entry,
 	s.appendMu.Lock()
 	defer s.appendMu.Unlock()
 
-	if e.CreatedAt.IsZero() {
-		e.CreatedAt = time.Now()
-	}
-	e.CreatedAt = e.CreatedAt.UTC()
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ledger.Entry{}, wrap(err, "beginning ledger append")
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	sealed, err := appendLedgerTx(ctx, tx, e)
+	if err != nil {
+		return ledger.Entry{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return ledger.Entry{}, wrap(err, "committing ledger append")
+	}
+	return sealed, nil
+}
+
+func appendLedgerTx(ctx context.Context, tx *sql.Tx, e ledger.Entry) (ledger.Entry, error) {
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = time.Now()
+	}
+	e.CreatedAt = e.CreatedAt.UTC()
+
 	var headSeq int64
 	prev := ledger.GenesisHash
-
 	row := tx.QueryRowContext(ctx, `SELECT seq, hash FROM ledger ORDER BY seq DESC LIMIT 1`)
 	var headHash string
 	switch err := row.Scan(&headSeq, &headHash); {
@@ -591,7 +837,6 @@ func (s *Store) AppendLedger(ctx context.Context, e ledger.Entry) (ledger.Entry,
 
 	e.Seq = headSeq + 1
 	sealed := e.Seal(prev)
-
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO ledger (seq, run_id, principal_id, provider, model,
 		                     input_tokens, output_tokens, cost_nanos, estimated,
@@ -602,10 +847,6 @@ func (s *Store) AppendLedger(ctx context.Context, e ledger.Entry) (ledger.Entry,
 		formatTime(sealed.CreatedAt), sealed.PrevHash, sealed.Hash,
 	); err != nil {
 		return ledger.Entry{}, wrap(err, "appending ledger entry")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return ledger.Entry{}, wrap(err, "committing ledger append")
 	}
 	return sealed, nil
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -87,6 +88,39 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		info.model = requestInfo.Model
 	}
 
+	reservationID := ""
+	if g.recorder != nil {
+		reservation, decision, reserveErr := g.recorder.Reserve(ctx, principal, provider.Name(), requestInfo)
+		if reserveErr != nil {
+			g.logger.Error("could not make budget decision",
+				"principal", principal.ID, "run", runIDFrom(ctx), "error", reserveErr)
+			if principal.Mode == store.ModeEnforce {
+				writeError(w, g.logger, http.StatusInternalServerError, APIErrorDetail{
+					Type:       ErrTypeInternal,
+					Principal:  principal.ID,
+					Run:        runIDFrom(ctx),
+					Message:    "spendlease could not make an atomic budget decision, so enforcement failed closed.",
+					Resolution: "Retry the request. If it persists, check the datastore and gateway logs before disabling enforcement.",
+					Docs:       DocsBase + "/reserve-and-settle/",
+				})
+				return
+			}
+			g.logger.Warn("observe mode is forwarding without a reservation",
+				"principal", principal.ID, "run", runIDFrom(ctx))
+		} else if !decision.Allowed {
+			writeBudgetExceeded(w, g.logger, principal, decision)
+			return
+		} else {
+			reservationID = reservation.ID
+			if decision.WouldBlock {
+				g.logger.Warn("request would have exceeded budget",
+					"principal", principal.ID, "run", decision.RunID,
+					"requested", decision.Requested.String(), "shortfall", decision.Shortfall.String(),
+					"mode", string(principal.Mode))
+			}
+		}
+	}
+
 	// Ask the vendor to report usage on a streamed response when the caller
 	// did not. Without this an OpenAI-compatible stream cannot be priced
 	// exactly, and the whole point of recording is that the numbers are real.
@@ -136,9 +170,12 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		// to the client and closes it afterwards. The hook wraps it, it does
 		// not take ownership of it.
 		//nolint:bodyclose // the body is closed by ReverseProxy after copying
-		ModifyResponse: g.observeResponse(principal, provider, requestInfo, injectedUsage, r),
+		ModifyResponse: g.observeResponse(principal, provider, requestInfo, injectedUsage, reservationID, r),
 
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			if g.recorder != nil {
+				g.recorder.Release(context.WithoutCancel(r.Context()), reservationID)
+			}
 			if errors.Is(err, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
 				g.logger.Debug("client disconnected",
 					"provider", provider.Name(), "principal", principal.ID, "path", r.URL.Path)
@@ -162,6 +199,30 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy.ServeHTTP(w, r)
+}
+
+func writeBudgetExceeded(
+	w http.ResponseWriter,
+	logger *slog.Logger,
+	p store.Principal,
+	d store.BudgetDecision,
+) {
+	writeError(w, logger, http.StatusPaymentRequired, APIErrorDetail{
+		Type:      ErrTypeBudgetExceeded,
+		Principal: p.ID,
+		Run:       d.RunID,
+		Message: fmt.Sprintf(
+			"run %s has $%s remaining, but this request needs a $%s reservation.",
+			d.RunID, d.Remaining.String(), d.Requested.String()),
+		Resolution: "Increase the run budget, reduce max_tokens, or switch the principal to observe mode while validating the estimate.",
+		Budget:     d.Budget.String(),
+		Spent:      d.Spent.String(),
+		Held:       d.Held.String(),
+		Requested:  d.Requested.String(),
+		Remaining:  d.Remaining.String(),
+		Shortfall:  d.Shortfall.String(),
+		Docs:       DocsBase + "/reserve-and-settle/",
+	})
 }
 
 // readRequestBody consumes and replaces the request body.
@@ -215,6 +276,7 @@ func (g *Gateway) observeResponse(
 	provider providers.Provider,
 	info providers.RequestInfo,
 	injectedUsage bool,
+	reservationID string,
 	req *http.Request,
 ) func(*http.Response) error {
 	if g.recorder == nil {
@@ -227,6 +289,7 @@ func (g *Gateway) observeResponse(
 		// A failed request is not spend, and its body is an error message
 		// rather than a completion. Leave it entirely alone.
 		if !upstreamOK {
+			g.recorder.Release(context.WithoutCancel(req.Context()), reservationID)
 			return nil
 		}
 
@@ -288,6 +351,7 @@ func (g *Gateway) observeResponse(
 				usageReported: reported,
 				complete:      complete,
 				upstreamOK:    true,
+				reservationID: reservationID,
 			})
 		}
 

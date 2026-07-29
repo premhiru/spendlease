@@ -19,3 +19,5 @@ ADRs are immutable once merged. To change a decision, add a new ADR that superse
 | [0011](0011-implicit-runs.md) | Every principal has an implicit run | Accepted |
 | [0012](0012-stream-options-injection.md) | Injecting stream_options, and withholding the chunk it produces | Accepted |
 | [0013](0013-the-dashboard-is-one-table.md) | The dashboard is one table | Accepted |
+| [0014](0014-budget-decisions-are-atomic-and-hierarchical.md) | Budget decisions are atomic and hierarchical | Accepted |
+| [0015](0015-reservations-may-precede-leases.md) | Reservations may precede leases | Accepted |

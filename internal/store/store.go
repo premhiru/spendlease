@@ -178,7 +178,8 @@ type Reservation struct {
 	ID string
 	// RunID is the run whose budget is held.
 	RunID string
-	// LeaseID is the lease that authorized the request.
+	// LeaseID is the lease that authorized the request. It is empty while the
+	// transitional principal-key authentication path is in use; see ADR-0015.
 	LeaseID string
 	// Amount is the held upper bound, in nanodollars.
 	Amount money.Nanos
@@ -191,6 +192,31 @@ type Reservation struct {
 	CreatedAt time.Time
 	// ResolvedAt is nil while the reservation is pending.
 	ResolvedAt *time.Time
+}
+
+// BudgetDecision is the result of checking one reservation against its run
+// and every budgeted ancestor.
+type BudgetDecision struct {
+	// Allowed reports whether the request may proceed in the principal's mode.
+	Allowed bool
+	// WouldBlock reports that at least one budget was insufficient. It is true
+	// for observe-mode requests that are deliberately allowed through.
+	WouldBlock bool
+	// RunID is the first run whose budget was insufficient, or the target run
+	// when every check passed.
+	RunID string
+	// Budget is RunID's configured ceiling. Zero means no ceiling.
+	Budget money.Nanos
+	// Spent is settled ledger spend in RunID's descendant subtree.
+	Spent money.Nanos
+	// Held is pending reservations in RunID's descendant subtree.
+	Held money.Nanos
+	// Requested is the new reservation amount.
+	Requested money.Nanos
+	// Remaining is what was available before this request.
+	Remaining money.Nanos
+	// Shortfall is Requested minus Remaining when WouldBlock is true.
+	Shortfall money.Nanos
 }
 
 // PrincipalSummary is one principal with its totals, as the dashboard shows
@@ -311,6 +337,10 @@ type Store interface {
 
 	// CreateReservation inserts a pending hold.
 	CreateReservation(ctx context.Context, r Reservation) error
+	// TryReserve atomically checks the target run and every budgeted ancestor,
+	// and inserts the hold when allowed. Observe mode passes enforce=false and
+	// records a hold even when the result says WouldBlock.
+	TryReserve(ctx context.Context, r Reservation, enforce bool) (BudgetDecision, error)
 	// GetReservation returns a reservation by ID, or ErrNotFound.
 	GetReservation(ctx context.Context, id string) (Reservation, error)
 	// ResolveReservation moves a pending reservation to a terminal status.
@@ -322,6 +352,9 @@ type Store interface {
 	ExpirePendingReservations(ctx context.Context, now time.Time) (int, error)
 	// PendingReservationTotal sums the still-held amounts for one run.
 	PendingReservationTotal(ctx context.Context, runID string) (money.Nanos, error)
+	// SettleReservation atomically appends one ledger entry and resolves its
+	// reservation. Repeating the same settlement returns the original entry.
+	SettleReservation(ctx context.Context, reservationID string, e ledger.Entry) (ledger.Entry, error)
 
 	// AppendLedger seals an entry onto the end of the chain and persists it.
 	// The store assigns Seq, PrevHash and Hash; any values already set on the

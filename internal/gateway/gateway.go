@@ -141,7 +141,7 @@ func (g *Gateway) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	_, _ = io.WriteString(w, `{"status":"ok"}`+"\n")
 }
 
-// handleRoot serves the placeholder that stands where the dashboard will be.
+// handleRoot serves a status page when no dashboard registrar was supplied.
 //
 // Returning something honest here matters: the quickstart tells people to open
 // this port, and a blank 404 would read as a broken install rather than an
@@ -152,7 +152,7 @@ func (g *Gateway) handleRoot(w http.ResponseWriter, _ *http.Request) {
 
 The gateway is running and proxying requests.
 
-The dashboard is not built yet - it arrives in a later phase. Until then:
+This process was started without the embedded dashboard. Available routes:
 
   GET  /healthz              liveness
   *    /v1/chat/completions  proxied to OpenAI
@@ -162,7 +162,7 @@ Point a vendor SDK at this address and authenticate with a principal key:
 
   client = OpenAI(base_url="http://localhost:4000/v1", api_key=SPENDLEASE_KEY)
 
-Nothing is metered or capped yet. See `+DocsBase+`
+Requests are metered and enforce-mode principals are capped. See `+DocsBase+`
 `)
 }
 

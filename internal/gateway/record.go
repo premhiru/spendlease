@@ -39,6 +39,12 @@ type LedgerStore interface {
 	GetRun(ctx context.Context, id string) (store.Run, error)
 	// CreateRun inserts a run.
 	CreateRun(ctx context.Context, r store.Run) error
+	// TryReserve makes the atomic pre-egress budget decision.
+	TryReserve(ctx context.Context, r store.Reservation, enforce bool) (store.BudgetDecision, error)
+	// ResolveReservation releases a failed request's hold.
+	ResolveReservation(ctx context.Context, id string, status store.ReservationStatus, at time.Time) error
+	// SettleReservation records actual spend and resolves the hold atomically.
+	SettleReservation(ctx context.Context, id string, e ledger.Entry) (ledger.Entry, error)
 }
 
 // Recorder prices completed requests and appends them to the ledger.
@@ -47,15 +53,31 @@ type Recorder struct {
 	book   *pricing.Book
 	logger *slog.Logger
 
-	// defaultRunBudget is given to an implicit run. Nothing enforces it yet;
-	// it is recorded so the dashboard has something to measure spend against
-	// and so enforcement has a value to read when it lands.
+	// defaultRunBudget is given to an implicit run and enforced when the
+	// principal is in enforce mode.
 	defaultRunBudget money.Nanos
+	reservationTTL   time.Duration
 }
 
+// DefaultReservationTTL bounds a hold left behind by a vanished request.
+const DefaultReservationTTL = 15 * time.Minute
+
 // NewRecorder returns a recorder.
-func NewRecorder(st LedgerStore, book *pricing.Book, budget money.Nanos, logger *slog.Logger) *Recorder {
-	return &Recorder{store: st, book: book, logger: logger, defaultRunBudget: budget}
+func NewRecorder(
+	st LedgerStore,
+	book *pricing.Book,
+	budget money.Nanos,
+	logger *slog.Logger,
+	reservationTTL ...time.Duration,
+) *Recorder {
+	ttl := DefaultReservationTTL
+	if len(reservationTTL) > 0 && reservationTTL[0] > 0 {
+		ttl = reservationTTL[0]
+	}
+	return &Recorder{
+		store: st, book: book, logger: logger,
+		defaultRunBudget: budget, reservationTTL: ttl,
+	}
 }
 
 // observation is everything known about one completed request.
@@ -75,6 +97,46 @@ type observation struct {
 	complete bool
 	// upstreamOK is false for a non-2xx vendor response.
 	upstreamOK bool
+	// reservationID is the hold this completion resolves. Empty preserves the
+	// direct-record path used by accounting unit tests.
+	reservationID string
+}
+
+// Reserve estimates the request's upper bound and asks the store for one
+// atomic budget decision.
+func (r *Recorder) Reserve(
+	ctx context.Context,
+	p store.Principal,
+	provider string,
+	request providers.RequestInfo,
+) (store.Reservation, store.BudgetDecision, error) {
+	price, _ := r.book.Lookup(provider, request.Model, time.Now())
+	input := pricing.EstimateFromChars(request.PromptChars).Tokens
+	output := pricing.ReservationTokens(request.MaxTokens, price)
+	amount := price.Cost(pricing.Usage{InputTokens: input, OutputTokens: output})
+	now := time.Now()
+	reservation := store.Reservation{
+		ID:        store.NewReservationID(),
+		RunID:     runIDFrom(ctx),
+		Amount:    amount,
+		Status:    store.ReservationPending,
+		ExpiresAt: now.Add(r.reservationTTL),
+		CreatedAt: now,
+	}
+	decision, err := r.store.TryReserve(ctx, reservation, p.Mode == store.ModeEnforce)
+	return reservation, decision, err
+}
+
+// Release drops the full hold after a provider or transport failure.
+func (r *Recorder) Release(ctx context.Context, reservationID string) {
+	if reservationID == "" {
+		return
+	}
+	if err := r.store.ResolveReservation(
+		ctx, reservationID, store.ReservationReleased, time.Now(),
+	); err != nil && !errors.Is(err, store.ErrConflict) {
+		r.logger.Error("could not release reservation", "reservation", reservationID, "error", err)
+	}
 }
 
 // Record prices an observation and appends a ledger entry.
@@ -95,9 +157,9 @@ func (r *Recorder) Record(ctx context.Context, obs observation) {
 
 	model := obs.request.Model
 	if model == "" {
-		// Nothing to price against. Recording an entry attributed to no model
-		// would be worse than recording nothing, because it would be
-		// indistinguishable from a priced one on the dashboard.
+		// There is no honest ledger entry to build without a model. Release the
+		// reservation rather than leaving a hold behind until its TTL.
+		r.Release(ctx, obs.reservationID)
 		r.logger.Debug("not recording a request with no identifiable model",
 			"principal", obs.principal.ID, "provider", obs.provider)
 		return
@@ -115,18 +177,12 @@ func (r *Recorder) Record(ctx context.Context, obs observation) {
 		usage = r.estimate(obs, price)
 	}
 
-	if usage.IsZero() {
-		r.logger.Debug("not recording a request with no measurable usage",
-			"principal", obs.principal.ID, "model", model)
-		return
-	}
-
 	cost := price.Cost(pricing.Usage{
 		InputTokens:  usage.InputTokens,
 		OutputTokens: usage.OutputTokens,
 	})
 
-	entry, err := r.store.AppendLedger(ctx, ledger.Entry{
+	toAppend := ledger.Entry{
 		RunID:        obs.runID,
 		PrincipalID:  obs.principal.ID,
 		Provider:     obs.provider,
@@ -136,7 +192,14 @@ func (r *Recorder) Record(ctx context.Context, obs observation) {
 		Cost:         cost,
 		Estimated:    estimated,
 		CreatedAt:    now,
-	})
+	}
+	var entry ledger.Entry
+	var err error
+	if obs.reservationID != "" {
+		entry, err = r.store.SettleReservation(ctx, obs.reservationID, toAppend)
+	} else {
+		entry, err = r.store.AppendLedger(ctx, toAppend)
+	}
 	if err != nil {
 		r.logger.Error("could not record spend",
 			"principal", obs.principal.ID, "run", obs.runID,
@@ -212,6 +275,9 @@ func (r *Recorder) resolveRun(ctx context.Context, p store.Principal, requested 
 			// corrupt attribution, which is the one thing this must not do.
 			return "", errors.New("that run belongs to a different principal")
 		}
+		if run.Status != store.RunActive {
+			return "", errors.New("that run is closed")
+		}
 		return run.ID, nil
 	}
 	return r.implicitRun(ctx, p)
@@ -224,7 +290,10 @@ func (r *Recorder) resolveRun(ctx context.Context, p store.Principal, requested 
 func (r *Recorder) implicitRun(ctx context.Context, p store.Principal) (string, error) {
 	id := implicitRunID(p.ID)
 
-	if _, err := r.store.GetRun(ctx, id); err == nil {
+	if existing, err := r.store.GetRun(ctx, id); err == nil {
+		if existing.Status != store.RunActive {
+			return "", errors.New("the principal's implicit run is closed")
+		}
 		return id, nil
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return "", err
