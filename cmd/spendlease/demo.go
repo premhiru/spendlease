@@ -74,11 +74,6 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 	logger := slog.New(slog.NewTextHandler(safeErr, &slog.HandlerOptions{Level: slog.LevelError}))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if *duration > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, *duration)
-		defer cancel()
-	}
 
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -135,6 +130,14 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 	agents, err := seedDemoFleet(ctx, st)
 	if err != nil {
 		return err
+	}
+	// Duration describes how long the user can watch the running demo. Setup
+	// time does not count: migrations and fleet seeding can be slower under
+	// race instrumentation or on a cold machine.
+	if *duration > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *duration)
+		defer cancel()
 	}
 	srv := &http.Server{Handler: gw.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	errCh := make(chan error, 1)
