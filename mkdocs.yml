@@ -67,3 +67,5 @@ nav:
       - 5. Ledger integrity: adr/0005-ledger-integrity.md
       - 6. Provider routing: adr/0006-provider-routing.md
       - 7. Credential vault and master key: adr/0007-credential-vault-and-master-key.md
+      - 8. Token estimation: adr/0008-token-estimation.md
+      - 9. Dated price supersession: adr/0009-dated-price-supersession.md
