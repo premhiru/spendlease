@@ -1,12 +1,12 @@
 # Policy reference
 
-The v0.1 policy surface is deliberately small. A principal has one mode; runs
-carry budgets; the active price book supplies reservation defaults. There is
-no general rule language or capability system.
+The v0.1 policy surface is small: principals choose whether budgets block,
+runs carry those budgets, leases restrict provider access and optional spend,
+and the price book supplies reservation defaults.
 
 ## Principal mode
 
-| Value | Default | Behaviour |
+| Value | Default | Behavior |
 |---|---:|---|
 | `observe` | yes | Price, reserve, settle and log every request, but never reject for budget. Would-block decisions remain visible. |
 | `enforce` | no | Reject a reservation that does not fit with `402 budget_exceeded`. Datastore decision failures fail closed. |
@@ -14,7 +14,7 @@ no general rule language or capability system.
 Change mode from the dashboard, with the CLI:
 
 ```bash
-spendlease keys principal set-mode checkout-agent --mode enforce
+spendlease keys principal set-mode --name checkout-agent --mode enforce
 ```
 
 or through `POST /admin/principals/{id}/mode`. The admin guard described in
@@ -34,13 +34,51 @@ Budgets are exact US-dollar amounts stored as integer nanodollars.
   parent's remaining balance.
 - Exact exhaustion is allowed; the next positive reservation is rejected.
 
-Until explicit run creation lands with leases, requests without
-`X-Spendlease-Run` use the principal's implicit run. Its budget defaults to
-`$10.00` and is configured at startup:
+Every lease belongs to an explicitly created run, so a request authenticated
+with an `sll_` token is charged to that run. The older `slk_` principal-key
+path remains available for compatibility. A request using a principal key and
+no `X-Spendlease-Run` header is charged to an implicit run whose budget is
+configured at startup:
 
 ```bash
 spendlease serve --default-run-budget 25.00
 ```
+
+For a principal-key request, `X-Spendlease-Run: run_...` may select an explicit
+run owned by that principal. A lease token cannot be moved to another run by
+setting this header; the run attached to the lease remains authoritative.
+
+## Lease restrictions
+
+A lease can restrict providers, lifetime, and spend:
+
+```bash
+spendlease keys lease issue \
+  --run run_... \
+  --ttl 15m \
+  --providers openai,anthropic \
+  --ceiling 5.00
+```
+
+- `--providers` is a comma-separated allowlist. A request routed to another
+  provider returns `403 lease_scope_denied`.
+- `--ttl` sets the expiry time. Expired and revoked leases return
+  `401 unauthenticated`.
+- `--ceiling` limits cumulative spend through that lease. The default `0`
+  inherits the run's budget rather than creating an additional limit.
+
+The lease ceiling and run hierarchy are checked in the same atomic reservation
+transaction. Passing a smaller lease ceiling cannot increase the run budget.
+
+Revoke every current lease for one principal with:
+
+```bash
+spendlease keys revoke --all --principal checkout-agent
+```
+
+The dashboard's Revoke button calls the same operation through the admin API.
+Revocation is durable across restarts and is also placed in the gateway's
+in-memory deny set for immediate checks.
 
 ## Reservation defaults
 
@@ -55,7 +93,7 @@ The price book's model-level `default_max_tokens` is used when a request omits
 its output ceiling. Unknown models use the configured fallback input/output
 rates and fallback ceiling; they are never treated as free.
 
-## Deliberate omissions
+## Not implemented
 
 There is no per-endpoint policy, time-of-day policy, approval workflow,
 multi-currency rule, RBAC, anomaly detector or general expression language in

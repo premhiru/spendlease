@@ -1,0 +1,139 @@
+# CLI reference
+
+Run `spendlease help` for the top-level command list and
+`spendlease <command> -h` for command flags. Key-management help is attached to
+the final action, for example `spendlease keys lease issue -h`.
+
+## Gateway
+
+### `spendlease serve`
+
+Starts the proxy, dashboard, reservation sweeper, and SQLite store.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--addr` | `:4000` | Listen address. |
+| `--store` | `./spendlease.db` | SQLite database path. |
+| `--admin-token` | `SPENDLEASE_ADMIN_TOKEN` | Credential for non-loopback dashboard and admin access. |
+| `--pricing` | embedded book | Directory containing price-book YAML. |
+| `--default-run-budget` | `10.00` | Budget for implicit runs used by principal-key compatibility requests. |
+| `--reservation-ttl` | `15m` | Maximum pending hold lifetime. |
+| `--reservation-sweep-interval` | `30s` | Expired-hold scan interval. |
+| `--openai-url` | `https://api.openai.com` | OpenAI upstream base URL. Useful for tests and private compatible endpoints. |
+| `--anthropic-url` | `https://api.anthropic.com` | Anthropic upstream base URL. |
+| `--log-level` | `info` | `debug`, `info`, `warn`, or `error`. |
+
+### `spendlease demo`
+
+Runs an in-memory gateway and mock provider with three simulated agents.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--duration` | `30s` | Runtime. Set `0` to run until interrupted. |
+| `--target` | `http://localhost:4000` | Dashboard listen URL. |
+
+The demo never reads the persistent store or a vendor key.
+
+### `spendlease version`
+
+Prints the version, commit, build timestamp, Go version, and target platform.
+
+## Principals
+
+```bash
+spendlease keys principal create --name NAME [--mode observe|enforce] [--store PATH]
+spendlease keys principal list [--store PATH]
+spendlease keys principal set-mode --name NAME --mode observe|enforce [--store PATH]
+```
+
+`create` prints the new `slk_` principal key once. Agent applications should
+use leases instead. `set-mode` accepts the principal name, not its ID.
+
+## Vendor credentials
+
+```bash
+spendlease keys provider set PROVIDER [--key VALUE] [--store PATH]
+spendlease keys provider list [--store PATH]
+spendlease keys provider rm PROVIDER [--store PATH]
+```
+
+`PROVIDER` is currently `openai` or `anthropic`. Omitting `--key` makes `set`
+read the value from standard input. `list` prints provider names only; it never
+prints stored values.
+
+Every provider command resolves the same master key as `serve`. A command
+using a different store path or `SPENDLEASE_MASTER_KEY` will not modify the
+gateway's credential vault.
+
+## Runs
+
+```bash
+spendlease keys run create \
+  --principal NAME_OR_ID \
+  --budget USD \
+  [--parent RUN_ID] \
+  [--store PATH]
+```
+
+The budget is an exact non-negative USD decimal. `0` means no run ceiling. A
+child run cannot escape a budget on its parent or another ancestor.
+
+There are no run list, close, or budget-edit commands in v0.1.
+
+## Leases
+
+```bash
+spendlease keys lease issue \
+  --run RUN_ID \
+  [--ttl 15m] \
+  [--providers openai,anthropic] \
+  [--ceiling USD] \
+  [--store PATH]
+```
+
+The command prints an `sll_` token once. An empty provider list does not add a
+provider restriction. A zero ceiling inherits the run budget. Lease TTL must
+be positive.
+
+There is no lease-list command because plaintext tokens are never stored. Use
+the dashboard or revoke operation at the principal level.
+
+## Revocation
+
+```bash
+spendlease keys revoke --all [--principal NAME_OR_ID] [--store PATH]
+```
+
+`--all` is required as a safeguard. Without `--principal`, the command revokes
+every current lease in the store. With it, only leases belonging to that
+principal are revoked.
+
+## Master key generation
+
+```bash
+spendlease keys master generate
+```
+
+The 64-character hexadecimal key is written to standard output. Store it in a
+secret manager and provide it as `SPENDLEASE_MASTER_KEY`.
+
+## Environment variables
+
+| Variable | Read by | Purpose |
+|---|---|---|
+| `SPENDLEASE_MASTER_KEY` | CLI and gateway | AES-256 key used for vendor credentials. Required in production. |
+| `SPENDLEASE_ENV` | CLI and gateway | Set to `production` to disable automatic development-key creation. |
+| `SPENDLEASE_ADMIN_TOKEN` | gateway | Protects non-loopback dashboard and admin requests. |
+| `SPENDLEASE_LEASE_TOKEN` | Python and TypeScript helpers | Lease placed in vendor-client authentication options. |
+| `SPENDLEASE_URL` | Python and TypeScript helpers | Gateway URL; defaults to `http://localhost:4000`. |
+
+Vendor variables such as `OPENAI_API_KEY` are not read by the gateway. Store
+vendor keys explicitly with `spendlease keys provider set`.
+
+## Exit codes
+
+| Code | Meaning |
+|---:|---|
+| `0` | Command completed successfully, including help output. |
+| `1` | The command ran but failed. |
+| `2` | Invalid command or flags. |

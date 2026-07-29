@@ -1,10 +1,14 @@
 # Contributing to spendlease
 
-Thanks for being here. This project is meant to be easy to contribute to. If any step below is harder than it reads, that is a bug in this document and we want to hear about it.
+This guide covers the development setup, project conventions, and the checks a
+pull request is expected to pass. If a command is incomplete or out of date,
+please open an issue or fix it with the change that exposed the problem.
 
 ## Clone to green tests
 
-Four commands. Go 1.25+ is the only prerequisite — see [ADR-0004](docs/adr/0004-go-version-floor.md) for why the floor is there.
+You need Go 1.25 or later, Git, and Make. The full race test also needs a C
+toolchain. See [ADR-0004](docs/adr/0004-go-version-floor.md) for the Go version
+decision.
 
 ```bash
 git clone https://github.com/premhiru/spendlease.git
@@ -13,7 +17,19 @@ make setup
 make test
 ```
 
-`make setup` installs the dev tooling (`golangci-lint`) and downloads modules. `make test` runs the suite with the race detector on, exactly as CI does. If you do not have a C toolchain, `make test-short` skips the race detector.
+`make setup` installs `golangci-lint` and downloads Go modules. `make test`
+runs the Go suite with the race detector. If you do not have a C toolchain,
+`make test-short` runs the same packages without race detection.
+
+CI also tests the SDKs and documentation. Install Python 3.12 and Node.js 22
+when changing those areas, then run:
+
+```bash
+PYTHONPATH=sdk/python/src python -m unittest discover -s sdk/python/tests
+(cd sdk/typescript && npm ci && npm test)
+python -m pip install -r docs/requirements.txt
+mkdocs build --strict
+```
 
 To build and start the gateway locally:
 
@@ -25,9 +41,8 @@ Then open <http://localhost:4000>.
 
 ## Price book updates
 
-**This is the best place to start, and it is the most valuable contribution to the project.**
-
-Vendor prices change constantly. Nobody maintains a normalized cost table across every vendor an agent might call, which is exactly why this one matters. Updating it needs no Go, no tests, and no understanding of the gateway internals.
+Vendor prices change independently of the code. Updating the price book is a
+small, reviewable contribution that does not require changing Go.
 
 The price book lives in [`/pricing`](pricing/) as plain YAML:
 
@@ -48,17 +63,22 @@ providers:
 
 To submit an update:
 
-1. **A price that has already changed:** edit the entry under `/pricing`.
-2. **A price that changes on a future date:** add a new file named for that date, such as `anthropic-2026-09-01.yaml`, containing only the models that change. Never overwrite an old price. The loader ignores a future-dated file until its date arrives, then applies it to those models only, leaving everything else alone. Past ledger entries have to stay explainable, and they can only be explained against the price that was in force when they were written.
-3. Set `effective` to the date the price actually takes effect, not today's date.
-4. **Link the vendor's public pricing page in your PR description.** This is the one hard requirement.
-5. Run `make test`.
+1. Add a file named for the effective date, such as
+   `anthropic-2026-09-01.yaml`, containing only the models that change. Do this
+   for an already-active change as well as a scheduled one; do not overwrite
+   an older effective price.
+2. Set `effective` to the date the price actually takes effect, not today's
+   date. A future-dated file is ignored until that date.
+3. Link the vendor's public pricing page in the PR description.
+4. Run `make test`.
 
 The test suite validates the shipped price book, so a mistake fails CI rather than reaching an invoice. It catches a missing `source`, an absent or non-positive `default_max_tokens`, a rate that is not a number, output priced below input, and prices large enough to suggest a units error — such as a per-thousand-token price entered into a per-million field.
 
 Full format reference, including how unknown models are priced: [docs/pricing-book.md](docs/pricing-book.md).
 
-Issues labelled [`good first issue`](https://github.com/premhiru/spendlease/labels/good%20first%20issue) are mostly price book updates and small provider adapters. Pick one up without asking.
+Issues labeled [`good first issue`](https://github.com/premhiru/spendlease/labels/good%20first%20issue)
+are intended to be self-contained. Comment on an issue if its scope is unclear
+or if someone else may already be working on it.
 
 ## Working on code
 
@@ -85,11 +105,16 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 
 ### Architecture decisions
 
-If you have to make a judgment call this document does not cover, write it down as an ADR in [`docs/adr/`](docs/adr/) in the same PR rather than deciding silently. Copy the format of an existing one. A short honest ADR beats a long agonised one: record the options you rejected and why, because that is the part nobody can reconstruct later.
+If a change makes an architectural tradeoff that future contributors will need
+to understand, add an ADR under [`docs/adr/`](docs/adr/). Follow an existing
+record and include the alternatives that were considered. Routine
+implementation choices do not need an ADR.
 
 ### Things we are deliberately not building
 
-Please check [the "what it does not do" list](README.md#what-it-does-not-do) before starting something large. Reconciliation, ERP export, RBAC, multi-currency, payment rails, approval workflows, anomaly detection, least-cost routing, multi-tenancy, SSO, charts in the dashboard, and framework-specific integrations are all out of scope on purpose. Several are good products, just not this one and not yet. A PR implementing one of them will be declined however good it is, so please open a discussion first and save yourself the work.
+Check [the "what it does not do" list](README.md#what-it-does-not-do) before
+starting a large feature. Open a discussion before working on an item listed
+there so its scope can be agreed before implementation.
 
 ## Security
 

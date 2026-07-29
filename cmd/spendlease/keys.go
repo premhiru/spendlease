@@ -16,12 +16,10 @@ import (
 
 // runKeys dispatches the key-management subcommands.
 //
-// This is the subset needed to actually use the gateway: register a principal
-// and store a vendor credential. Runs, leases and revocation arrive with the
-// lease phase.
+// These commands manage the local credential vault and authorization objects.
 func runKeys(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: expected one of principal, provider, master", errUsage)
+		return fmt.Errorf("%w: expected one of principal, provider, master, run, lease, revoke", errUsage)
 	}
 
 	switch args[0] {

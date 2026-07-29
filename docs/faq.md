@@ -4,8 +4,18 @@
 
 It is pre-v1. The complete v0.1 surface is implemented and tested, including
 the encrypted vault, SQLite ledger, reserve/settle enforcement, short-lived
-leases and sub-second kill switch. Pin a release and evaluate it in observe
-mode before making it a production dependency.
+leases and sub-second kill switch. There is no stable release, and the
+`v0.1.0-alpha.1` tag predates the current implementation. Pin a commit or
+`sha-...` container build and evaluate it in observe mode before making it a
+production dependency.
+
+## Is the configured budget a ceiling on my vendor invoice?
+
+Not in every billing scenario. The gateway enforces the base token rates in
+its price book. Cache-write and long-context multipliers, regional tiers, tool
+fees, and non-token charges are not modeled yet. Some omissions overcount and
+some undercount. Compare the ledger with the vendor bill in observe mode for
+the models and features your workload uses.
 
 ## Why does a new principal default to observe mode?
 
@@ -40,6 +50,14 @@ before the disconnect or records a marked estimate.
 No. Its HTML, CSS and htmx are embedded in the binary. Loopback access is
 credential-free; remote access requires an admin token and should be placed
 behind TLS.
+
+## Can I export or verify the ledger from the CLI?
+
+Not in v0.1. Ledger rows are append-only and hash-chained, and the Go package
+provides `ledger.VerifyChain`, but there is no supported operator command for
+export or verification yet. Back up the SQLite database as described under
+[Self-hosting](self-hosting.md#backups); the hash chain is not a substitute for
+a backup.
 
 ## Is PostgreSQL supported?
 

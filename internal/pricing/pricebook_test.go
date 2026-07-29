@@ -106,6 +106,8 @@ func TestKnownModelsArePriced(t *testing.T) {
 	}{
 		{provider: "openai", model: "gpt-4o", wantIn: "2.50", wantOut: "10.00"},
 		{provider: "openai", model: "gpt-4o-mini", wantIn: "0.15", wantOut: "0.60"},
+		// OpenAI documents gpt-5.6 as the alias for gpt-5.6-sol.
+		{provider: "openai", model: "gpt-5.6", wantIn: "5.00", wantOut: "30.00"},
 		{provider: "anthropic", model: "claude-sonnet-5", wantIn: "2.00", wantOut: "10.00"},
 		{provider: "anthropic", model: "claude-opus-5", wantIn: "5.00", wantOut: "25.00"},
 		{provider: "anthropic", model: "claude-haiku-4-5-20251001", wantIn: "1.00", wantOut: "5.00"},
@@ -216,10 +218,9 @@ func TestWorkedExampleMatchesVendorArithmetic(t *testing.T) {
 	}
 }
 
-// TestFortyThousandDollarLoop is the README's motivating scenario, priced.
-// It is here because the number in the README should be defensible rather
-// than rhetorical.
-func TestFortyThousandDollarLoop(t *testing.T) {
+// TestHighCostRetryLoop keeps a realistic runaway-loop scenario in the price
+// book tests without making it a product claim in the README.
+func TestHighCostRetryLoop(t *testing.T) {
 	t.Parallel()
 
 	b := loadShipped(t)
@@ -257,10 +258,8 @@ func TestFortyThousandDollarLoop(t *testing.T) {
 		t.Logf("%-34s %s x %d calls x %d agent(s) = %s", s.comment, perCall, calls, s.agents, total)
 	}
 
-	// The README's $40,000 figure has to be reachable by a plausible
-	// unattended overnight loop, or it is rhetoric rather than a motivating
-	// example. It is not reachable on a cheap model with a single agent,
-	// which is worth knowing when describing the scenario.
+	// This lower bound catches a misplaced decimal point in one of the costly
+	// entries while keeping the scenario visible in test logs.
 	if worst < money.MustParseUSD("40000.00") {
 		t.Errorf("the worst plausible overnight loop costs %s, below the $40,000 the README cites", worst)
 	}

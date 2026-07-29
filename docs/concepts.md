@@ -1,6 +1,7 @@
 # Concepts
 
-`spendlease` has four objects. It is a deliberately small model, and resisting the urge to generalise it is a design goal rather than an oversight.
+`spendlease` uses four policy objects: principals, runs, leases, and
+reservations. Ledger entries record their result.
 
 ```mermaid
 erDiagram
@@ -50,14 +51,18 @@ erDiagram
 
 ## Principal
 
-A registered agent with a stable identity. It holds a long-lived API key (`slk_...`) and a policy, and it is the thing you name when you ask "which agent spent this?".
+A registered agent or service with a stable identity. Its long-lived key starts
+with `slk_`, and its policy determines whether budget overruns are observed or
+blocked.
 
 A principal carries a **mode**:
 
 - **`observe`** — everything passes through and nothing is blocked, but all of it is recorded. This is the default for every new principal.
 - **`enforce`** — reservations can reject a request.
 
-Observe mode is the entire adoption strategy. Nobody puts an unproven gateway in the blocking path of production traffic, so `spendlease` starts by only watching. Switching is one API call, and the dashboard shows what *would have been* blocked while observing.
+Observe mode lets an operator compare spendlease's estimates with real
+workload behavior before enabling a blocking policy. The dashboard marks
+requests that would have exceeded a budget.
 
 ## Run
 
@@ -65,13 +70,14 @@ One execution of a principal. A run carries a **budget** and is where money is a
 
 Principals are long-lived; runs are not. A principal that handles support tickets might have thousands of runs, one per ticket, each with a $2 budget. That separation is what makes a runaway loop containable — the loop burns one run's budget, not the principal's entire allowance.
 
-A run may have a `parent_run_id`. That is the whole delegation model:
+A run may have a `parent_run_id`:
 
 - Sub-agents are runs with a parent.
 - A child draws from the parent's **remaining** budget, so a parent cannot be over-spent by its children collectively.
 - Spend rolls up: a parent's total is its own plus every descendant's.
 
-**Budget flows down, accountability rolls up.** There is no general capability system here, and there will not be one.
+This makes a parent budget a shared ceiling for all of its descendants while
+preserving spend attribution for each child.
 
 ## Lease
 
@@ -85,7 +91,9 @@ A lease is scoped three ways:
 | **Ceiling** | The most this single lease may spend, which may be lower than the run's remaining budget |
 | **TTL** | When it stops working, regardless of budget left |
 
-Leases are the reason agents never hold vendor credentials. The gateway swaps the lease token for the real key at egress, and a leaked lease expires on its own and can be revoked instantly.
+The gateway exchanges the lease token for the stored vendor key immediately
+before egress. A leaked lease is limited by its expiry, provider scope, run
+budget, optional ceiling, and revocation state.
 
 Revocation is checked against an in-memory set on every request, so revoking a principal invalidates every lease it owns in **under a second**.
 
@@ -99,21 +107,23 @@ Every reservation has a TTL, because a client that disconnects mid-stream would 
 
 ## Ledger
 
-Not one of the four objects, but the record they all produce.
+The ledger is the record produced after a reservation settles.
 
 The ledger is **append-only from the first commit**. There is no `UPDATE` path and no `DELETE` path, and that is enforced by a database trigger rather than by convention — application code cannot rewrite history even by accident.
 
 Each entry carries the hash of the entry before it, forming a chain. Changing any historical entry breaks every hash after it, which makes tampering detectable rather than merely discouraged.
 
-Retrofitting immutability after the first compliance-sensitive user is a miserable project, so it is here from the beginning.
-
 ## Money
 
 All amounts are stored as **`int64` nanodollars** — a billionth of a US dollar. No floats, anywhere.
 
-This is not fussiness. A single `gpt-4o` input token costs $0.0000025, which is 2,500 nanodollars but only 2.5 *micro*dollars, so microdollar precision would round a real per-token price to an integer and accumulate error over millions of tokens. `int64` nanodollars represents roughly ±$9.2 billion, comfortably more than any budget this will hold.
+A single `gpt-4o` input token at $2.50 per million costs 2,500
+nanodollars. Microdollars would require fractional storage at that rate.
+`int64` nanodollars covers approximately ±$9.2 billion.
 
-Binary floating point cannot represent `0.1` exactly, and a budget system that disagrees with an invoice about the third decimal place is worse than no budget system. See [ADR-0003](adr/0003-money-as-int64-nanodollars.md).
+Binary floating point cannot represent every decimal amount exactly. See
+[ADR-0003](adr/0003-money-as-int64-nanodollars.md) for the storage and rounding
+decision.
 
 ## Identifiers and secrets
 

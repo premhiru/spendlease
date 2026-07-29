@@ -2,10 +2,10 @@
 #
 # Base input and output rates only. Prompt caching multipliers (1.25x and 2x
 # writes, 0.1x reads) and the Batch API discount are not modelled: those are
-# properties of an individual request that spendlease cannot reliably infer
-# from the outside, and pricing them wrongly is worse than pricing them
-# plainly. A cached-heavy workload will therefore be over-estimated, which is
-# the safe direction.
+# properties of an individual request that spendlease does not yet carry into
+# settlement. Base-rate accounting can overstate cache hits and understate
+# cache writes, so cached workloads must be compared with the vendor invoice
+# before enforcement is enabled.
 #
 # Claude Sonnet 5 is on introductory pricing through 2026-08-31. The standard
 # rate is in anthropic-2026-09-01.yaml, which supersedes this file from that
