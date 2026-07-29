@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/premhiru/spendlease/internal/dashboard"
 	"github.com/premhiru/spendlease/internal/gateway"
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/providers"
@@ -104,11 +106,23 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("%w: invalid -default-run-budget: %v", errUsage, err)
 	}
 
+	dash, err := dashboard.New(dashboard.Options{
+		Store:   st,
+		Logger:  logger,
+		Version: version,
+		Models:  countModels(book),
+		Warning: dashboardWarning(*addr),
+	})
+	if err != nil {
+		return err
+	}
+
 	gw, err := gateway.New(gateway.Options{
 		Principals:  st,
 		Credentials: v,
 		Registry:    registry,
 		Recorder:    gateway.NewRecorder(st, book, budget, logger),
+		Dashboard:   dash,
 		Logger:      logger,
 	})
 	if err != nil {
@@ -152,6 +166,26 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("shutting down: %w", err)
 	}
 	return nil
+}
+
+// dashboardWarning returns the banner shown above the table, or empty.
+//
+// The admin routes have no authentication: the 60-second quickstart depends on
+// that, and SECURITY.md says so. Somebody who has bound the gateway to a
+// public interface should be told on the page itself, not only in a document
+// they have not read.
+func dashboardWarning(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	switch host {
+	case "127.0.0.1", "localhost", "::1", "[::1]":
+		return ""
+	}
+	return "This gateway is not bound to loopback and the admin controls on this page " +
+		"are unauthenticated. Anyone who can reach this address can switch enforcement off. " +
+		"Put authentication in front of it before exposing it."
 }
 
 // warnIfUnconfigured tells the operator, at startup rather than on the first

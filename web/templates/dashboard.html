@@ -1,0 +1,61 @@
+{{/*
+  The dashboard is one table, sorted by spend descending.
+
+  There are deliberately no charts. A chart of spend over time answers a
+  question nobody asks in an incident; "which agent is costing me money right
+  now" is answered by sorting, and sorting is what this does.
+*/}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spendlease</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<style>
+  /* The only hand-written rule: keep identifiers from wrapping mid-token. */
+  .id { font-variant-ligatures: none; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+<div class="mx-auto max-w-6xl px-6 py-10">
+
+  <header class="mb-8 flex items-baseline justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">spendlease</h1>
+      <p class="mt-1 text-sm text-slate-500">
+        Spend by agent, highest first.
+      </p>
+    </div>
+    <div class="text-right text-xs text-slate-400">
+      <div>{{ .Version }}</div>
+      <div>{{ .Models }} models priced</div>
+    </div>
+  </header>
+
+  {{ if .Warning }}
+  <div class="mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    {{ .Warning }}
+  </div>
+  {{ end }}
+
+  {{/*
+    The table template carries its own id and polling attributes, because it
+    replaces itself on every swap. Wrapping it in a second polling element
+    here would nest two nodes with the same id and poll twice as often.
+  */}}
+  {{ template "table" . }}
+
+  <footer class="mt-10 border-t border-slate-200 pt-6 text-xs text-slate-400">
+    <p>
+      Nothing is blocked yet: budgets are recorded but not enforced, so a run
+      marked over budget was still served.
+    </p>
+    <p class="mt-1">
+      <a class="underline hover:text-slate-600" href="https://premhiru.github.io/spendlease">Documentation</a>
+    </p>
+  </footer>
+</div>
+</body>
+</html>

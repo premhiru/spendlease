@@ -49,6 +49,9 @@ type Options struct {
 	// Optional: without one the gateway proxies without accounting, which is
 	// what the tests that only care about proxying use.
 	Recorder *Recorder
+	// Dashboard, if set, claims the root path and the admin routes. Without
+	// one the root serves a plain-text banner.
+	Dashboard RouteRegistrar
 	// Logger receives structured request logs. Required.
 	Logger *slog.Logger
 	// Transport is used for upstream requests. Defaults to
@@ -60,12 +63,22 @@ type Options struct {
 	UpstreamTimeout time.Duration
 }
 
+// RouteRegistrar is anything that adds its own handlers to the gateway's mux.
+//
+// The dashboard is passed in this shape rather than imported directly so the
+// gateway does not depend on rendering, and so proxy tests need no templates.
+type RouteRegistrar interface {
+	// Routes registers handlers on the mux.
+	Routes(mux *http.ServeMux)
+}
+
 // Gateway proxies agent requests to vendor APIs.
 type Gateway struct {
 	principals  PrincipalLookup
 	credentials CredentialSource
 	registry    *providers.Registry
 	recorder    *Recorder
+	dashboard   RouteRegistrar
 	logger      *slog.Logger
 	transport   http.RoundTripper
 }
@@ -95,6 +108,7 @@ func New(opts Options) (*Gateway, error) {
 		credentials: opts.Credentials,
 		registry:    opts.Registry,
 		recorder:    opts.Recorder,
+		dashboard:   opts.Dashboard,
 		logger:      opts.Logger,
 		transport:   transport,
 	}, nil
@@ -110,7 +124,11 @@ func (g *Gateway) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", g.handleHealth)
-	mux.HandleFunc("GET /{$}", g.handleRoot)
+	if g.dashboard != nil {
+		g.dashboard.Routes(mux)
+	} else {
+		mux.HandleFunc("GET /{$}", g.handleRoot)
+	}
 	mux.Handle("/", g.authenticate(http.HandlerFunc(g.handleProxy)))
 
 	return g.logRequests(mux)

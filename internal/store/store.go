@@ -193,6 +193,63 @@ type Reservation struct {
 	ResolvedAt *time.Time
 }
 
+// PrincipalSummary is one principal with its totals, as the dashboard shows
+// it.
+//
+// It embeds Principal rather than repeating its fields, so a column added to
+// the identity model appears here without a second edit.
+type PrincipalSummary struct {
+	Principal
+	// Spend is everything charged to this principal, across all of its runs.
+	Spend money.Nanos
+	// Entries is how many ledger entries make up that total.
+	Entries int
+	// EstimatedEntries is how many of those were not priced from
+	// vendor-reported usage. A high proportion means the total is a guess.
+	EstimatedEntries int
+	// Runs is how many runs the principal has.
+	Runs int
+	// OverBudgetRuns is how many of those have spent more than their budget.
+	//
+	// Nothing enforces budgets yet, so this is the "what would have been
+	// blocked" signal that makes observe mode worth running: every one of
+	// these requests was served, and would not have been under enforcement.
+	OverBudgetRuns int
+	// LastActivity is when it last spent anything, nil if never.
+	LastActivity *time.Time
+}
+
+// RunSummary is one run with its totals.
+type RunSummary struct {
+	// ID is the run identifier.
+	ID string
+	// PrincipalID is the agent this run executes as.
+	PrincipalID string
+	// ParentRunID is empty for a root run.
+	ParentRunID string
+	// Budget is the ceiling recorded for this run.
+	Budget money.Nanos
+	// Spend is everything charged to it, excluding its children.
+	Spend money.Nanos
+	// Entries is how many ledger entries make up that total.
+	Entries int
+	// Status is active or closed.
+	Status RunStatus
+	// CreatedAt is in UTC.
+	CreatedAt time.Time
+	// LastActivity is when it last spent anything, nil if never.
+	LastActivity *time.Time
+}
+
+// OverBudget reports whether the run has spent more than its budget allows.
+//
+// Nothing enforces this yet, so it is what the dashboard uses to show what
+// *would* have been blocked had the principal been in enforce mode. A budget
+// of zero means unset rather than "no allowance", and is never over.
+func (r RunSummary) OverBudget() bool {
+	return r.Budget > 0 && r.Spend > r.Budget
+}
+
 // LedgerFilter narrows a ledger query. Zero values mean "no constraint", so
 // an empty filter returns everything in sequence order.
 type LedgerFilter struct {

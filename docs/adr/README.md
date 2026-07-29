@@ -18,3 +18,4 @@ ADRs are immutable once merged. To change a decision, add a new ADR that superse
 | [0010](0010-accounting-observes-the-response.md) | Accounting observes the response, it does not buffer it | Accepted |
 | [0011](0011-implicit-runs.md) | Every principal has an implicit run | Accepted |
 | [0012](0012-stream-options-injection.md) | Injecting stream_options, and withholding the chunk it produces | Accepted |
+| [0013](0013-the-dashboard-is-one-table.md) | The dashboard is one table | Accepted |
