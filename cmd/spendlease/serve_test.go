@@ -107,6 +107,8 @@ func TestServeValidatesFlagsBeforeSideEffects(t *testing.T) {
 		{name: "bad log level", args: []string{"serve", "--log-level", "chatty"}},
 		{name: "bad openai url", args: []string{"serve", "--openai-url", "://nope"}},
 		{name: "bad anthropic url", args: []string{"serve", "--anthropic-url", "://nope"}},
+		{name: "non-positive reservation ttl", args: []string{"serve", "--reservation-ttl", "0s"}},
+		{name: "non-positive sweep interval", args: []string{"serve", "--reservation-sweep-interval", "-1s"}},
 	}
 
 	for _, tt := range tests {

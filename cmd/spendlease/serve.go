@@ -38,7 +38,11 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	anthropicBase := fs.String("anthropic-url", anthropic.DefaultBaseURL, "Anthropic upstream base URL")
 	pricingDir := fs.String("pricing", "", "directory of price book YAML (default: the copy embedded in this binary)")
 	defaultBudget := fs.String("default-run-budget", "10.00",
-		"budget recorded on a principal's implicit run; not enforced yet")
+		"budget on a principal's implicit run")
+	reservationTTL := fs.Duration("reservation-ttl", gateway.DefaultReservationTTL,
+		"maximum lifetime of an in-flight budget hold")
+	sweepInterval := fs.Duration("reservation-sweep-interval", gateway.DefaultReservationSweepInterval,
+		"how often abandoned budget holds are reclaimed")
 	adminTokenFlag := fs.String("admin-token", "",
 		"credential required to reach the dashboard from off-machine (default: $"+EnvAdminToken+")")
 	logLevel := fs.String("log-level", "info", "debug, info, warn or error")
@@ -77,6 +81,12 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	summarisePriceBook(stdout, book)
+	if *reservationTTL <= 0 {
+		return fmt.Errorf("%w: -reservation-ttl must be positive", errUsage)
+	}
+	if *sweepInterval <= 0 {
+		return fmt.Errorf("%w: -reservation-sweep-interval must be positive", errUsage)
+	}
 
 	// Then the master key, which in production must be supplied rather than
 	// generated. Resolving it before opening the store means a refused
@@ -127,13 +137,14 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		Principals:  st,
 		Credentials: v,
 		Registry:    registry,
-		Recorder:    gateway.NewRecorder(st, book, budget, logger),
+		Recorder:    gateway.NewRecorder(st, book, budget, logger, *reservationTTL),
 		Dashboard:   dash,
 		Logger:      logger,
 	})
 	if err != nil {
 		return err
 	}
+	gateway.StartReservationSweeper(ctx, st, *sweepInterval, logger)
 
 	configured, err := v.Providers(ctx)
 	if err != nil {

@@ -26,13 +26,23 @@ import (
 // recordingHarness is a gateway backed by a real store and price book, so
 // ledger entries are genuinely written and can be read back.
 type recordingHarness struct {
-	gateway  *httptest.Server
-	upstream *httptest.Server
-	store    *sqlite.Store
-	logs     *syncBuffer
+	gateway   *httptest.Server
+	upstream  *httptest.Server
+	store     *sqlite.Store
+	logs      *syncBuffer
+	principal store.Principal
 }
 
 func newRecordingHarness(t *testing.T, upstream http.HandlerFunc) *recordingHarness {
+	return newRecordingHarnessWith(t, upstream, store.ModeObserve, money.MustParseUSD("10.00"))
+}
+
+func newRecordingHarnessWith(
+	t *testing.T,
+	upstream http.HandlerFunc,
+	mode store.Mode,
+	budget money.Nanos,
+) *recordingHarness {
 	t.Helper()
 
 	ctx := context.Background()
@@ -45,7 +55,7 @@ func newRecordingHarness(t *testing.T, upstream http.HandlerFunc) *recordingHarn
 
 	principal := store.Principal{
 		ID: store.NewPrincipalID(), Name: "recorder-test",
-		KeyHash: store.HashSecret(testKey), Mode: store.ModeObserve, CreatedAt: time.Now(),
+		KeyHash: store.HashSecret(testKey), Mode: mode, CreatedAt: time.Now(),
 	}
 	if err := st.CreatePrincipal(ctx, principal); err != nil {
 		t.Fatalf("creating the principal: %v", err)
@@ -79,7 +89,7 @@ func newRecordingHarness(t *testing.T, upstream http.HandlerFunc) *recordingHarn
 		Principals:  st,
 		Credentials: &fakeCredentials{keys: map[string]string{"openai": testVendor, "anthropic": testVendor}},
 		Registry:    registry,
-		Recorder:    NewRecorder(st, book, money.MustParseUSD("10.00"), logger),
+		Recorder:    NewRecorder(st, book, budget, logger),
 		Logger:      logger,
 	})
 	if err != nil {
@@ -89,7 +99,9 @@ func newRecordingHarness(t *testing.T, upstream http.HandlerFunc) *recordingHarn
 	srv := httptest.NewServer(gw.Handler())
 	t.Cleanup(srv.Close)
 
-	return &recordingHarness{gateway: srv, upstream: up, store: st, logs: logs}
+	return &recordingHarness{
+		gateway: srv, upstream: up, store: st, logs: logs, principal: principal,
+	}
 }
 
 // call sends an authenticated request and drains the response.

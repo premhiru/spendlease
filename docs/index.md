@@ -2,11 +2,11 @@
 
 A spend authorization gateway for AI agents. It holds your vendor API keys, issues short-lived scoped leases to agents, enforces hard spending caps before a request is allowed out, and records an immutable ledger of every dollar each agent spent.
 
-!!! warning "Pre-v0.1 and under construction"
+!!! note "Pre-v0.1 and under construction"
 
-    The gateway does not work yet. `serve` currently starts, logs its configuration and exits without listening. What exists today is the project scaffold, the CLI command surface, CI, and the container build.
-
-    These documentation pages are placeholders that name the phase which fills each one. The [README](https://github.com/premhiru/spendlease#readme) describes v0.1 as designed and is the authoritative specification until the code catches up with it.
+    The gateway, encrypted credential vault, price book, spend ledger,
+    dashboard and budget enforcement work today. Lease issuance, the kill
+    switch, SDKs and the simulated fleet demo are the remaining phases.
 
 ## The problem
 

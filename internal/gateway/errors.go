@@ -19,6 +19,8 @@ const (
 	// ErrTypeUnknownRun means the run named by the caller does not exist or
 	// belongs to a different principal.
 	ErrTypeUnknownRun = "unknown_run"
+	// ErrTypeBudgetExceeded means an enforce-mode reservation could not fit.
+	ErrTypeBudgetExceeded = "budget_exceeded"
 	// ErrTypeNoCredential means the gateway has no vendor key for the
 	// provider the request was routed to.
 	ErrTypeNoCredential = "provider_credential_missing"
@@ -50,6 +52,20 @@ type APIErrorDetail struct {
 	Provider string `json:"provider,omitempty"`
 	// Principal is the authenticated agent, when one had been resolved.
 	Principal string `json:"principal,omitempty"`
+	// Run is the run whose budget caused a rejection.
+	Run string `json:"run,omitempty"`
+	// Budget is Run's configured ceiling, as an exact USD decimal string.
+	Budget string `json:"budget,omitempty"`
+	// Spent is settled spend counted against Run.
+	Spent string `json:"spent,omitempty"`
+	// Held is pending reservations counted against Run.
+	Held string `json:"held,omitempty"`
+	// Requested is the rejected reservation amount.
+	Requested string `json:"requested,omitempty"`
+	// Remaining is the balance available before this request.
+	Remaining string `json:"remaining,omitempty"`
+	// Shortfall is the additional budget needed for this reservation.
+	Shortfall string `json:"shortfall,omitempty"`
 	// Docs links to the relevant documentation.
 	Docs string `json:"docs,omitempty"`
 }
