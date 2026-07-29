@@ -45,6 +45,10 @@ type Options struct {
 	Credentials CredentialSource
 	// Registry routes requests to providers.
 	Registry *providers.Registry
+	// Recorder prices completed requests and appends them to the ledger.
+	// Optional: without one the gateway proxies without accounting, which is
+	// what the tests that only care about proxying use.
+	Recorder *Recorder
 	// Logger receives structured request logs. Required.
 	Logger *slog.Logger
 	// Transport is used for upstream requests. Defaults to
@@ -61,6 +65,7 @@ type Gateway struct {
 	principals  PrincipalLookup
 	credentials CredentialSource
 	registry    *providers.Registry
+	recorder    *Recorder
 	logger      *slog.Logger
 	transport   http.RoundTripper
 }
@@ -89,6 +94,7 @@ func New(opts Options) (*Gateway, error) {
 		principals:  opts.Principals,
 		credentials: opts.Credentials,
 		registry:    opts.Registry,
+		recorder:    opts.Recorder,
 		logger:      opts.Logger,
 		transport:   transport,
 	}, nil
@@ -148,7 +154,14 @@ type contextKey int
 const (
 	ctxPrincipal contextKey = iota
 	ctxInfo
+	ctxRun
 )
+
+// runIDFrom returns the run this request is charged to.
+func runIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(ctxRun).(string)
+	return id
+}
 
 // requestInfo collects attribution as a request travels inward, so the
 // logging middleware on the outside can report it.
@@ -160,6 +173,9 @@ const (
 type requestInfo struct {
 	principalID string
 	provider    string
+	model       string
+	runID       string
+	mode        string
 }
 
 // infoFrom returns the attribution holder for this request, if there is one.

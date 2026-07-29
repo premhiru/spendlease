@@ -35,6 +35,26 @@ type Provider interface {
 	// called after the client's own Authorization header has been stripped,
 	// so an implementation should set rather than append.
 	Authorize(req *http.Request, apiKey string)
+
+	// ParseRequest reads what the gateway needs from a request body: the
+	// model, the output ceiling, whether the response streams, and the
+	// prompt size.
+	//
+	// It never fails. A body it cannot understand yields a zero-valued
+	// RequestInfo and the request is still proxied — refusing to forward a
+	// call over an unrecognised field would be a worse failure than an
+	// unmeasured one.
+	ParseRequest(body []byte) RequestInfo
+
+	// UsageFromResponse reads the token counts a vendor reports on a
+	// complete, non-streaming response. The bool is false when the response
+	// carried no usage.
+	UsageFromResponse(body []byte) (Usage, bool)
+
+	// UsageFromStreamEvent reads the token counts carried by one server-sent
+	// event payload, which vendors report in pieces across a stream. The
+	// bool is false for the majority of events, which carry only content.
+	UsageFromStreamEvent(data []byte) (Usage, bool)
 }
 
 // Registry resolves an incoming request to a provider.

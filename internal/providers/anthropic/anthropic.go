@@ -4,6 +4,8 @@ package anthropic
 import (
 	"net/http"
 	"net/url"
+
+	"github.com/premhiru/spendlease/internal/providers"
 )
 
 // Name is the provider identifier used in leases, the price book and the
@@ -70,4 +72,45 @@ func (p *Provider) Authorize(req *http.Request, apiKey string) {
 	if req.Header.Get("anthropic-version") == "" {
 		req.Header.Set("anthropic-version", DefaultVersion)
 	}
+}
+
+// ParseRequest reads the model, output ceiling, streaming flag and prompt
+// size from a Messages API request body.
+//
+// WantsUsage is always true: unlike OpenAI, Anthropic reports usage on every
+// streamed response without being asked, so spendlease can always record
+// exact token counts for this vendor.
+func (p *Provider) ParseRequest(body []byte) providers.RequestInfo {
+	m := providers.DecodeBody(body)
+	if m == nil {
+		return providers.RequestInfo{}
+	}
+	return providers.RequestInfo{
+		Model:       providers.StringField(m, "model"),
+		MaxTokens:   providers.IntField(m, "max_tokens"),
+		Stream:      providers.BoolField(m, "stream"),
+		PromptChars: providers.CountPromptChars(m),
+		WantsUsage:  true,
+	}
+}
+
+// UsageFromResponse reads Anthropic's usage object from a complete response.
+func (p *Provider) UsageFromResponse(body []byte) (providers.Usage, bool) {
+	m := providers.DecodeBody(body)
+	if m == nil {
+		return providers.Usage{}, false
+	}
+	return providers.UsageFrom(m,
+		[]string{"input_tokens"},
+		[]string{"output_tokens"})
+}
+
+// UsageFromStreamEvent reads usage from one streamed event.
+//
+// Anthropic reports usage in two places: message_start carries the input
+// count nested under "message", and message_delta carries a running output
+// count. Merging both is what produces an exact total, so no estimate is
+// needed for a streamed Anthropic call.
+func (p *Provider) UsageFromStreamEvent(data []byte) (providers.Usage, bool) {
+	return p.UsageFromResponse(data)
 }

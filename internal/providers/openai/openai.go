@@ -4,6 +4,8 @@ package openai
 import (
 	"net/http"
 	"net/url"
+
+	"github.com/premhiru/spendlease/internal/providers"
 )
 
 // Name is the provider identifier used in leases, the price book and the
@@ -61,4 +63,51 @@ func (p *Provider) Paths() []string {
 // Authorize sets the OpenAI bearer credential.
 func (p *Provider) Authorize(req *http.Request, apiKey string) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+}
+
+// ParseRequest reads the model, output ceiling, streaming flag and prompt
+// size from an OpenAI-shaped request body.
+//
+// Both max_tokens and its replacement max_completion_tokens are read, because
+// the newer models accept only the latter and older clients still send the
+// former.
+func (p *Provider) ParseRequest(body []byte) providers.RequestInfo {
+	m := providers.DecodeBody(body)
+	if m == nil {
+		return providers.RequestInfo{}
+	}
+
+	info := providers.RequestInfo{
+		Model:       providers.StringField(m, "model"),
+		MaxTokens:   providers.IntField(m, "max_tokens", "max_completion_tokens"),
+		Stream:      providers.BoolField(m, "stream"),
+		PromptChars: providers.CountPromptChars(m),
+	}
+
+	// Usage on a streamed OpenAI response is opt-in. Whether the caller asked
+	// decides whether spendlease can record exact usage or has to estimate.
+	if opts, ok := m["stream_options"].(map[string]any); ok {
+		info.WantsUsage = providers.BoolField(opts, "include_usage")
+	}
+	return info
+}
+
+// UsageFromResponse reads OpenAI's usage object from a complete response.
+func (p *Provider) UsageFromResponse(body []byte) (providers.Usage, bool) {
+	m := providers.DecodeBody(body)
+	if m == nil {
+		return providers.Usage{}, false
+	}
+	return providers.UsageFrom(m,
+		[]string{"prompt_tokens", "input_tokens"},
+		[]string{"completion_tokens", "output_tokens"})
+}
+
+// UsageFromStreamEvent reads usage from one streamed chunk.
+//
+// OpenAI sends usage only in a final chunk, and only when the caller set
+// stream_options.include_usage. Without it there is nothing to read and the
+// gateway falls back to its local estimate.
+func (p *Provider) UsageFromStreamEvent(data []byte) (providers.Usage, bool) {
+	return p.UsageFromResponse(data)
 }

@@ -20,6 +20,37 @@ Your credential is **always stripped** before the request is forwarded. Any vend
 
 Lease tokens (`sll_`) are recognised but not yet accepted; the error says so explicitly.
 
+### Attributing spend to a run
+
+Spend is charged to a run. Without a header, a request is charged to the principal's implicit run, created on first use — see [ADR-0011](adr/0011-implicit-runs.md).
+
+An application that already models executions can attribute explicitly:
+
+```
+X-Spendlease-Run: run_...
+```
+
+Naming a run that does not exist, or one belonging to a different principal, returns `400 unknown_run` before the request is forwarded.
+
+## Accounting
+
+Every successful request produces a ledger entry: provider, model, token counts, exact cost, and the run and principal it belongs to. Entries are append-only and hash-chained.
+
+**Failed requests are not charged.** A non-2xx from the vendor produces no entry, because vendors do not bill for failures.
+
+Token counts come from the vendor where it reports them. An entry is marked `estimated` when they do not, and the log line says why:
+
+| Situation | Exact? |
+|---|---|
+| Non-streaming, either vendor | Exact |
+| Streaming, Anthropic | Exact — usage is always reported |
+| Streaming, OpenAI **with** `stream_options: {include_usage: true}` | Exact |
+| Streaming, OpenAI **without** it | Estimated |
+| Model not in the price book | Estimated, at the fallback rate |
+| Client disconnected mid-response | Estimated, from partial usage |
+
+Setting `stream_options` yourself is currently the only way to get exact accounting for streamed OpenAI calls. Injecting it automatically is planned and would mutate your request, so it is not done silently today.
+
 ## Proxy endpoints
 
 Everything not listed under [operational endpoints](#operational-endpoints) is proxied. Routing is by path prefix — see [ADR-0006](adr/0006-provider-routing.md).

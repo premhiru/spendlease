@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/premhiru/spendlease/internal/gateway"
+	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/providers"
 	"github.com/premhiru/spendlease/internal/providers/anthropic"
 	"github.com/premhiru/spendlease/internal/providers/openai"
@@ -33,6 +34,8 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	openAIBase := fs.String("openai-url", openai.DefaultBaseURL, "OpenAI upstream base URL")
 	anthropicBase := fs.String("anthropic-url", anthropic.DefaultBaseURL, "Anthropic upstream base URL")
 	pricingDir := fs.String("pricing", "", "directory of price book YAML (default: the copy embedded in this binary)")
+	defaultBudget := fs.String("default-run-budget", "10.00",
+		"budget recorded on a principal's implicit run; not enforced yet")
 	logLevel := fs.String("log-level", "info", "debug, info, warn or error")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -96,10 +99,16 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	budget, err := money.ParseUSD(*defaultBudget)
+	if err != nil {
+		return fmt.Errorf("%w: invalid -default-run-budget: %v", errUsage, err)
+	}
+
 	gw, err := gateway.New(gateway.Options{
 		Principals:  st,
 		Credentials: v,
 		Registry:    registry,
+		Recorder:    gateway.NewRecorder(st, book, budget, logger),
 		Logger:      logger,
 	})
 	if err != nil {

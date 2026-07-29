@@ -106,6 +106,24 @@ func isDenseScript(r rune) bool {
 		unicode.Is(unicode.Thai, r)
 }
 
+// EstimateFromChars returns an approximate token count for text of a known
+// length, when the text itself is no longer available.
+//
+// The gateway counts prompt characters while walking a request body and does
+// not keep the text, so this is the form it needs. Dense-script weighting
+// cannot apply here, since the characters are gone; the result is the plain
+// chars-per-token figure.
+func EstimateFromChars(chars int64) Estimate {
+	if chars <= 0 {
+		return Estimate{Tokens: 0, Approximate: true, Method: "chars/4"}
+	}
+	tokens := (chars + DefaultCharsPerToken - 1) / DefaultCharsPerToken
+	if tokens < 1 {
+		tokens = 1
+	}
+	return Estimate{Tokens: tokens, Approximate: true, Method: "chars/4"}
+}
+
 // ReservationTokens decides how many output tokens to reserve for a request.
 //
 // If the caller specified max_tokens, that is the ceiling and it is used. If

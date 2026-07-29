@@ -180,17 +180,19 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ✅ shipped |
 | — | Encrypted vendor credential vault | ✅ shipped |
 | 4 | Price book, cost calculation, token estimation | ✅ shipped |
-| 5 | Ledger writes, attribution, hash chaining | ⬜ next |
-| 6 | Dashboard | ⬜ |
+| 5 | Ledger writes, attribution, hash chaining | ✅ shipped |
+| 6 | Dashboard | ⬜ next |
 | 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ |
 | 8 | Leases, scoping, revocation set, kill switch | ⬜ |
 | 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
 
 **What runs today:** `spendlease serve` starts a working reverse proxy. It authenticates agents by principal key, swaps that key for the real vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or Anthropic by path, streams SSE responses through unbuffered, and logs every request with per-principal and per-provider attribution. `spendlease keys principal` and `spendlease keys provider` manage identities and vendor credentials. Underneath sits a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
 
-The price book is loaded and prices any request exactly: 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
+The price book prices any request exactly — 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
 
-**What does not:** **nothing is capped, reserved or recorded.** Pricing exists as a library but the gateway does not call it yet — no ledger entry is written for a proxied request, there is no budget enforcement and no `402`. Runs and leases are stored but not issued or checked; agents authenticate with the long-lived principal key for now. `demo` and the dashboard do not exist. Today this is a credential-custody proxy that knows what things cost but does not yet count them.
+**Spend is now recorded.** Every successful request produces an append-only, hash-chained ledger entry attributed to a principal and a run, priced from the token counts the vendor reported. Failed requests are not charged. Entries the gateway could not price exactly are marked `estimated` and say why. This is **observe mode**: everything is recorded, nothing is blocked.
+
+**What does not:** **nothing is capped.** There is no reservation, no budget enforcement and no `402` — a run can exceed its budget freely and only the record shows it. Leases are stored but not issued; agents authenticate with the long-lived principal key. The dashboard and `demo` do not exist, so reading the ledger currently means querying SQLite yourself.
 
 ## Contributing
 
