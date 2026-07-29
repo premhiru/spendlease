@@ -21,6 +21,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
     -o /out/spendlease ./cmd/spendlease
 
+# The final stage copies this empty directory with the runtime user's numeric
+# ownership so SQLite can create its files there.
+RUN mkdir -p /out/data
+
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
@@ -30,6 +34,7 @@ LABEL org.opencontainers.image.title="spendlease" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 COPY --from=build /out/spendlease /usr/local/bin/spendlease
+COPY --from=build --chown=65532:65532 /out/data /data
 
 # State lives here so it can be bind-mounted or backed by a volume. The image
 # runs unprivileged; the directory is owned by the nonroot user.

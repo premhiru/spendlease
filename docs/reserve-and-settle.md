@@ -1,9 +1,13 @@
 # Reserve and settle
 
-Spend authorization has to happen before a vendor call, while the exact cost
-is only known after it. `spendlease` treats the gap like a fuel-pump
+Spend authorization has to happen before a vendor call, while final token
+usage is only known after it. `spendlease` treats the gap like a fuel-pump
 pre-authorization: hold a safe upper bound, then replace the hold with the
-actual charge.
+calculated token charge.
+
+Reservations use the active price book. Charges outside that model, including
+cache and long-context multipliers or per-tool fees, are not part of the hold;
+see [Price book](pricing-book.md#what-is-not-modeled).
 
 ## The reservation
 
@@ -81,8 +85,8 @@ Money fields are decimal US-dollar strings. The stable field to branch on is
 
 On a successful vendor response, spendlease reads the vendor's usage and
 atomically appends the ledger entry while resolving the reservation. The
-ledger charge is the actual input and output cost, not the reserved ceiling;
-the unused difference becomes available immediately.
+ledger charge is the base token cost calculated from that usage, not the
+reserved ceiling; the unused difference becomes available immediately.
 
 Settlement is idempotent. A reservation can produce at most one ledger entry,
 including when a process retries after an uncertain database result.
@@ -107,8 +111,8 @@ not erase spend already incurred upstream.
 
 If the process disappears before it can settle or release, the reservation
 remains pending until its TTL, then the sweeper reclaims it. A late response
-may still append its actual charge after expiry, but cannot reclaim the hold a
-second time.
+may still append its calculated charge after expiry, but cannot reclaim the
+hold a second time.
 
 ## Failure policy
 

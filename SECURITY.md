@@ -14,12 +14,15 @@ We ask for 90 days before public disclosure, and will usually be much faster tha
 
 ## Supported versions
 
-Pre-1.0, only the latest minor release receives security fixes.
+There is no stable release. Security fixes are applied to the current `main`
+branch and the container built from it. The existing alpha tag predates the
+current gateway implementation.
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
-| < 0.1 | No |
+| Current `main` / matching `sha-...` image | Yes |
+| `edge` image | Yes, but mutable |
+| `v0.1.0-alpha.1` | No |
 
 ## Scope
 

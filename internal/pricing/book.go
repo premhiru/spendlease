@@ -1,5 +1,5 @@
 // Package pricing loads the versioned price book and turns token counts into
-// exact costs.
+// calculated costs.
 //
 // The price book is data, not code: plain YAML files under /pricing, each
 // stamped with the date its prices take effect. Vendor prices change
@@ -148,13 +148,10 @@ type Fallback struct {
 	DefaultMaxTokens int64
 }
 
-// DefaultFallback is deliberately expensive: roughly the most costly model in
-// the book at the time of writing.
-//
-// Guessing high means an unknown model over-reserves and is throttled early,
-// which is recoverable. Guessing low means it under-reserves and a runaway
-// loop runs longer than the budget should have allowed, which is the failure
-// this product exists to prevent.
+// DefaultFallback is a fixed conservative rate for unknown models. It avoids
+// treating an unrecognised model as free, but it is not guaranteed to exceed
+// every vendor price. Callers can identify the estimate on the ledger entry
+// and the gateway logs a warning when the fallback is selected.
 var DefaultFallback = Fallback{
 	InputPer1M:       money.MustParseUSD("15.00"),
 	OutputPer1M:      money.MustParseUSD("75.00"),

@@ -4,6 +4,11 @@ Why things are the way they are. See [ADR-0001](0001-record-architecture-decisio
 
 ADRs are immutable once merged. To change a decision, add a new ADR that supersedes the old one rather than editing it.
 
+Each record describes the code and roadmap at the time of that decision. A
+statement such as "enforcement has not landed" may therefore be historically
+correct even when the current implementation has moved on. Use the main guides
+and references for current behavior.
+
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |

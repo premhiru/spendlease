@@ -17,7 +17,7 @@ x-api-key: sll_...
 
 A bare `Authorization: sll_...` with no scheme is also accepted, for hand-rolled clients.
 
-Your credential is **always stripped** before the request is forwarded. Any vendor key you send is discarded rather than honoured: the gateway decides which credential goes upstream.
+Your credential is **always stripped** before the request is forwarded. Any vendor key you send is discarded rather than honored: the gateway decides which credential goes upstream.
 
 Lease tokens (`sll_`) are the agent credential. They resolve to a run and
 principal and enforce expiry, provider scope and the optional lease ceiling.
@@ -50,17 +50,27 @@ the formula, concurrency guarantee and lifecycle.
 
 ## Accounting
 
-Every successful request produces a ledger entry: provider, model, token counts, exact cost, and the run and principal it belongs to. Entries are append-only and hash-chained.
+Every successful request produces a ledger entry containing the provider,
+model, reported or estimated token counts, calculated base token cost, run,
+and principal. Entries are append-only and hash-chained.
+
+The cost is exact for the price-book rate and token counts used in the
+calculation. It may not equal the complete vendor charge because cache and
+long-context multipliers, regional tiers, tool fees, and other non-token
+charges are not modeled. The `estimated` field identifies missing token usage
+or an unknown model; it does not currently flag every unmodeled billing
+dimension. See [Price book](pricing-book.md#what-is-not-modeled).
 
 **Failed requests are not charged.** A non-2xx from the vendor produces no entry, because vendors do not bill for failures.
 
-Token counts come from the vendor where it reports them. An entry is marked `estimated` when they do not, and the log line says why:
+Token counts come from the vendor where it reports them. An entry is marked
+`estimated` when the counts or model price require a fallback:
 
-| Situation | Exact? |
+| Situation | Token-cost basis |
 |---|---|
-| Non-streaming, either vendor | Exact |
-| Streaming, Anthropic | Exact — usage is always reported |
-| Streaming, OpenAI | Exact — `stream_options` is injected if you did not set it |
+| Non-streaming, either vendor | Reported usage |
+| Streaming, Anthropic | Reported usage |
+| Streaming, OpenAI | Reported usage; `stream_options` is injected if needed |
 | Vendor reports no usage even when asked | Estimated |
 | Model not in the price book | Estimated, at the fallback rate |
 | Client disconnected mid-response | Estimated, from partial usage |
@@ -152,7 +162,7 @@ Every spendlease-generated error is JSON with the same shape, and carries `X-Spe
 
 | Type | Status | Meaning |
 |---|---|---|
-| `unauthenticated` | 401 | No credential, a malformed one, or one that is not recognised |
+| `unauthenticated` | 401 | No credential, a malformed one, or one that is not recognized |
 | `unknown_route` | 404 | No provider claims this path |
 | `unknown_run` | 400 | The requested run is missing or belongs to another principal |
 | `budget_exceeded` | 402 | The reservation exceeds the run or an ancestor's remaining budget |

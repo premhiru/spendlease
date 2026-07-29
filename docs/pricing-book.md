@@ -1,8 +1,22 @@
 # Price book
 
-The price book is how `spendlease` turns token counts into dollars. It lives in [`/pricing`](https://github.com/premhiru/spendlease/tree/main/pricing) as plain YAML — data, not code.
+The price book turns token counts into US dollars. It lives in
+[`/pricing`](https://github.com/premhiru/spendlease/tree/main/pricing) as YAML
+and currently contains base token rates for selected OpenAI and Anthropic
+models.
 
-**This is the easiest and most valuable thing to contribute to.** Updating a price needs no Go, no tests to write, and no understanding of the gateway. Vendor prices change constantly and nobody else maintains a normalised cost table across every vendor an agent might call.
+The shipped rates were checked against the
+[OpenAI](https://developers.openai.com/api/docs/pricing) and
+[Anthropic](https://platform.claude.com/docs/en/about-claude/pricing) pricing
+pages on 2026-07-29. They still need regular review because model names and
+prices can change without a spendlease release.
+
+> [!WARNING]
+> A spendlease budget currently covers the token charges represented by the
+> price book. It is not a guaranteed ceiling on the complete vendor invoice.
+> Cache-write multipliers, long-context rates, regional processing, tool-call
+> fees, and other non-token charges are not modeled. Use observe mode and
+> compare the ledger with the vendor bill before enabling enforcement.
 
 ## Format
 
@@ -37,9 +51,12 @@ It is **not** the model's output limit. It is what gets held against a run's bud
 
 Reserving a model's full output window (128k tokens on current flagship models) would tie up most of a budget for a request that will almost certainly use a fraction of it, and would reject every subsequent call. Reserving nothing would let an unbounded completion through. A few thousand tokens is the sensible middle.
 
-## Prices are never edited, only superseded
+## Superseding a price
 
-Each file carries an `effective` date. A price change ships as a **new dated file**, not an edit to an existing one.
+Each file carries an `effective` date. Add a dated file when a rate changes,
+even if the effective date has already passed. Editing an older rate would
+make the repository lose the price history used to interpret earlier ledger
+entries.
 
 The shipped book demonstrates this with a real example. Claude Sonnet 5 is on introductory pricing through 2026-08-31:
 
@@ -63,13 +80,16 @@ This matters because a ledger entry written in July has to stay explainable in D
 
 ## Unknown models
 
-A model the book does not contain **never costs zero**. Instead:
+A model the book does not contain is not treated as free. Instead:
 
 1. A warning is logged, once per unknown model, so a retry loop does not flood the log.
-2. A configurable fallback rate is applied. The default is deliberately expensive — roughly the priciest model in the book.
+2. A fixed fallback of $15 per million input tokens, $75 per million output
+   tokens, and a 4,096-token output reservation is applied.
 3. The resulting ledger entry is marked `estimated: true`.
 
-Guessing high means an unknown model over-reserves and is throttled early, which is recoverable. Guessing low means a runaway loop runs longer than the budget should have allowed, which is the failure this product exists to prevent.
+The fallback prevents silent zero-cost accounting, but it is not guaranteed to
+be higher than the unknown model's real price. Treat the warning and
+`estimated` marker as a request to add the model before relying on enforcement.
 
 ## Cost calculation
 
@@ -82,7 +102,8 @@ cost = input_tokens  × input_per_1m  ÷ 1,000,000
 
 The implementation splits the token count into whole millions and a remainder, because the naive multiplication overflows `int64` for large requests. The remainder is rounded half-up rather than truncated: truncation would bias every charge downwards, and a spend limiter that consistently under-counts is the wrong kind of wrong.
 
-Verified against a vendor's own worked example — 50,000 input and 15,000 output tokens on Claude Opus 5 costs $0.25 + $0.375 — which is the closest thing to an independent oracle available.
+The test suite includes worked examples and boundary cases for integer
+rounding and overflow.
 
 ## Token estimation
 
@@ -92,19 +113,22 @@ There is **no bundled tokenizer**. The estimate uses a documented `chars/4` heur
 
 The estimate only has to be good enough to size a hold that gets settled against actual usage minutes later.
 
-## What is not modelled
+## What is not modeled
 
-Being clear about this matters more than covering everything:
-
-- **Prompt caching.** Cache writes and reads are priced differently (1.25×, 2×, 0.1× of base input on Anthropic), but whether a given request hit cache is not reliably knowable from outside. A cache-heavy workload is therefore over-estimated, which is the safe direction.
-- **Batch API discounts.** 50% on both vendors, but only for asynchronous batch endpoints.
-- **Priority and fast-mode tiers**, and data-residency multipliers.
-- **Per-search and per-container tool charges**, such as web search billed per thousand searches.
-- **Non-token spend entirely** — search APIs, scrapers, data APIs. The ledger can hold these; the price book does not describe them yet.
+- **Prompt caching.** Cache reads can cost less than base input and cache writes
+  can cost more. Pricing all input at the base rate can therefore overcount or
+  undercount, depending on the workload.
+- **Long-context multipliers.** Some models charge higher input and output
+  rates after a context threshold.
+- **Batch discounts, priority tiers, fast-mode tiers, and regional processing
+  multipliers.**
+- **Tool charges**, such as search or container use billed per call.
+- **Non-token providers**, including search APIs, scrapers, and data APIs.
 
 ## Contributing an update
 
-1. Edit the relevant file under `/pricing`, or add a new dated one for a scheduled change.
+1. Add a dated YAML file containing the models whose rates changed. Do not
+   rewrite an older effective rate.
 2. Set `effective` to the date the price actually takes effect, not today.
 3. **Link the vendor's pricing page in your PR description.** This is the one hard requirement.
 4. Run `make test`. The price book is schema-validated and sanity-checked by the test suite — it will catch a missing source, a non-positive rate, output priced below input, and prices large enough to suggest a units error.

@@ -1,12 +1,14 @@
 # spendlease
 
-**A spend authorization gateway for AI agents.** It holds your vendor API keys, issues short-lived scoped leases to agents, enforces hard spending caps before a request is allowed out, and records an immutable ledger of every dollar each agent spent.
+`spendlease` is a self-hosted reverse proxy for OpenAI and Anthropic. It keeps
+vendor keys out of agent environments, gives each agent a short-lived lease,
+checks a budget before forwarding a request, and records calculated token cost
+in an append-only ledger.
 
-Agents spend real money on inference, search APIs, data APIs and scrapers, and almost nobody can answer "which agent spent this?" until the invoice arrives. An unattended retry loop — one call a second, twelve hours, a 4k prompt each time — costs **$864** on `gpt-4o`, **$43,200** across a fleet of fifty, and **$51,840** on `o1-pro`. The first signal is a billing alert three days later. `spendlease` puts an authorization decision in front of every one of those calls, so the loop dies at $50 instead.
-
-Those figures are computed from the shipped [price book](pricing/) by a [test](internal/pricing/pricebook_test.go), not estimated.
-
-This is **IAM for machine spend**, closer to `sts:AssumeRole` than to Expensify. It is meant to be load-bearing infrastructure that you install once and never rip out.
+The useful comparison is IAM rather than expense reporting: a lease says who
+may spend, where, for how long, and up to what amount. A retry loop stops when
+its run reaches the configured budget instead of continuing until someone
+notices the vendor bill.
 
 [![CI](https://github.com/premhiru/spendlease/actions/workflows/ci.yml/badge.svg)](https://github.com/premhiru/spendlease/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -17,25 +19,14 @@ This is **IAM for machine spend**, closer to `sts:AssumeRole` than to Expensify.
 ## Quickstart
 
 > [!NOTE]
-> The complete v0.1 feature set is implemented. The project remains pre-v1,
-> so pin a release before using it as load-bearing infrastructure.
+> The current `main` branch contains the planned v0.1 feature set, but there is
+> no stable release yet. The existing `v0.1.0-alpha.1` tag predates several
+> features described here. Use `:edge` to evaluate the current container, or
+> pin a `sha-...` container tag when you need a repeatable build.
 
-No signup, no config file, no database to provision.
-
-```bash
-docker run -p 4000:4000 ghcr.io/premhiru/spendlease:edge
-```
-
-Open <http://localhost:4000>. The dashboard is live and empty. To explore the
-whole flow without vendor credentials or application wiring, run the
-self-contained demo instead:
-
-```bash
-spendlease demo
-```
-
-Or run the demo directly from the image (stop the regular gateway container
-first if it already owns port 4000):
+The demo starts a temporary gateway, a mock provider, and three simulated
+agents. It does not need a vendor key and deletes its in-memory state when it
+stops:
 
 ```bash
 docker run --rm -p 4000:4000 ghcr.io/premhiru/spendlease:edge \
@@ -47,19 +38,20 @@ loop. Visit the printed dashboard URL to watch spend accumulate, the budget
 block requests, and the kill switch revoke the loop's lease. The demo uses an
 in-memory database and removes all state when it exits.
 
-Prefer a binary?
+To run the demo from source instead:
 
 ```bash
-go install github.com/premhiru/spendlease/cmd/spendlease@latest
-spendlease serve
+go run ./cmd/spendlease demo
 ```
 
-State lands in a single SQLite file (`./spendlease.db` by default). The
-optional PostgreSQL backend is planned but not implemented yet.
+For a real provider, follow [Getting started](docs/getting-started.md). It
+covers the binary and Docker workflows, persistent state, vendor credentials,
+leases, and the environment variables used by an application.
 
 ## Integration
 
-One line. Override the base URL. This works with every vendor SDK in every language, because it is just an HTTP endpoint.
+An application only needs a different base URL and a spendlease lease in place
+of its vendor API key. The rest of the vendor SDK remains unchanged.
 
 The optional thin SDK packages validate the lease and produce the vendor
 client options without wrapping the vendor API:
@@ -78,9 +70,11 @@ import { Lease } from "@spendlease/sdk";
 const client = new OpenAI(Lease.fromEnv().openAIOptions());
 ```
 
-Or configure the vendor SDK directly:
+The SDK packages are currently installed from this repository. You can also
+configure the vendor SDK directly:
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(
@@ -98,41 +92,49 @@ const client = new Anthropic({
 });
 ```
 
-Your real vendor keys stay in the gateway's encrypted vault. Create a run and
-issue a short-lived lease:
+Before running the application, store the vendor key, create a run, and issue
+a short-lived lease:
 
 ```bash
 spendlease keys principal create --name checkout-agent
+spendlease keys provider set openai --key sk-proj-...
 spendlease keys run create --principal checkout-agent --budget 25.00
 spendlease keys lease issue --run <run-id> --ttl 15m --providers openai
+export SPENDLEASE_LEASE_TOKEN=sll_...
+export SPENDLEASE_URL=http://localhost:4000
+spendlease serve
 ```
+
+PowerShell uses `$env:SPENDLEASE_LEASE_TOKEN = "sll_..."` and
+`$env:SPENDLEASE_URL = "http://localhost:4000"`. The principal key printed by
+the first command is a long-lived bootstrap credential; applications should
+use the lease token printed by `keys lease issue`.
 
 Every new principal starts in **observe mode**: everything passes through, nothing is blocked, all of it is recorded. Flip to enforcement when you trust the numbers, with one API call or one toggle in the dashboard.
 
 ```bash
-spendlease keys principal set-mode checkout-agent --mode enforce
+spendlease keys principal set-mode --name checkout-agent --mode enforce
 ```
 
 ## What it does
 
-- **Caps spend before the request leaves.** Costs are estimated and reserved against a run's budget at request time, then settled against actual usage on completion. Over-budget requests get a `402` naming the run, the cap, and the shortfall.
+- **Enforces a price-book budget before egress.** Token cost is reserved against a run at request time and settled from reported usage. A reservation that does not fit returns a `402` naming the limiting run and shortfall.
 - **Holds your vendor credentials.** AES-256-GCM at rest, keyed by `SPENDLEASE_MASTER_KEY`. The gateway swaps the lease token for the real key at egress.
-- **Attributes every dollar.** Per principal, per run, per model. Sub-agents are runs with a `parent_run_id` drawing from the parent's remaining budget: budget flows down, accountability rolls up.
-- **Kills a runaway agent in under a second.** `POST /admin/principals/{id}/revoke` invalidates every lease for that principal against an in-memory revocation set checked on every request. `spendlease keys revoke --all` from the CLI.
+- **Attributes recorded token cost.** Every ledger entry names its principal, run, provider, and model. Child runs draw from their own budget and every budgeted ancestor.
+- **Rejects revoked leases on the next request.** `POST /admin/principals/{id}/revoke` invalidates every lease for that principal against an in-memory revocation set. `spendlease keys revoke --all` provides the same control from the CLI.
 - **Keeps a tamper-evident ledger.** Append-only, enforced by a database trigger, with each entry carrying the previous entry's hash.
-- **Streams properly.** SSE chunks pass through untouched as they arrive, and usage accumulates as they go. No buffering, no added latency to first token.
+- **Forwards SSE without response buffering.** Chunks are flushed as they arrive while usage events are observed for settlement.
 
 ## What it does not do
 
-Being clear about this is more useful than a longer feature list:
-
 - **No reconciliation or ERP export.** It will not close your books or talk to NetSuite.
-- **No charts.** The dashboard is one table, sorted by spend descending. That is deliberate.
+- **No charts.** The dashboard is one table, sorted by spend descending.
 - **No framework integrations.** No LangChain, CrewAI, or LlamaIndex adapters. Base-URL override works everywhere and does not rot.
 - **No multi-tenancy, SSO, or RBAC.** Single tenant, self-hosted, one shared admin surface.
 - **No anomaly detection or least-cost routing.** It enforces the budget you set; it will not second-guess your model choice.
 - **No payment rails.** It authorizes spend against vendor accounts you already have. It does not move money.
 - **Not a proxy for correctness.** It counts dollars, not tokens-well-spent.
+- **Not a complete vendor-invoice ceiling.** Cache and long-context multipliers, regional tiers, tool fees, and other non-token charges are not modeled yet. Validate a workload in observe mode before relying on enforcement.
 
 ## How it works
 
@@ -156,7 +158,12 @@ flowchart LR
     L --> D["Dashboard :4000"]
 ```
 
-The hard part is that you cannot know an LLM call's cost until it finishes, but you have to authorize it before it starts. `spendlease` handles this like a fuel pump pre-authorization: reserve an upper bound up front, settle the real number afterward, release the difference. See [reserve-and-settle](docs/reserve-and-settle.md) for the full explanation, including what happens on mid-stream disconnects and provider errors.
+An LLM call has to be authorized before its final token usage is known.
+`spendlease` reserves a price-book upper bound, replaces that hold with the
+calculated token charge when the response finishes, and releases the
+difference. [Reserve and
+settle](docs/reserve-and-settle.md) explains the calculation and the behavior
+on disconnects and provider errors.
 
 > [!IMPORTANT]
 > For OpenAI-compatible streaming endpoints, `spendlease` injects `stream_options: {include_usage: true}` when you have not set it, so it can read actual token counts. The extra usage chunk that produces is withheld from the stream you receive, so what you read is byte-identical to what you would have read without spendlease in the path.
@@ -189,74 +196,46 @@ providers:
 
 Unknown models never silently cost zero. They log loudly, apply a configurable fallback rate, and mark the ledger entry `estimated: true`.
 
-Vendor prices change constantly and nobody else maintains a normalized cost table across every vendor an agent might call. **Price book PRs are the single most valuable contribution to this project** and the easiest place to start. See [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
+Vendor prices change often. Price book updates are plain YAML and are a useful
+first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
 
 ## Documentation
 
 | | |
 |---|---|
 | [Getting started](docs/getting-started.md) | Install, first principal, first lease |
+| [CLI reference](docs/cli-reference.md) | Commands, flags, environment variables |
+| [Dashboard](docs/dashboard.md) | Fields, controls, access, and limitations |
 | [Concepts](docs/concepts.md) | Principal, run, lease, reservation |
 | [Reserve and settle](docs/reserve-and-settle.md) | The deep explanation, streaming caveat included |
 | [Policy reference](docs/policy-reference.md) | Every policy field |
 | [Price book](docs/pricing-book.md) | Format, and how to contribute updates |
-| [Self-hosting](docs/self-hosting.md) | Production deployment, PostgreSQL, key management |
+| [Self-hosting](docs/self-hosting.md) | Persistent deployment, backups, and key management |
 | [API reference](docs/api-reference.md) | Admin and gateway HTTP surface |
 | [FAQ](docs/faq.md) | |
 | [ADRs](docs/adr/) | Why things are the way they are |
 
 Full site: **<https://premhiru.github.io/spendlease>**
 
-## Status
+## Release status
 
-The v0.1 feature set is complete and the project remains pre-v1. This table is
-the implementation history; `main` stayed working at every phase.
+`main` contains the gateway, encrypted credential vault, SQLite store, price
+book, reserve-and-settle enforcement, dashboard, leases, revocation, SDK
+helpers, and demo. PostgreSQL, multi-tenancy, and the other items listed above
+are not implemented.
 
-| Phase | | |
-|---|---|---|
-| 1 | Scaffold, CI, container, contributor docs | ✅ shipped |
-| — | Release and docs publishing | ✅ shipped |
-| 2 | Store interface, SQLite, schema, ledger immutability | ✅ shipped |
-| 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ✅ shipped |
-| — | Encrypted vendor credential vault | ✅ shipped |
-| 4 | Price book, cost calculation, token estimation | ✅ shipped |
-| 5 | Ledger writes, attribution, hash chaining | ✅ shipped |
-| 6 | Dashboard | ✅ shipped |
-| 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ✅ shipped |
-| 8 | Leases, scoping, revocation set, kill switch | ✅ shipped |
-| 9 | Python + TypeScript SDKs, `demo`, examples | ✅ shipped |
-
-**What runs today:** `spendlease serve` starts a working reverse proxy. It
-authenticates agents with short-lived leases, swaps each lease for the real
-vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or
-Anthropic by path, streams SSE responses through unbuffered, and logs every
-request with per-principal and per-provider attribution. `spendlease keys`
-manages principals, runs, leases, revocation, and vendor credentials.
-Underneath sits a self-migrating SQLite database holding principals, runs,
-leases, reservations and a hash-chained, trigger-enforced append-only ledger.
-
-The price book prices any request exactly — 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
-
-**Spend is reserved and settled.** Before egress, each request holds a priced
-upper bound against its run and every budgeted ancestor in one atomic
-transaction. Enforce mode returns a structured `402` before contacting the
-vendor when the hold does not fit. Observe mode records the same would-block
-decision but forwards it. Successful responses settle actual usage; provider
-errors release the hold; disconnects settle partial usage; and a background
-sweeper reclaims abandoned reservations after their TTL.
-
-**The dashboard is live** at `http://localhost:4000` — one table, sorted by spend descending, with a one-click observe/enforce toggle and a badge on every agent whose run exceeded its budget. That badge is the point of observe mode: each of those requests was served, and would not have been under enforcement.
-
-**The SDKs and demo are live.** [`sdk/python`](sdk/python/) and
-[`sdk/typescript`](sdk/typescript/) contain dependency-free helpers for the
-official vendor clients, with runnable integrations under [`examples`](examples/).
-`spendlease demo` exercises the real gateway, accounting, enforcement,
-dashboard, and revocation paths against a local mock provider.
+The project is still pre-v1. The mutable `edge` container tracks `main`, while
+every build also publishes an immutable `sha-...` tag. The tagged
+`v0.1.0-alpha.1` release is older than the current feature set; do not use that
+tag as a substitute for the current documentation.
 
 ## Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md) gets you from clone to green tests in four commands. Bug reports, price book updates, and provider adapters are all welcome. Questions and design discussion belong in [GitHub Discussions](https://github.com/premhiru/spendlease/discussions); security reports follow [SECURITY.md](SECURITY.md) and should never be filed as public issues.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers local setup, tests, price book
+changes, and pull-request conventions. Questions and design discussion belong
+in [GitHub Discussions](https://github.com/premhiru/spendlease/discussions).
+Report security problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-[Apache 2.0](LICENSE). The patent grant is deliberate: this is infrastructure, and adopters should not have to think twice.
+[Apache 2.0](LICENSE).
