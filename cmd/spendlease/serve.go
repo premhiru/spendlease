@@ -120,6 +120,8 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	}
 
 	adminToken := resolveAdminToken(*adminTokenFlag)
+	revocations := gateway.NewRevocationSet()
+	killSwitch := gateway.NewKillSwitch(st, revocations)
 	dash, err := dashboard.New(dashboard.Options{
 		Store:   st,
 		Logger:  logger,
@@ -127,6 +129,7 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		Models:  countModels(book),
 		Warning: dashboardWarning(*addr, adminToken),
 		Guard:   dashboard.Guard{Token: adminToken},
+		Revoker: killSwitch,
 	})
 	if err != nil {
 		return err
@@ -135,6 +138,8 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 
 	gw, err := gateway.New(gateway.Options{
 		Principals:  st,
+		Leases:      st,
+		Revocations: revocations,
 		Credentials: v,
 		Registry:    registry,
 		Recorder:    gateway.NewRecorder(st, book, budget, logger, *reservationTTL),

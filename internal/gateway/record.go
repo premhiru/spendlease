@@ -118,6 +118,7 @@ func (r *Recorder) Reserve(
 	reservation := store.Reservation{
 		ID:        store.NewReservationID(),
 		RunID:     runIDFrom(ctx),
+		LeaseID:   leaseIDFrom(ctx),
 		Amount:    amount,
 		Status:    store.ReservationPending,
 		ExpiresAt: now.Add(r.reservationTTL),

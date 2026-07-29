@@ -27,6 +27,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
         <th class="num">Calls</th>
         <th class="num">Spend</th>
         <th class="num">Last seen</th>
+        <th>Kill</th>
       </tr>
     </thead>
     <tbody>
@@ -75,6 +76,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
         <td class="spend">${{ .Spend }}</td>
 
         <td class="seen">{{ .LastSeen }}</td>
+        <td><button class="badge" hx-post="/admin/principals/{{ .ID }}/revoke" hx-target="#table" hx-swap="outerHTML" title="Revoke every lease now">Revoke</button></td>
       </tr>
       {{ end }}
     </tbody>
@@ -82,7 +84,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
       <tr>
         <td class="label" colspan="4">Total</td>
         <td class="spend">${{ .Total }}</td>
-        <td></td>
+        <td colspan="2"></td>
       </tr>
     </tfoot>
   </table>

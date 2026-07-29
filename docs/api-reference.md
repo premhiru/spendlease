@@ -3,8 +3,7 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v0.1. Lease authentication is not built yet. This page documents what is
-> implemented, not what is planned.
+> Pre-v0.1. This page documents what is implemented, not what is planned.
 
 ## Authentication
 
@@ -19,7 +18,10 @@ A bare `Authorization: slk_...` with no scheme is also accepted, for hand-rolled
 
 Your credential is **always stripped** before the request is forwarded. Any vendor key you send is discarded rather than honoured: the gateway decides which credential goes upstream.
 
-Lease tokens (`sll_`) are recognised but not yet accepted; the error says so explicitly.
+Lease tokens (`sll_`) are the agent credential. They resolve to a run and
+principal and enforce expiry, provider scope and the optional lease ceiling.
+Principal keys remain accepted as a compatibility path, but should not be
+placed in agent environments.
 
 ### Attributing spend to a run
 
@@ -120,6 +122,7 @@ Vendor responses are passed through unchanged, including error status codes and 
 | `GET` | `/` | local or admin token | Embedded spend dashboard. |
 | `GET` | `/table` | local or admin token | Dashboard table fragment used by htmx. |
 | `POST` | `/admin/principals/{id}/mode` | local or admin token | Switch between `observe` and `enforce`. |
+| `POST` | `/admin/principals/{id}/revoke` | local or admin token | Immediately revoke every current lease. |
 
 “Local” means the TCP peer is a loopback address. Remote dashboard and admin
 requests require `SPENDLEASE_ADMIN_TOKEN` (or `--admin-token`) and either HTTP
@@ -152,6 +155,7 @@ Every spendlease-generated error is JSON with the same shape, and carries `X-Spe
 | `unknown_route` | 404 | No provider claims this path |
 | `unknown_run` | 400 | The requested run is missing or belongs to another principal |
 | `budget_exceeded` | 402 | The reservation exceeds the run or an ancestor's remaining budget |
+| `lease_scope_denied` | 403 | The lease does not allow the resolved provider |
 | `provider_credential_missing` | 503 | No vendor key stored, or it could not be decrypted |
 | `upstream_unavailable` | 502 | The vendor could not be reached |
 | `internal` | 500 | The gateway itself failed |

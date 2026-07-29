@@ -31,8 +31,12 @@ func runKeys(args []string, stdout, stderr io.Writer) error {
 		return runKeysProvider(args[1:], stdout, stderr)
 	case "master":
 		return runKeysMaster(args[1:], stdout, stderr)
-	case "run", "lease", "revoke":
-		return fmt.Errorf("%w: `keys %s` is not implemented yet; it arrives with the lease phase", errUsage, args[0])
+	case "run":
+		return runKeysRun(args[1:], stdout, stderr)
+	case "lease":
+		return runKeysLease(args[1:], stdout, stderr)
+	case "revoke":
+		return runKeysRevoke(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("%w: unknown subcommand %q", errUsage, args[0])
 	}

@@ -91,11 +91,10 @@ func TestRun(t *testing.T) {
 			wantErr:  "expected one of create, list, set-mode",
 		},
 		{
-			// Deferred rather than unknown, and the message says which.
-			name:     "keys lease says it is not implemented yet",
+			name:     "keys lease requires issue",
 			args:     []string{"keys", "lease"},
 			wantCode: 2,
-			wantErr:  "not implemented yet",
+			wantErr:  "keys lease issue",
 		},
 		{
 			name:     "keys master requires generate",

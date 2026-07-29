@@ -29,6 +29,11 @@ type SummaryStore interface {
 	SetPrincipalMode(ctx context.Context, id string, m store.Mode) error
 }
 
+// PrincipalRevoker is the kill-switch surface used by the dashboard.
+type PrincipalRevoker interface {
+	RevokePrincipal(context.Context, string) (int, error)
+}
+
 // Options configures a dashboard.
 type Options struct {
 	// Store supplies the rows. Required.
@@ -44,6 +49,8 @@ type Options struct {
 	Warning string
 	// Guard controls access from outside the local machine.
 	Guard Guard
+	// Revoker activates the principal-wide kill switch.
+	Revoker PrincipalRevoker
 }
 
 // Dashboard serves the spend table.
@@ -56,6 +63,7 @@ type Dashboard struct {
 	version string
 	models  int
 	warning string
+	revoker PrincipalRevoker
 }
 
 // New parses the templates and returns a dashboard.
@@ -76,6 +84,7 @@ func New(opts Options) (*Dashboard, error) {
 		version: opts.Version,
 		models:  opts.Models,
 		warning: opts.Warning,
+		revoker: opts.Revoker,
 	}, nil
 }
 
@@ -89,11 +98,26 @@ func (d *Dashboard) Routes(mux *http.ServeMux) {
 	mux.Handle("GET /{$}", d.guard.Protect(http.HandlerFunc(d.handlePage)))
 	mux.Handle("GET /table", d.guard.Protect(http.HandlerFunc(d.handleTable)))
 	mux.Handle("POST /admin/principals/{id}/mode", d.guard.Protect(http.HandlerFunc(d.handleSetMode)))
+	if d.revoker != nil {
+		mux.Handle("POST /admin/principals/{id}/revoke", d.guard.Protect(http.HandlerFunc(d.handleRevoke)))
+	}
 
 	// Stylesheet and htmx. No secrets, and requiring credentials for them
 	// would mean an unauthenticated browser could not even render the login
 	// prompt properly.
 	mux.Handle("GET /static/", d.static)
+}
+
+func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	n, err := d.revoker.RevokePrincipal(r.Context(), id)
+	if err != nil {
+		d.logger.Error("revoking principal", "principal", id, "error", err)
+		http.Error(w, "could not revoke principal", http.StatusInternalServerError)
+		return
+	}
+	d.logger.Warn("principal kill switch activated", "principal", id, "leases", n)
+	d.handleTable(w, r)
 }
 
 // view is what the templates render.
