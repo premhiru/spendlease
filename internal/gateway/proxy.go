@@ -170,21 +170,38 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 		return nil, nil
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
-	_ = r.Body.Close()
+	original := r.Body
+	// Read one byte past the observation limit so a body that is exactly the
+	// limit remains measurable while a larger body can be identified without
+	// consuming it all into memory.
+	body, err := io.ReadAll(io.LimitReader(original, maxRequestBody+1))
 	if err != nil {
+		_ = original.Close()
 		return nil, err
 	}
 
-	// Rewind for the proxy. Anything past the cap would have been dropped, so
-	// the original reader is chained back on to keep the request whole.
-	if int64(len(body)) == maxRequestBody {
-		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(body), r.Body))
+	// Rewind for the proxy. For a large request the unread tail still belongs
+	// to original, so keep that closer alive and prepend the bytes already
+	// consumed. Closing original before building this reader would truncate
+	// every request over the cap.
+	if int64(len(body)) > maxRequestBody {
+		r.Body = &replayReadCloser{
+			Reader: io.MultiReader(bytes.NewReader(body), original),
+			Closer: original,
+		}
 		return nil, nil // too large to measure; still proxied in full
 	}
+	_ = original.Close()
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
 	return body, nil
+}
+
+// replayReadCloser replays a consumed prefix before continuing with—and
+// ultimately closing—the original request body.
+type replayReadCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // observeResponse returns a ModifyResponse hook that watches the vendor's

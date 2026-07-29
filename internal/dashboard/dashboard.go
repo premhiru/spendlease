@@ -42,6 +42,8 @@ type Options struct {
 	// Warning, if set, is displayed above the table. It carries the reason a
 	// deployment is not production-ready rather than leaving it implicit.
 	Warning string
+	// Guard controls access from outside the local machine.
+	Guard Guard
 }
 
 // Dashboard serves the spend table.
@@ -49,6 +51,8 @@ type Dashboard struct {
 	store   SummaryStore
 	logger  *slog.Logger
 	tmpl    *template.Template
+	static  http.Handler
+	guard   Guard
 	version string
 	models  int
 	warning string
@@ -67,6 +71,8 @@ func New(opts Options) (*Dashboard, error) {
 		store:   opts.Store,
 		logger:  opts.Logger,
 		tmpl:    tmpl,
+		static:  http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
+		guard:   opts.Guard,
 		version: opts.Version,
 		models:  opts.Models,
 		warning: opts.Warning,
@@ -74,10 +80,20 @@ func New(opts Options) (*Dashboard, error) {
 }
 
 // Routes registers the dashboard's handlers on a mux.
+//
+// Everything except the static assets is behind the guard: spend figures are
+// as sensitive as the control that changes them, and a read-only view of
+// which agent is burning money is not something to serve to the internet
+// either.
 func (d *Dashboard) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /{$}", d.handlePage)
-	mux.HandleFunc("GET /table", d.handleTable)
-	mux.HandleFunc("POST /admin/principals/{id}/mode", d.handleSetMode)
+	mux.Handle("GET /{$}", d.guard.Protect(http.HandlerFunc(d.handlePage)))
+	mux.Handle("GET /table", d.guard.Protect(http.HandlerFunc(d.handleTable)))
+	mux.Handle("POST /admin/principals/{id}/mode", d.guard.Protect(http.HandlerFunc(d.handleSetMode)))
+
+	// Stylesheet and htmx. No secrets, and requiring credentials for them
+	// would mean an unauthenticated browser could not even render the login
+	// prompt properly.
+	mux.Handle("GET /static/", d.static)
 }
 
 // view is what the templates render.

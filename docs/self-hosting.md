@@ -31,9 +31,29 @@ For SQLite, either copy the database file together with its `-wal` and `-shm` co
 VACUUM INTO 'spendlease-backup.db';
 ```
 
+## Dashboard and admin access
+
+Loopback access needs no credential, preserving the zero-configuration local
+quickstart. Requests from any non-loopback address are refused unless an admin
+token is configured:
+
+```bash
+SPENDLEASE_ADMIN_TOKEN="a-long-random-secret" \
+  spendlease serve --addr 0.0.0.0:4000
+```
+
+`--admin-token` overrides the environment variable. Remote scripts may send
+`Authorization: Bearer <token>`; browsers use HTTP Basic authentication with
+any username and the token as the password. Put TLS or a trusted terminating
+proxy in front of the port because Basic and Bearer credentials do not encrypt
+the connection.
+
+The spend table and every admin mutation use the same guard. Static dashboard
+assets are public, contain no deployment data, and are embedded in the binary;
+the dashboard does not require an internet connection or CDN.
+
 ## Not yet written
 
 - PostgreSQL setup, and the guarantee that it runs the same schema
 - `SPENDLEASE_MASTER_KEY` generation, storage and rotation
-- Putting authentication in front of the admin API, which is **required** before exposing port 4000 beyond loopback — see [SECURITY.md](https://github.com/premhiru/spendlease/blob/main/SECURITY.md)
 - Guarding against an older binary opening a newer database

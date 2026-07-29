@@ -1,0 +1,181 @@
+/*
+ * The dashboard's entire stylesheet.
+ *
+ * Hand-written rather than generated, so the container carries no build step
+ * and needs no network. A utility framework loaded from a CDN would be less
+ * code here and would stop the dashboard rendering in an air-gapped
+ * deployment, which is the opposite of what a self-hosted product should do.
+ *
+ * It is deliberately small. One table does not need a design system.
+ */
+
+:root {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --text: #0f172a;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --head: #f1f5f9;
+  --warn-bg: #fffbeb;
+  --warn-line: #fcd34d;
+  --warn-text: #78350f;
+  --danger-bg: #fee2e2;
+  --danger-text: #991b1b;
+  --ok-bg: #d1fae5;
+  --ok-text: #065f46;
+  --chip-bg: #e2e8f0;
+  --chip-text: #334155;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --panel: #111a2b;
+    --line: #1e293b;
+    --line-strong: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --faint: #64748b;
+    --head: #16213a;
+    --warn-bg: #2a2107;
+    --warn-line: #a16207;
+    --warn-text: #fde68a;
+    --danger-bg: #3f1418;
+    --danger-text: #fca5a5;
+    --ok-bg: #062f22;
+    --ok-text: #6ee7b7;
+    --chip-bg: #1e293b;
+    --chip-text: #cbd5e1;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.wrap { max-width: 68rem; margin: 0 auto; padding: 2.5rem 1.5rem; }
+
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
+h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
+.subtitle { margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--muted); }
+.meta { text-align: right; font-size: 0.75rem; color: var(--faint); }
+
+.warning {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+thead th {
+  background: var(--head);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 0.75rem 1rem;
+}
+
+tbody td { padding: 0.75rem 1rem; border-top: 1px solid var(--line); vertical-align: top; }
+tbody tr:hover { background: var(--head); }
+
+/* Money and counts line up only if the digits do. */
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.spend { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.agent-name { font-weight: 500; }
+.agent-id { font-size: 0.75rem; color: var(--faint); font-variant-ligatures: none; }
+.seen { text-align: right; font-size: 0.75rem; color: var(--muted); }
+
+.badge {
+  display: inline-block;
+  margin-top: 0.25rem;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.estimated { margin-left: 0.25rem; font-size: 0.75rem; color: #b45309; }
+@media (prefers-color-scheme: dark) { .estimated { color: #fbbf24; } }
+
+.mode {
+  border: 0;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+}
+.mode:hover { filter: brightness(0.95); }
+.mode:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
+.mode.enforce { background: var(--ok-bg); color: var(--ok-text); }
+
+tfoot td {
+  border-top: 2px solid var(--line-strong);
+  background: var(--head);
+  color: var(--muted);
+  padding: 0.75rem 1rem;
+}
+tfoot .label { font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; }
+tfoot .spend { color: var(--text); }
+
+.empty {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 0.5rem;
+  padding: 4rem 1.5rem;
+  text-align: center;
+}
+.empty p { margin: 0 0 0.5rem; font-size: 0.875rem; }
+.empty .lead { font-weight: 500; }
+.empty .hint { color: var(--muted); }
+.empty pre {
+  display: inline-block;
+  margin: 1rem 0 0;
+  text-align: left;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 0.25rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  overflow-x: auto;
+}
+
+footer { margin-top: 2.5rem; border-top: 1px solid var(--line); padding-top: 1.5rem; font-size: 0.75rem; color: var(--faint); }
+footer p { margin: 0 0 0.25rem; }
+footer a { color: inherit; }
+
+@media (max-width: 40rem) {
+  .wrap { padding: 1.5rem 1rem; }
+  header { flex-direction: column; align-items: flex-start; }
+  .meta { text-align: left; }
+  table { display: block; overflow-x: auto; }
+}

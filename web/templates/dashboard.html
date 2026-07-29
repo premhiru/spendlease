@@ -4,6 +4,9 @@
   There are deliberately no charts. A chart of spend over time answers a
   question nobody asks in an incident; "which agent is costing me money right
   now" is answered by sorting, and sorting is what this does.
+
+  Nothing is loaded from a network. The stylesheet and htmx are served from
+  the binary, so an air-gapped deployment gets the same page as any other.
 */}}
 <!doctype html>
 <html lang="en">
@@ -11,33 +14,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>spendlease</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/htmx.org@2.0.4"></script>
-<style>
-  /* The only hand-written rule: keep identifiers from wrapping mid-token. */
-  .id { font-variant-ligatures: none; }
-</style>
+<link rel="stylesheet" href="/static/dashboard.css">
+<script src="/static/htmx.min.js" defer></script>
 </head>
-<body class="bg-slate-50 text-slate-900">
-<div class="mx-auto max-w-6xl px-6 py-10">
+<body>
+<div class="wrap">
 
-  <header class="mb-8 flex items-baseline justify-between">
+  <header>
     <div>
-      <h1 class="text-2xl font-semibold tracking-tight">spendlease</h1>
-      <p class="mt-1 text-sm text-slate-500">
-        Spend by agent, highest first.
-      </p>
+      <h1>spendlease</h1>
+      <p class="subtitle">Spend by agent, highest first.</p>
     </div>
-    <div class="text-right text-xs text-slate-400">
+    <div class="meta">
       <div>{{ .Version }}</div>
       <div>{{ .Models }} models priced</div>
     </div>
   </header>
 
   {{ if .Warning }}
-  <div class="mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-    {{ .Warning }}
-  </div>
+  <div class="warning">{{ .Warning }}</div>
   {{ end }}
 
   {{/*
@@ -47,14 +42,12 @@
   */}}
   {{ template "table" . }}
 
-  <footer class="mt-10 border-t border-slate-200 pt-6 text-xs text-slate-400">
+  <footer>
     <p>
       Nothing is blocked yet: budgets are recorded but not enforced, so a run
       marked over budget was still served.
     </p>
-    <p class="mt-1">
-      <a class="underline hover:text-slate-600" href="https://premhiru.github.io/spendlease">Documentation</a>
-    </p>
+    <p><a href="https://premhiru.github.io/spendlease">Documentation</a></p>
   </footer>
 </div>
 </body>

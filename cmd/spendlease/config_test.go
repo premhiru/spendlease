@@ -54,6 +54,20 @@ func TestResolveMasterKeyFromEnvironment(t *testing.T) {
 	}
 }
 
+func TestResolveAdminToken(t *testing.T) {
+	t.Setenv(EnvAdminToken, "  from-environment  ")
+
+	if got := resolveAdminToken(""); got != "from-environment" {
+		t.Errorf("environment token = %q, want from-environment", got)
+	}
+	if got := resolveAdminToken("  from-flag  "); got != "from-flag" {
+		t.Errorf("flag token = %q, want from-flag", got)
+	}
+	if got := resolveAdminToken("   "); got != "from-environment" {
+		t.Errorf("blank flag did not fall back to environment: %q", got)
+	}
+}
+
 func TestResolveMasterKeyRejectsMalformedEnvironment(t *testing.T) {
 	t.Setenv(EnvMasterKey, "not-a-valid-hex-key")
 

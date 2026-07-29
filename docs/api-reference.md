@@ -3,7 +3,8 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v0.1. The admin API, budget enforcement and the `402` response are not built yet. This page documents what is implemented, not what is planned.
+> Pre-v0.1. Budget enforcement and the `402` response are not built yet. This
+> page documents what is implemented, not what is planned.
 
 ## Authentication
 
@@ -104,7 +105,15 @@ Vendor responses are passed through unchanged, including error status codes and 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/healthz` | none | Liveness. Returns `{"status":"ok"}`. |
-| `GET` | `/` | none | Human-readable status banner. The dashboard replaces this later. |
+| `GET` | `/` | local or admin token | Embedded spend dashboard. |
+| `GET` | `/table` | local or admin token | Dashboard table fragment used by htmx. |
+| `POST` | `/admin/principals/{id}/mode` | local or admin token | Switch between `observe` and `enforce`. |
+
+“Local” means the TCP peer is a loopback address. Remote dashboard and admin
+requests require `SPENDLEASE_ADMIN_TOKEN` (or `--admin-token`) and either HTTP
+Basic authentication with the token as password or
+`Authorization: Bearer <token>`. Without a configured token, remote access is
+refused with `403`.
 
 ## Errors
 

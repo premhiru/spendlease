@@ -75,11 +75,19 @@ func newTestDashboard(t *testing.T, st *fakeStore) http.Handler {
 	return mux
 }
 
+// get issues a request as if from the local machine.
+//
+// httptest.NewRequest uses a TEST-NET address, which the guard correctly
+// treats as remote, so tests about rendering have to say where they are
+// coming from.
 func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	t.Helper()
 
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	h.ServeHTTP(rec, req)
 	return rec
 }
 
@@ -255,6 +263,7 @@ func TestModeToggle(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/admin/principals/prn_a/mode",
 				strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.RemoteAddr = "127.0.0.1:54321"
 
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)

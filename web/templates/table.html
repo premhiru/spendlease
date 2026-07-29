@@ -10,80 +10,78 @@
      hx-swap="outerHTML">
 
   {{ if not .Principals }}
-  <div class="rounded-lg border border-slate-200 bg-white px-6 py-16 text-center">
-    <p class="text-sm font-medium text-slate-700">No agents yet.</p>
-    <p class="mt-2 text-sm text-slate-500">Register one, then point an SDK at this gateway:</p>
-    <pre class="mx-auto mt-4 w-fit rounded bg-slate-900 px-4 py-3 text-left text-xs text-slate-100"><code>spendlease keys principal create --name my-agent
+  <div class="empty">
+    <p class="lead">No agents yet.</p>
+    <p class="hint">Register one, then point an SDK at this gateway:</p>
+    <pre><code>spendlease keys principal create --name my-agent
 spendlease keys provider set openai --key sk-...</code></pre>
   </div>
   {{ else }}
 
-  <table class="w-full border-separate border-spacing-0 overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
+  <table>
     <thead>
-      <tr class="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
-        <th class="px-4 py-3 font-medium">Agent</th>
-        <th class="px-4 py-3 font-medium">Mode</th>
-        <th class="px-4 py-3 text-right font-medium">Runs</th>
-        <th class="px-4 py-3 text-right font-medium">Calls</th>
-        <th class="px-4 py-3 text-right font-medium">Spend</th>
-        <th class="px-4 py-3 text-right font-medium">Last seen</th>
+      <tr>
+        <th>Agent</th>
+        <th>Mode</th>
+        <th class="num">Runs</th>
+        <th class="num">Calls</th>
+        <th class="num">Spend</th>
+        <th class="num">Last seen</th>
       </tr>
     </thead>
     <tbody>
       {{ range .Principals }}
-      <tr class="border-t border-slate-100 hover:bg-slate-50">
-        <td class="px-4 py-3">
-          <div class="font-medium">{{ .Name }}</div>
-          <div class="id text-xs text-slate-400">{{ .ID }}</div>
+      <tr>
+        <td>
+          <div class="agent-name">{{ .Name }}</div>
+          <div class="agent-id">{{ .ID }}</div>
           {{ if .OverBudget }}
-          <div class="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-800"
-               title="This run exceeded its budget. Nothing blocked it, because this principal is in observe mode.">
+          <div class="badge"
+               title="This run exceeded its budget. Nothing blocked it, because budgets are not enforced yet.">
             would have been blocked
           </div>
           {{ end }}
         </td>
 
-        <td class="px-4 py-3">
+        <td>
           {{/*
-            The mode toggle is one click, because the brief is right that
-            switching should not require reading documentation. It posts and
-            swaps only this table, so the page does not jump.
+            The mode toggle is one click, because switching should not require
+            reading documentation. It posts and swaps only this table, so the
+            page does not jump.
           */}}
           <button
+            class="mode{{ if eq .Mode "enforce" }} enforce{{ end }}"
             hx-post="/admin/principals/{{ .ID }}/mode"
             hx-vals='{"mode": "{{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }}"}'
             hx-target="#table"
             hx-swap="outerHTML"
-            title="Switch to {{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }} mode"
-            class="rounded px-2 py-1 text-xs font-medium
-                   {{ if eq .Mode "observe" }}bg-slate-200 text-slate-700 hover:bg-slate-300
-                   {{ else }}bg-emerald-100 text-emerald-800 hover:bg-emerald-200{{ end }}">
+            title="Switch to {{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }} mode">
             {{ .Mode }}
           </button>
         </td>
 
-        <td class="px-4 py-3 text-right tabular-nums text-slate-600">{{ .Runs }}</td>
+        <td class="num">{{ .Runs }}</td>
 
-        <td class="px-4 py-3 text-right tabular-nums text-slate-600">
+        <td class="num">
           {{ .Entries }}
           {{ if .EstimatedEntries }}
-          <span class="ml-1 text-xs text-amber-600"
+          <span class="estimated"
                 title="{{ .EstimatedEntries }} of these could not be priced from vendor-reported usage, so the total is partly estimated.">
             ~{{ .EstimatedEntries }}
           </span>
           {{ end }}
         </td>
 
-        <td class="px-4 py-3 text-right font-medium tabular-nums">${{ .Spend }}</td>
+        <td class="spend">${{ .Spend }}</td>
 
-        <td class="px-4 py-3 text-right text-xs text-slate-500">{{ .LastSeen }}</td>
+        <td class="seen">{{ .LastSeen }}</td>
       </tr>
       {{ end }}
     </tbody>
     <tfoot>
-      <tr class="border-t-2 border-slate-200 bg-slate-50 text-slate-600">
-        <td class="px-4 py-3 text-xs uppercase tracking-wide" colspan="4">Total</td>
-        <td class="px-4 py-3 text-right font-semibold tabular-nums">${{ .Total }}</td>
+      <tr>
+        <td class="label" colspan="4">Total</td>
+        <td class="spend">${{ .Total }}</td>
         <td></td>
       </tr>
     </tfoot>

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -38,6 +39,8 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	pricingDir := fs.String("pricing", "", "directory of price book YAML (default: the copy embedded in this binary)")
 	defaultBudget := fs.String("default-run-budget", "10.00",
 		"budget recorded on a principal's implicit run; not enforced yet")
+	adminTokenFlag := fs.String("admin-token", "",
+		"credential required to reach the dashboard from off-machine (default: $"+EnvAdminToken+")")
 	logLevel := fs.String("log-level", "info", "debug, info, warn or error")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -106,16 +109,19 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("%w: invalid -default-run-budget: %v", errUsage, err)
 	}
 
+	adminToken := resolveAdminToken(*adminTokenFlag)
 	dash, err := dashboard.New(dashboard.Options{
 		Store:   st,
 		Logger:  logger,
 		Version: version,
 		Models:  countModels(book),
-		Warning: dashboardWarning(*addr),
+		Warning: dashboardWarning(*addr, adminToken),
+		Guard:   dashboard.Guard{Token: adminToken},
 	})
 	if err != nil {
 		return err
 	}
+	reportAdminAccess(stdout, *addr, adminToken)
 
 	gw, err := gateway.New(gateway.Options{
 		Principals:  st,
@@ -170,22 +176,50 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 
 // dashboardWarning returns the banner shown above the table, or empty.
 //
-// The admin routes have no authentication: the 60-second quickstart depends on
-// that, and SECURITY.md says so. Somebody who has bound the gateway to a
-// public interface should be told on the page itself, not only in a document
-// they have not read.
-func dashboardWarning(addr string) string {
+// Access from outside the machine is refused without an admin token, so the
+// remaining risk is a token that is weak or widely shared. Saying so on the
+// page reaches somebody who has not read the deployment documentation.
+func dashboardWarning(addr, adminToken string) string {
+	if boundToLoopback(addr) || adminToken == "" {
+		return ""
+	}
+	return "This gateway is reachable from the network. The controls on this page can switch " +
+		"enforcement off, and the admin token is all that stands in front of them. Treat it " +
+		"like a password and put TLS in front of this port."
+}
+
+// boundToLoopback reports whether a listen address is local-only.
+func boundToLoopback(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr
 	}
 	switch host {
-	case "127.0.0.1", "localhost", "::1", "[::1]":
-		return ""
+	case "localhost", "[::1]":
+		return true
 	}
-	return "This gateway is not bound to loopback and the admin controls on this page " +
-		"are unauthenticated. Anyone who can reach this address can switch enforcement off. " +
-		"Put authentication in front of it before exposing it."
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
+}
+
+// reportAdminAccess tells the operator, at startup, whether the dashboard is
+// reachable and how.
+//
+// A gateway bound to every interface with no admin token serves the dashboard
+// to nobody but localhost. That is the safe outcome, and it is also
+// surprising, so it is said out loud rather than discovered as a 403.
+func reportAdminAccess(w io.Writer, addr, adminToken string) {
+	if boundToLoopback(addr) {
+		return
+	}
+	if adminToken == "" {
+		fmt.Fprintf(w,
+			"\nThe dashboard is bound to %s but no admin token is set, so it is reachable "+
+				"only from this machine.\nSet %s (or --admin-token) to open it to the network.\n\n",
+			addr, EnvAdminToken)
+		return
+	}
+	fmt.Fprintf(w, "\nDashboard reachable on %s. An admin token is required from off-machine.\n\n", addr)
 }
 
 // warnIfUnconfigured tells the operator, at startup rather than on the first

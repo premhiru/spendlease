@@ -19,7 +19,26 @@ const (
 	// EnvEnv marks the deployment environment. Setting it to "production"
 	// refuses the development conveniences below.
 	EnvEnv = "SPENDLEASE_ENV"
+	// EnvAdminToken is the credential required to reach the dashboard and the
+	// admin API from anywhere other than the local machine.
+	EnvAdminToken = "SPENDLEASE_ADMIN_TOKEN"
 )
+
+// resolveAdminToken returns the admin credential, from the flag if given and
+// the environment otherwise.
+//
+// There is deliberately no generated fallback, unlike the master key. A
+// generated master key still encrypts the credentials it protects, so it is
+// worth something. A generated admin token that nobody has read protects
+// nothing and would only create the impression of a control: the operator
+// would not know it, so they could not use it, and access would be refused
+// anyway. Refusing outright says so plainly instead.
+func resolveAdminToken(flagValue string) string {
+	if v := strings.TrimSpace(flagValue); v != "" {
+		return v
+	}
+	return strings.TrimSpace(os.Getenv(EnvAdminToken))
+}
 
 // keyFilePerm is owner read/write only. The master key decrypts every stored
 // vendor credential, so it is treated like an SSH private key.
