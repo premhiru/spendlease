@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -628,6 +629,32 @@ func TestQueryStringIsPreserved(t *testing.T) {
 
 	if got := h.lastUpstream.URL.RawQuery; got != "limit=5&after=abc" {
 		t.Errorf("upstream query = %q, want it preserved", got)
+	}
+}
+
+// TestLargeRequestBodyIsNotTruncated protects the pass-through guarantee for
+// bodies too large to inspect. The parser deliberately declines to measure
+// them, but the vendor must still receive every byte.
+func TestLargeRequestBodyIsNotTruncated(t *testing.T) {
+	t.Parallel()
+
+	want := bytes.Repeat([]byte("x"), maxRequestBody+257)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(want))
+
+	measured, err := readRequestBody(req)
+	if err != nil {
+		t.Fatalf("readRequestBody: %v", err)
+	}
+	if measured != nil {
+		t.Fatalf("measured %d bytes, want nil for an oversized body", len(measured))
+	}
+
+	got, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("reading replayed body: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("replayed body length = %d, want %d; request was truncated", len(got), len(want))
 	}
 }
 

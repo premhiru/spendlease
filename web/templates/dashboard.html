@@ -1,0 +1,54 @@
+{{/*
+  The dashboard is one table, sorted by spend descending.
+
+  There are deliberately no charts. A chart of spend over time answers a
+  question nobody asks in an incident; "which agent is costing me money right
+  now" is answered by sorting, and sorting is what this does.
+
+  Nothing is loaded from a network. The stylesheet and htmx are served from
+  the binary, so an air-gapped deployment gets the same page as any other.
+*/}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spendlease</title>
+<link rel="stylesheet" href="/static/dashboard.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>spendlease</h1>
+      <p class="subtitle">Spend by agent, highest first.</p>
+    </div>
+    <div class="meta">
+      <div>{{ .Version }}</div>
+      <div>{{ .Models }} models priced</div>
+    </div>
+  </header>
+
+  {{ if .Warning }}
+  <div class="warning">{{ .Warning }}</div>
+  {{ end }}
+
+  {{/*
+    The table template carries its own id and polling attributes, because it
+    replaces itself on every swap. Wrapping it in a second polling element
+    here would nest two nodes with the same id and poll twice as often.
+  */}}
+  {{ template "table" . }}
+
+  <footer>
+    <p>
+      Nothing is blocked yet: budgets are recorded but not enforced, so a run
+      marked over budget was still served.
+    </p>
+    <p><a href="https://premhiru.github.io/spendlease">Documentation</a></p>
+  </footer>
+</div>
+</body>
+</html>

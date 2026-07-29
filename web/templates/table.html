@@ -1,0 +1,91 @@
+{{ define "table" }}
+{{/*
+  The refresh pauses while a button has focus. Without the guard, the table
+  replaces itself underneath somebody reaching for the mode toggle, and the
+  click lands on an element that no longer exists.
+*/}}
+<div id="table"
+     hx-get="/table"
+     hx-trigger="every 3s [!document.activeElement || document.activeElement.tagName !== 'BUTTON']"
+     hx-swap="outerHTML">
+
+  {{ if not .Principals }}
+  <div class="empty">
+    <p class="lead">No agents yet.</p>
+    <p class="hint">Register one, then point an SDK at this gateway:</p>
+    <pre><code>spendlease keys principal create --name my-agent
+spendlease keys provider set openai --key sk-...</code></pre>
+  </div>
+  {{ else }}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Agent</th>
+        <th>Mode</th>
+        <th class="num">Runs</th>
+        <th class="num">Calls</th>
+        <th class="num">Spend</th>
+        <th class="num">Last seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ range .Principals }}
+      <tr>
+        <td>
+          <div class="agent-name">{{ .Name }}</div>
+          <div class="agent-id">{{ .ID }}</div>
+          {{ if .OverBudget }}
+          <div class="badge"
+               title="This run exceeded its budget. Nothing blocked it, because budgets are not enforced yet.">
+            would have been blocked
+          </div>
+          {{ end }}
+        </td>
+
+        <td>
+          {{/*
+            The mode toggle is one click, because switching should not require
+            reading documentation. It posts and swaps only this table, so the
+            page does not jump.
+          */}}
+          <button
+            class="mode{{ if eq .Mode "enforce" }} enforce{{ end }}"
+            hx-post="/admin/principals/{{ .ID }}/mode"
+            hx-vals='{"mode": "{{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }}"}'
+            hx-target="#table"
+            hx-swap="outerHTML"
+            title="Switch to {{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }} mode">
+            {{ .Mode }}
+          </button>
+        </td>
+
+        <td class="num">{{ .Runs }}</td>
+
+        <td class="num">
+          {{ .Entries }}
+          {{ if .EstimatedEntries }}
+          <span class="estimated"
+                title="{{ .EstimatedEntries }} of these could not be priced from vendor-reported usage, so the total is partly estimated.">
+            ~{{ .EstimatedEntries }}
+          </span>
+          {{ end }}
+        </td>
+
+        <td class="spend">${{ .Spend }}</td>
+
+        <td class="seen">{{ .LastSeen }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="label" colspan="4">Total</td>
+        <td class="spend">${{ .Total }}</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  {{ end }}
+</div>
+{{ end }}

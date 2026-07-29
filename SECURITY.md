@@ -48,6 +48,12 @@ If you find any of these three statements to be untrue in practice, that is a vu
 
 ## Deployment notes
 
-`spendlease` ships with no authentication on the admin API when bound to loopback, because the 60-second quickstart depends on it. **Do not expose port 4000 to an untrusted network without putting authentication in front of it.** See [self-hosting](docs/self-hosting.md) for the production checklist.
+`spendlease` ships with no authentication on the admin API when reached over
+loopback, because the 60-second quickstart depends on it. Non-loopback access
+fails closed unless `SPENDLEASE_ADMIN_TOKEN` or `--admin-token` is set. The
+dashboard accepts the token through HTTP Basic authentication; scripts may use
+a Bearer token. See [self-hosting](docs/self-hosting.md) for the production
+checklist and put TLS in front of the port before exposing it to an untrusted
+network.
 
 In production, `SPENDLEASE_MASTER_KEY` must be set explicitly. The auto-generated development key is refused when `SPENDLEASE_ENV=production`, so a misconfigured deployment fails to start rather than quietly encrypting your vendor credentials under a key that was written to disk beside them.

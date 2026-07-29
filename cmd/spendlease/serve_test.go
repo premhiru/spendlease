@@ -8,6 +8,55 @@ import (
 	"testing"
 )
 
+func TestBoundToLoopback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		addr string
+		want bool
+	}{
+		{"127.0.0.1:4000", true},
+		{"[::1]:4000", true},
+		{"localhost:4000", true},
+		{"0.0.0.0:4000", false},
+		{"192.168.1.20:4000", false},
+		{"garbage", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.addr, func(t *testing.T) {
+			t.Parallel()
+			if got := boundToLoopback(tt.addr); got != tt.want {
+				t.Errorf("boundToLoopback(%q) = %v, want %v", tt.addr, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReportAdminAccess(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, addr, token, want string
+	}{
+		{"loopback is quiet", "127.0.0.1:4000", "", ""},
+		{"remote without token explains refusal", "0.0.0.0:4000", "", EnvAdminToken},
+		{"remote with token confirms protection", "0.0.0.0:4000", "secret", "token is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			reportAdminAccess(&out, tt.addr, tt.token)
+			if tt.want == "" && out.Len() != 0 {
+				t.Errorf("output = %q, want silence", out.String())
+			}
+			if tt.want != "" && !strings.Contains(out.String(), tt.want) {
+				t.Errorf("output = %q, want it to contain %q", out.String(), tt.want)
+			}
+		})
+	}
+}
+
 // TestServeRefusesProductionBeforeTouchingDisk goes through run() rather than
 // resolveMasterKey, because the bug it guards against was one of ordering
 // rather than logic.

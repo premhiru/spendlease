@@ -183,8 +183,8 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | — | Encrypted vendor credential vault | ✅ shipped |
 | 4 | Price book, cost calculation, token estimation | ✅ shipped |
 | 5 | Ledger writes, attribution, hash chaining | ✅ shipped |
-| 6 | Dashboard | ⬜ next |
-| 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ |
+| 6 | Dashboard | ✅ shipped |
+| 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ next |
 | 8 | Leases, scoping, revocation set, kill switch | ⬜ |
 | 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
 
@@ -194,7 +194,9 @@ The price book prices any request exactly — 26 models across both vendors, wit
 
 **Spend is now recorded.** Every successful request produces an append-only, hash-chained ledger entry attributed to a principal and a run, priced from the token counts the vendor reported — including streamed responses on both vendors. Failed requests are not charged. Entries the gateway could not price exactly are marked `estimated` and say why. This is **observe mode**: everything is recorded, nothing is blocked.
 
-**What does not:** **nothing is capped.** There is no reservation, no budget enforcement and no `402` — a run can exceed its budget freely and only the record shows it. Leases are stored but not issued; agents authenticate with the long-lived principal key. The dashboard and `demo` do not exist, so reading the ledger currently means querying SQLite yourself.
+**The dashboard is live** at `http://localhost:4000` — one table, sorted by spend descending, with a one-click observe/enforce toggle and a badge on every agent whose run exceeded its budget. That badge is the point of observe mode: each of those requests was served, and would not have been under enforcement.
+
+**What does not:** **nothing is capped.** There is no reservation, no budget enforcement and no `402` — the "would have been blocked" badge is a report, not an action. Leases are stored but not issued; agents authenticate with the long-lived principal key. `demo` does not exist.
 
 ## Contributing
 
