@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/premhiru/spendlease/internal/store"
 )
@@ -33,14 +34,38 @@ func (g *Gateway) authenticate(next http.Handler) http.Handler {
 		}
 
 		if store.LooksLikeLeaseToken(presented) {
-			// Being specific here saves real debugging time: the token is
-			// well-formed, it is simply not yet supported.
-			writeError(w, g.logger, http.StatusUnauthorized, APIErrorDetail{
-				Type:       ErrTypeUnauthenticated,
-				Message:    "A lease token (sll_) was presented, but lease authentication is not implemented yet.",
-				Resolution: "Use the principal key (slk_) for now. Leases arrive in a later release.",
-				Docs:       DocsBase + "/concepts/",
-			})
+			hash := store.HashSecret(presented)
+			if g.revocations != nil && g.revocations.Revoked(hash) {
+				writeLeaseRejected(w, g, "That lease has been revoked.")
+				return
+			}
+			if g.leases == nil {
+				writeLeaseRejected(w, g, "Lease authentication is unavailable on this gateway.")
+				return
+			}
+			lease, err := g.leases.GetLeaseByTokenHash(r.Context(), hash)
+			if err != nil || !lease.Active(time.Now()) {
+				writeLeaseRejected(w, g, "That lease is unknown, expired, or revoked.")
+				return
+			}
+			run, err := g.leases.GetRun(r.Context(), lease.RunID)
+			if err != nil || run.Status != store.RunActive {
+				writeLeaseRejected(w, g, "The run behind that lease is unavailable or closed.")
+				return
+			}
+			principal, err := g.leases.GetPrincipal(r.Context(), run.PrincipalID)
+			if err != nil {
+				writeLeaseRejected(w, g, "The principal behind that lease is unavailable.")
+				return
+			}
+			ctx := context.WithValue(r.Context(), ctxPrincipal, principal)
+			ctx = context.WithValue(ctx, ctxRun, run.ID)
+			ctx = context.WithValue(ctx, ctxLease, lease.ID)
+			ctx = context.WithValue(ctx, ctxLeaseObject, lease)
+			if info := infoFrom(r.Context()); info != nil {
+				info.principalID, info.runID, info.mode = principal.ID, run.ID, string(principal.Mode)
+			}
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -106,6 +131,14 @@ func (g *Gateway) authenticate(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func writeLeaseRejected(w http.ResponseWriter, g *Gateway, message string) {
+	writeError(w, g.logger, http.StatusUnauthorized, APIErrorDetail{
+		Type: ErrTypeUnauthenticated, Message: message,
+		Resolution: "Issue a fresh lease with `spendlease keys lease issue` and retry.",
+		Docs:       DocsBase + "/concepts/#lease",
 	})
 }
 

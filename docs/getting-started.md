@@ -2,8 +2,9 @@
 
 Install, register an agent, store a vendor key, and make your first proxied call.
 
-> [!WARNING]
-> `spendlease` is pre-v0.1. The gateway proxies and authenticates, but **nothing is metered, priced, capped or recorded yet**. Budgets, leases and the ledger arrive in later phases. Today this is a credential-custody proxy, not a spend limiter.
+> [!NOTE]
+> `spendlease` is pre-v0.1. The gateway, ledger, enforcement, leases and kill
+> switch work; packaged SDKs and the simulated fleet demo arrive next.
 
 ## Install
 
@@ -70,7 +71,16 @@ spendlease v0.1.0 listening on :4000
 
 If a provider has no key stored, the gateway says so at startup rather than waiting for a failed request.
 
-## 4. Point an SDK at it
+## 4. Create a run and lease
+
+```bash
+spendlease keys run create --principal checkout-agent --budget 25.00
+spendlease keys lease issue --run <run-id> --ttl 15m --providers openai
+```
+
+Store the shown-once `sll_` token in `SPENDLEASE_LEASE_TOKEN`.
+
+## 5. Point an SDK at it
 
 One line: override the base URL, and use the principal key where the vendor key would go.
 
@@ -80,7 +90,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key=os.environ["SPENDLEASE_KEY"],  # slk_..., not your OpenAI key
+    api_key=os.environ["SPENDLEASE_LEASE_TOKEN"],  # sll_..., not your OpenAI key
 )
 
 response = client.chat.completions.create(
@@ -94,7 +104,7 @@ from anthropic import Anthropic
 
 client = Anthropic(
     base_url="http://localhost:4000",
-    api_key=os.environ["SPENDLEASE_KEY"],
+    api_key=os.environ["SPENDLEASE_LEASE_TOKEN"],
 )
 ```
 
@@ -104,7 +114,7 @@ Or with `curl`:
 
 ```bash
 curl http://localhost:4000/v1/chat/completions \
-  -H "Authorization: Bearer $SPENDLEASE_KEY" \
+  -H "Authorization: Bearer $SPENDLEASE_LEASE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}'
 ```

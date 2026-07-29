@@ -464,11 +464,11 @@ func TestAuthentication(t *testing.T) {
 			wantInMsg:  "not a spendlease key",
 		},
 		{
-			name:       "a lease token, which is not supported yet",
+			name:       "a lease token without a configured lease store",
 			setHeaders: func(h http.Header) { h.Set("Authorization", "Bearer sll_sometoken") },
 			wantStatus: http.StatusUnauthorized,
 			wantType:   ErrTypeUnauthenticated,
-			wantInMsg:  "lease authentication is not implemented yet",
+			wantInMsg:  "Lease authentication is unavailable",
 		},
 		{
 			name:       "an unknown principal key",

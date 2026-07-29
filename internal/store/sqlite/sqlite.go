@@ -584,6 +584,43 @@ func (s *Store) TryReserve(ctx context.Context, r store.Reservation, enforce boo
 			decision.Shortfall = r.Amount - remaining
 		}
 	}
+	if r.LeaseID != "" {
+		var ceiling, spent, held int64
+		err := tx.QueryRowContext(ctx, `
+			SELECT l.ceiling_nanos,
+			  COALESCE((SELECT SUM(le.cost_nanos)
+			    FROM reservation_settlements rs
+			    JOIN reservations rr ON rr.id = rs.reservation_id
+			    JOIN ledger le ON le.seq = rs.ledger_seq
+			    WHERE rr.lease_id = l.id), 0),
+			  COALESCE((SELECT SUM(amount_nanos) FROM reservations
+			    WHERE lease_id = l.id AND status = 'pending'), 0)
+			FROM leases l WHERE l.id = ?`, r.LeaseID).Scan(&ceiling, &spent, &held)
+		if err != nil {
+			return decision, wrap(err, "checking lease ceiling")
+		}
+		if ceiling > 0 {
+			remaining := money.Nanos(ceiling)
+			if money.Nanos(spent) >= remaining {
+				remaining = 0
+			} else {
+				remaining -= money.Nanos(spent)
+			}
+			if money.Nanos(held) >= remaining {
+				remaining = 0
+			} else {
+				remaining -= money.Nanos(held)
+			}
+			if r.Amount > remaining && !decision.WouldBlock {
+				decision.WouldBlock = true
+				decision.Budget = money.Nanos(ceiling)
+				decision.Spent = money.Nanos(spent)
+				decision.Held = money.Nanos(held)
+				decision.Remaining = remaining
+				decision.Shortfall = r.Amount - remaining
+			}
+		}
+	}
 
 	decision.Allowed = !enforce || !decision.WouldBlock
 	if decision.Allowed {

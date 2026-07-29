@@ -18,8 +18,7 @@ This is **IAM for machine spend**, closer to `sts:AssumeRole` than to Expensify.
 
 > [!NOTE]
 > The gateway, dashboard, accounting and budget enforcement work today. Lease
-> issuance, the kill switch and `spendlease demo` arrive in the remaining
-> phases; use a principal key (`slk_`) for requests until leases land. Track
+> SDK packages and `spendlease demo` arrive in the final phase. Track
 > the exact boundary in [Status](#status).
 
 No signup, no config file, no database to provision.
@@ -57,7 +56,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key=os.environ["SPENDLEASE_PRINCIPAL_KEY"],  # slk_... temporarily; never your OpenAI key
+    api_key=os.environ["SPENDLEASE_LEASE_TOKEN"],  # sll_...; never your OpenAI key
 )
 ```
 
@@ -66,15 +65,17 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({
   baseURL: "http://localhost:4000",
-  apiKey: process.env.SPENDLEASE_PRINCIPAL_KEY,
+  apiKey: process.env.SPENDLEASE_LEASE_TOKEN,
 });
 ```
 
-Your real vendor keys stay in the gateway's encrypted vault. The agent never
-holds one. Until short-lived leases land in phase 8, create a principal key:
+Your real vendor keys stay in the gateway's encrypted vault. Create a run and
+issue a short-lived lease:
 
 ```bash
-spendlease keys principal create --name checkout-agent  # -> slk_... (shown once)
+spendlease keys principal create --name checkout-agent
+spendlease keys run create --principal checkout-agent --budget 25.00
+spendlease keys lease issue --run <run-id> --ttl 15m --providers openai
 ```
 
 Every new principal starts in **observe mode**: everything passes through, nothing is blocked, all of it is recorded. Flip to enforcement when you trust the numbers, with one API call or one toggle in the dashboard.
@@ -188,8 +189,8 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 5 | Ledger writes, attribution, hash chaining | ✅ shipped |
 | 6 | Dashboard | ✅ shipped |
 | 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ✅ shipped |
-| 8 | Leases, scoping, revocation set, kill switch | ⬜ next |
-| 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
+| 8 | Leases, scoping, revocation set, kill switch | ✅ shipped |
+| 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ next |
 
 **What runs today:** `spendlease serve` starts a working reverse proxy. It authenticates agents by principal key, swaps that key for the real vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or Anthropic by path, streams SSE responses through unbuffered, and logs every request with per-principal and per-provider attribution. `spendlease keys principal` and `spendlease keys provider` manage identities and vendor credentials. Underneath sits a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
 
@@ -205,9 +206,8 @@ sweeper reclaims abandoned reservations after their TTL.
 
 **The dashboard is live** at `http://localhost:4000` — one table, sorted by spend descending, with a one-click observe/enforce toggle and a badge on every agent whose run exceeded its budget. That badge is the point of observe mode: each of those requests was served, and would not have been under enforcement.
 
-**What does not:** Leases are stored but not issued, scoped or accepted for
-authentication yet; agents temporarily authenticate with the long-lived
-principal key. The kill switch and `demo` do not exist.
+**What does not:** The Python and TypeScript SDK packages and `demo` command do
+not exist yet.
 
 ## Contributing
 

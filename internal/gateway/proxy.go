@@ -52,6 +52,15 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if lease, ok := leaseFrom(r.Context()); ok && !lease.AllowsProvider(provider.Name()) {
+		writeError(w, g.logger, http.StatusForbidden, APIErrorDetail{
+			Type: ErrTypeLeaseScopeDenied, Principal: principal.ID, Provider: provider.Name(),
+			Message:    "This lease is not scoped for provider " + provider.Name() + ".",
+			Resolution: "Issue a lease that includes this provider and retry.",
+			Docs:       DocsBase + "/concepts/#lease",
+		})
+		return
+	}
 
 	if info := infoFrom(r.Context()); info != nil {
 		info.provider = provider.Name()

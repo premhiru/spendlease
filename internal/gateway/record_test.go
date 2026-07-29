@@ -26,11 +26,12 @@ import (
 // recordingHarness is a gateway backed by a real store and price book, so
 // ledger entries are genuinely written and can be read back.
 type recordingHarness struct {
-	gateway   *httptest.Server
-	upstream  *httptest.Server
-	store     *sqlite.Store
-	logs      *syncBuffer
-	principal store.Principal
+	gateway     *httptest.Server
+	upstream    *httptest.Server
+	store       *sqlite.Store
+	logs        *syncBuffer
+	principal   store.Principal
+	revocations *RevocationSet
 }
 
 func newRecordingHarness(t *testing.T, upstream http.HandlerFunc) *recordingHarness {
@@ -85,8 +86,11 @@ func newRecordingHarnessWith(
 	logs := &syncBuffer{}
 	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
+	revocations := NewRevocationSet()
 	gw, err := New(Options{
 		Principals:  st,
+		Leases:      st,
+		Revocations: revocations,
 		Credentials: &fakeCredentials{keys: map[string]string{"openai": testVendor, "anthropic": testVendor}},
 		Registry:    registry,
 		Recorder:    NewRecorder(st, book, budget, logger),
@@ -100,7 +104,7 @@ func newRecordingHarnessWith(
 	t.Cleanup(srv.Close)
 
 	return &recordingHarness{
-		gateway: srv, upstream: up, store: st, logs: logs, principal: principal,
+		gateway: srv, upstream: up, store: st, logs: logs, principal: principal, revocations: revocations,
 	}
 }
 

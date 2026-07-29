@@ -21,6 +21,8 @@ const (
 	ErrTypeUnknownRun = "unknown_run"
 	// ErrTypeBudgetExceeded means an enforce-mode reservation could not fit.
 	ErrTypeBudgetExceeded = "budget_exceeded"
+	// ErrTypeLeaseScopeDenied means a lease excludes the resolved provider.
+	ErrTypeLeaseScopeDenied = "lease_scope_denied"
 	// ErrTypeNoCredential means the gateway has no vendor key for the
 	// provider the request was routed to.
 	ErrTypeNoCredential = "provider_credential_missing"

@@ -31,6 +31,13 @@ type PrincipalLookup interface {
 	GetPrincipalByKeyHash(ctx context.Context, keyHash string) (store.Principal, error)
 }
 
+// LeaseLookup resolves lease authentication into its run and principal.
+type LeaseLookup interface {
+	GetLeaseByTokenHash(ctx context.Context, tokenHash string) (store.Lease, error)
+	GetRun(ctx context.Context, id string) (store.Run, error)
+	GetPrincipal(ctx context.Context, id string) (store.Principal, error)
+}
+
 // CredentialSource supplies vendor API keys at egress.
 type CredentialSource interface {
 	// Get returns the plaintext vendor key for a provider.
@@ -41,6 +48,11 @@ type CredentialSource interface {
 type Options struct {
 	// Principals authenticates incoming requests.
 	Principals PrincipalLookup
+	// Leases authenticates short-lived agent credentials. Optional only for
+	// proxy unit tests; production supplies the store.
+	Leases LeaseLookup
+	// Revocations is checked in memory before a revoked lease reaches storage.
+	Revocations *RevocationSet
 	// Credentials supplies vendor keys at egress.
 	Credentials CredentialSource
 	// Registry routes requests to providers.
@@ -75,6 +87,8 @@ type RouteRegistrar interface {
 // Gateway proxies agent requests to vendor APIs.
 type Gateway struct {
 	principals  PrincipalLookup
+	leases      LeaseLookup
+	revocations *RevocationSet
 	credentials CredentialSource
 	registry    *providers.Registry
 	recorder    *Recorder
@@ -105,6 +119,8 @@ func New(opts Options) (*Gateway, error) {
 
 	return &Gateway{
 		principals:  opts.Principals,
+		leases:      opts.Leases,
+		revocations: opts.Revocations,
 		credentials: opts.Credentials,
 		registry:    opts.Registry,
 		recorder:    opts.Recorder,
@@ -173,11 +189,23 @@ const (
 	ctxPrincipal contextKey = iota
 	ctxInfo
 	ctxRun
+	ctxLease
+	ctxLeaseObject
 )
 
 // runIDFrom returns the run this request is charged to.
 func runIDFrom(ctx context.Context) string {
 	id, _ := ctx.Value(ctxRun).(string)
+	return id
+}
+
+func leaseFrom(ctx context.Context) (store.Lease, bool) {
+	l, ok := ctx.Value(ctxLeaseObject).(store.Lease)
+	return l, ok
+}
+
+func leaseIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(ctxLease).(string)
 	return id
 }
 
