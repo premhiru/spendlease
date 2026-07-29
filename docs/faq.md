@@ -2,11 +2,10 @@
 
 ## Is spendlease ready for production?
 
-It is pre-v0.1. The gateway, encrypted credential custody, SQLite ledger,
-dashboard and reserve/settle enforcement are implemented and tested. Lease
-tokens and the sub-second kill switch are not implemented yet, so agents still
-use long-lived principal keys. Evaluate it in observe mode before making it a
-production dependency.
+It is pre-v1. The complete v0.1 surface is implemented and tested, including
+the encrypted vault, SQLite ledger, reserve/settle enforcement, short-lived
+leases and sub-second kill switch. Pin a release and evaluate it in observe
+mode before making it a production dependency.
 
 ## Why does a new principal default to observe mode?
 

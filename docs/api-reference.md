@@ -3,18 +3,19 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v0.1. This page documents what is implemented, not what is planned.
+> Pre-v1. This page documents the implemented v0.1 surface.
 
 ## Authentication
 
-Send a principal key as either header. Both are accepted so that a single base-URL override works for SDKs that use different conventions.
+Send a short-lived lease token as either header. Both are accepted so that a
+single base-URL override works for SDKs that use different conventions.
 
 ```
-Authorization: Bearer slk_...
-x-api-key: slk_...
+Authorization: Bearer sll_...
+x-api-key: sll_...
 ```
 
-A bare `Authorization: slk_...` with no scheme is also accepted, for hand-rolled clients.
+A bare `Authorization: sll_...` with no scheme is also accepted, for hand-rolled clients.
 
 Your credential is **always stripped** before the request is forwarded. Any vendor key you send is discarded rather than honoured: the gateway decides which credential goes upstream.
 

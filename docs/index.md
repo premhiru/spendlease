@@ -2,11 +2,11 @@
 
 A spend authorization gateway for AI agents. It holds your vendor API keys, issues short-lived scoped leases to agents, enforces hard spending caps before a request is allowed out, and records an immutable ledger of every dollar each agent spent.
 
-!!! note "Pre-v0.1 and under construction"
+!!! note "Pre-v1"
 
-    The gateway, encrypted credential vault, price book, spend ledger,
-    dashboard and budget enforcement work today. Lease issuance, the kill
-    switch, SDKs and the simulated fleet demo are the remaining phases.
+    The complete v0.1 feature set is implemented: gateway, encrypted vault,
+    price book, ledger, dashboard, enforcement, leases, kill switch, SDKs and
+    the simulated fleet demo. Pin a release before production use.
 
 ## The problem
 
@@ -19,6 +19,7 @@ Agents spend real money on inference, search APIs, data APIs and scrapers, and a
 | | |
 |---|---|
 | [Getting started](getting-started.md) | Install, first principal, first lease |
+| [SDKs and examples](sdks.md) | Python and TypeScript helpers |
 | [Concepts](concepts.md) | Principal, run, lease, reservation |
 | [Reserve and settle](reserve-and-settle.md) | How spend is authorized before a call completes |
 | [Price book](pricing-book.md) | Cost data, and how to contribute updates |
