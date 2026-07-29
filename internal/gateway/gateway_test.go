@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
