@@ -175,17 +175,18 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 1 | Scaffold, CI, container, contributor docs | ✅ shipped |
 | — | Release and docs publishing | ✅ shipped |
 | 2 | Store interface, SQLite, schema, ledger immutability | ✅ shipped |
-| 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ⬜ next |
-| 4 | Price book, cost calculation, token estimation | ⬜ |
+| 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ✅ shipped |
+| — | Encrypted vendor credential vault | ✅ shipped |
+| 4 | Price book, cost calculation, token estimation | ⬜ next |
 | 5 | Ledger writes, attribution, hash chaining | ⬜ |
 | 6 | Dashboard | ⬜ |
 | 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ |
 | 8 | Leases, scoping, revocation set, kill switch | ⬜ |
 | 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
 
-**What runs today:** the CLI command surface (`version`, `help`, and flag validation for `serve`, `demo`, `keys`), the container image, CI, and the storage layer — a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
+**What runs today:** `spendlease serve` starts a working reverse proxy. It authenticates agents by principal key, swaps that key for the real vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or Anthropic by path, streams SSE responses through unbuffered, and logs every request with per-principal and per-provider attribution. `spendlease keys principal` and `spendlease keys provider` manage identities and vendor credentials. Underneath sits a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
 
-**What does not:** `serve` still does not listen, `demo` does not simulate, and `keys` does not mint anything. The store is complete and tested but nothing is wired to it yet; that starts with the gateway in phase 3.
+**What does not:** **nothing is priced, capped, reserved or recorded.** There is no cost calculation, no budget enforcement, no `402`, and no ledger entry is written for a proxied request — the ledger exists but nothing calls it yet. Runs and leases are stored but not issued or checked; agents authenticate with the long-lived principal key for now. `demo` and the dashboard do not exist. Today this is a credential-custody proxy, not a spend limiter.
 
 ## Contributing
 

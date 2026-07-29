@@ -16,7 +16,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"runtime"
 	"strings"
@@ -93,10 +92,15 @@ Usage:
   spendlease <command> [flags]
 
 Commands:
-  serve     Run the gateway and dashboard
+  serve     Run the gateway
   demo      Run a simulated agent fleet against a mock provider
-  keys      Manage principals, runs and leases
+  keys      Manage principals and vendor credentials
   version   Print version information
+
+Getting started:
+  spendlease keys principal create --name my-agent
+  spendlease keys provider set openai --key sk-...
+  spendlease serve
 
 Run "spendlease <command> -h" for the flags of an individual command.
 Docs: https://premhiru.github.io/spendlease
@@ -111,23 +115,6 @@ func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
 	return fs
 }
 
-// runServe starts the gateway. The listener, store and proxy arrive in later
-// phases; this scaffold validates flags and reports what it would do.
-func runServe(args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("serve", stderr)
-	addr := fs.String("addr", ":4000", "address to listen on")
-	store := fs.String("store", "./spendlease.db", "SQLite file path or PostgreSQL URL")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	logger := slog.New(slog.NewTextHandler(stderr, nil))
-	logger.Info("starting spendlease", "addr", *addr, "store", redactStore(*store), "version", version)
-
-	fmt.Fprintf(stdout, "serve is not implemented yet (scaffold build %s)\n", version)
-	return nil
-}
-
 // runDemo starts the simulated agent fleet.
 func runDemo(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("demo", stderr)
@@ -138,25 +125,6 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 
 	fmt.Fprintf(stdout, "demo is not implemented yet; would drive %s\n", *target)
 	return nil
-}
-
-// runKeys manages principals, runs and leases.
-func runKeys(args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("keys", stderr)
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() == 0 {
-		return fmt.Errorf("%w: expected one of principal, run, lease, revoke", errUsage)
-	}
-
-	switch sub := fs.Arg(0); sub {
-	case "principal", "run", "lease", "revoke":
-		fmt.Fprintf(stdout, "keys %s is not implemented yet\n", sub)
-		return nil
-	default:
-		return fmt.Errorf("%w: unknown subcommand %q", errUsage, sub)
-	}
 }
 
 // runVersion prints build and runtime information.
