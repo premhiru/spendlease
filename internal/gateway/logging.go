@@ -41,6 +41,15 @@ func (g *Gateway) logRequests(next http.Handler) http.Handler {
 		if info.provider != "" {
 			attrs = append(attrs, "provider", info.provider)
 		}
+		if info.model != "" {
+			attrs = append(attrs, "model", info.model)
+		}
+		if info.runID != "" {
+			attrs = append(attrs, "run", info.runID)
+		}
+		if info.mode != "" {
+			attrs = append(attrs, "mode", info.mode)
+		}
 		// Flush count is not the signal: the proxy flushes twice even for a
 		// short response when the upstream sends no Content-Length, which
 		// made every error look like a stream. The content type is what

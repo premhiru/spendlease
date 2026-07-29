@@ -126,7 +126,9 @@ flowchart LR
 The hard part is that you cannot know an LLM call's cost until it finishes, but you have to authorize it before it starts. `spendlease` handles this like a fuel pump pre-authorization: reserve an upper bound up front, settle the real number afterward, release the difference. See [reserve-and-settle](docs/reserve-and-settle.md) for the full explanation, including what happens on mid-stream disconnects and provider errors.
 
 > [!IMPORTANT]
-> For OpenAI-compatible streaming endpoints, `spendlease` injects `stream_options: {include_usage: true}` when you have not set it, so it can read actual token counts. If you did not ask for usage, the extra usage chunk is stripped from the stream you receive. Your request is modified in flight. This is documented rather than hidden, and covered in detail in [reserve-and-settle](docs/reserve-and-settle.md).
+> For OpenAI-compatible streaming endpoints, `spendlease` injects `stream_options: {include_usage: true}` when you have not set it, so it can read actual token counts. The extra usage chunk that produces is withheld from the stream you receive, so what you read is byte-identical to what you would have read without spendlease in the path.
+>
+> Your request is modified in flight, and the response says so with `X-Spendlease-Stream-Options: injected`. Anthropic requests are never modified — the Messages API reports usage without being asked. Reasoning and rejected alternatives in [ADR-0012](docs/adr/0012-stream-options-injection.md).
 
 ### Overhead
 
@@ -180,17 +182,19 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ✅ shipped |
 | — | Encrypted vendor credential vault | ✅ shipped |
 | 4 | Price book, cost calculation, token estimation | ✅ shipped |
-| 5 | Ledger writes, attribution, hash chaining | ⬜ next |
-| 6 | Dashboard | ⬜ |
+| 5 | Ledger writes, attribution, hash chaining | ✅ shipped |
+| 6 | Dashboard | ⬜ next |
 | 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ |
 | 8 | Leases, scoping, revocation set, kill switch | ⬜ |
 | 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ |
 
 **What runs today:** `spendlease serve` starts a working reverse proxy. It authenticates agents by principal key, swaps that key for the real vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or Anthropic by path, streams SSE responses through unbuffered, and logs every request with per-principal and per-provider attribution. `spendlease keys principal` and `spendlease keys provider` manage identities and vendor credentials. Underneath sits a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
 
-The price book is loaded and prices any request exactly: 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
+The price book prices any request exactly — 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
 
-**What does not:** **nothing is capped, reserved or recorded.** Pricing exists as a library but the gateway does not call it yet — no ledger entry is written for a proxied request, there is no budget enforcement and no `402`. Runs and leases are stored but not issued or checked; agents authenticate with the long-lived principal key for now. `demo` and the dashboard do not exist. Today this is a credential-custody proxy that knows what things cost but does not yet count them.
+**Spend is now recorded.** Every successful request produces an append-only, hash-chained ledger entry attributed to a principal and a run, priced from the token counts the vendor reported — including streamed responses on both vendors. Failed requests are not charged. Entries the gateway could not price exactly are marked `estimated` and say why. This is **observe mode**: everything is recorded, nothing is blocked.
+
+**What does not:** **nothing is capped.** There is no reservation, no budget enforcement and no `402` — a run can exceed its budget freely and only the record shows it. Leases are stored but not issued; agents authenticate with the long-lived principal key. The dashboard and `demo` do not exist, so reading the ledger currently means querying SQLite yourself.
 
 ## Contributing
 

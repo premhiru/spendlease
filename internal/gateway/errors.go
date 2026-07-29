@@ -16,6 +16,9 @@ const (
 	ErrTypeUnauthenticated = "unauthenticated"
 	// ErrTypeUnknownRoute means no provider claims the request path.
 	ErrTypeUnknownRoute = "unknown_route"
+	// ErrTypeUnknownRun means the run named by the caller does not exist or
+	// belongs to a different principal.
+	ErrTypeUnknownRun = "unknown_run"
 	// ErrTypeNoCredential means the gateway has no vendor key for the
 	// provider the request was routed to.
 	ErrTypeNoCredential = "provider_credential_missing"

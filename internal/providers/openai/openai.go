@@ -2,8 +2,11 @@
 package openai
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
+
+	"github.com/premhiru/spendlease/internal/providers"
 )
 
 // Name is the provider identifier used in leases, the price book and the
@@ -61,4 +64,101 @@ func (p *Provider) Paths() []string {
 // Authorize sets the OpenAI bearer credential.
 func (p *Provider) Authorize(req *http.Request, apiKey string) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+}
+
+// ParseRequest reads the model, output ceiling, streaming flag and prompt
+// size from an OpenAI-shaped request body.
+//
+// Both max_tokens and its replacement max_completion_tokens are read, because
+// the newer models accept only the latter and older clients still send the
+// former.
+func (p *Provider) ParseRequest(body []byte) providers.RequestInfo {
+	m := providers.DecodeBody(body)
+	if m == nil {
+		return providers.RequestInfo{}
+	}
+
+	info := providers.RequestInfo{
+		Model:       providers.StringField(m, "model"),
+		MaxTokens:   providers.IntField(m, "max_tokens", "max_completion_tokens"),
+		Stream:      providers.BoolField(m, "stream"),
+		PromptChars: providers.CountPromptChars(m),
+	}
+
+	// Usage on a streamed OpenAI response is opt-in. Whether the caller asked
+	// decides whether spendlease can record exact usage or has to estimate.
+	if opts, ok := m["stream_options"].(map[string]any); ok {
+		info.WantsUsage = providers.BoolField(opts, "include_usage")
+	}
+	return info
+}
+
+// UsageFromResponse reads OpenAI's usage object from a complete response.
+func (p *Provider) UsageFromResponse(body []byte) (providers.Usage, bool) {
+	m := providers.DecodeBody(body)
+	if m == nil {
+		return providers.Usage{}, false
+	}
+	return providers.UsageFrom(m,
+		[]string{"prompt_tokens", "input_tokens"},
+		[]string{"completion_tokens", "output_tokens"})
+}
+
+// UsageFromStreamEvent reads usage from one streamed chunk.
+//
+// OpenAI sends usage only in a final chunk, and only when
+// stream_options.include_usage was set — by the caller, or by the gateway on
+// their behalf.
+func (p *Provider) UsageFromStreamEvent(data []byte) (providers.Usage, bool) {
+	return p.UsageFromResponse(data)
+}
+
+// EnableStreamUsage sets stream_options.include_usage on a streaming request.
+//
+// Without it OpenAI reports no usage for a streamed call and the cost can only
+// be estimated. The change is confined to that one field: the body is decoded,
+// the field is set, and everything else is re-encoded as it was.
+//
+// It returns false, and the body untouched, when the request is not streaming
+// or already asks for usage.
+func (p *Provider) EnableStreamUsage(body []byte) ([]byte, bool) {
+	m := providers.DecodeBody(body)
+	if m == nil || !providers.BoolField(m, "stream") {
+		return body, false
+	}
+
+	opts, _ := m["stream_options"].(map[string]any)
+	if opts == nil {
+		opts = map[string]any{}
+	} else if include, ok := opts["include_usage"].(bool); ok && include {
+		return body, false
+	}
+
+	opts["include_usage"] = true
+	m["stream_options"] = opts
+
+	modified, err := json.Marshal(m)
+	if err != nil {
+		// Leave the request exactly as it arrived. Losing exact accounting is
+		// a far smaller failure than corrupting somebody's request.
+		return body, false
+	}
+	return modified, true
+}
+
+// IsUsageOnlyEvent reports whether a chunk carries usage and no content.
+//
+// The chunk that include_usage produces has an empty choices array, which is
+// how it is told apart from an ordinary content chunk that happens to arrive
+// alongside usage.
+func (p *Provider) IsUsageOnlyEvent(data []byte) bool {
+	m := providers.DecodeBody(data)
+	if m == nil {
+		return false
+	}
+	if _, hasUsage := m["usage"].(map[string]any); !hasUsage {
+		return false
+	}
+	choices, ok := m["choices"].([]any)
+	return !ok || len(choices) == 0
 }

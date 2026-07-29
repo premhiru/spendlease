@@ -20,6 +20,35 @@ Your credential is **always stripped** before the request is forwarded. Any vend
 
 Lease tokens (`sll_`) are recognised but not yet accepted; the error says so explicitly.
 
+### Attributing spend to a run
+
+Spend is charged to a run. Without a header, a request is charged to the principal's implicit run, created on first use — see [ADR-0011](adr/0011-implicit-runs.md).
+
+An application that already models executions can attribute explicitly:
+
+```
+X-Spendlease-Run: run_...
+```
+
+Naming a run that does not exist, or one belonging to a different principal, returns `400 unknown_run` before the request is forwarded.
+
+## Accounting
+
+Every successful request produces a ledger entry: provider, model, token counts, exact cost, and the run and principal it belongs to. Entries are append-only and hash-chained.
+
+**Failed requests are not charged.** A non-2xx from the vendor produces no entry, because vendors do not bill for failures.
+
+Token counts come from the vendor where it reports them. An entry is marked `estimated` when they do not, and the log line says why:
+
+| Situation | Exact? |
+|---|---|
+| Non-streaming, either vendor | Exact |
+| Streaming, Anthropic | Exact — usage is always reported |
+| Streaming, OpenAI | Exact — `stream_options` is injected if you did not set it |
+| Vendor reports no usage even when asked | Estimated |
+| Model not in the price book | Estimated, at the fallback rate |
+| Client disconnected mid-response | Estimated, from partial usage |
+
 ## Proxy endpoints
 
 Everything not listed under [operational endpoints](#operational-endpoints) is proxied. Routing is by path prefix — see [ADR-0006](adr/0006-provider-routing.md).
@@ -53,7 +82,18 @@ POST /anthropic/v1/models           ->  https://api.anthropic.com/v1/models
 
 Server-sent event responses are proxied through **unbuffered**. Each chunk is flushed to the client as it arrives, so first-token latency matches calling the vendor directly.
 
-The request body is currently forwarded **unmodified**. When cost accounting lands, OpenAI-compatible streaming requests will have `stream_options: {include_usage: true}` injected if not already present, and the extra usage chunk stripped from the client-bound stream. That is not happening yet.
+> [!IMPORTANT]
+> **Streaming requests to OpenAI-compatible endpoints are modified.** If you did not set `stream_options: {include_usage: true}`, spendlease sets it, because otherwise the vendor reports no token counts and the call cannot be priced exactly.
+>
+> The extra usage chunk this produces is **withheld** from the stream you read, so what you receive is byte-identical to what you would have received without spendlease in the path.
+>
+> The modification announces itself on the response:
+>
+> ```
+> X-Spendlease-Stream-Options: injected
+> ```
+>
+> Nothing else in your request is touched, and requests you already set `stream_options` on are forwarded unchanged. Anthropic requests are never modified — the Messages API reports usage without being asked. See [ADR-0012](adr/0012-stream-options-injection.md).
 
 ### Vendor responses
 

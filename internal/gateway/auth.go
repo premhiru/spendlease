@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -73,9 +74,37 @@ func (g *Gateway) authenticate(next http.Handler) http.Handler {
 
 		if info := infoFrom(r.Context()); info != nil {
 			info.principalID = principal.ID
+			info.mode = string(principal.Mode)
 		}
 
 		ctx := context.WithValue(r.Context(), ctxPrincipal, principal)
+
+		// Resolve the run now rather than at accounting time. A caller who
+		// names a run that does not exist, or one belonging to somebody else,
+		// should be told immediately instead of having the request succeed
+		// and the spend land nowhere.
+		if g.recorder != nil {
+			runID, err := g.recorder.resolveRun(ctx, principal, r.Header.Get(RunHeader))
+			if err != nil {
+				g.logger.Warn("could not resolve run",
+					"principal", principal.ID, "requested", r.Header.Get(RunHeader), "error", err)
+				writeError(w, g.logger, http.StatusBadRequest, APIErrorDetail{
+					Type:      ErrTypeUnknownRun,
+					Principal: principal.ID,
+					Message: fmt.Sprintf("The run %q named in %s cannot be used by this principal.",
+						r.Header.Get(RunHeader), RunHeader),
+					Resolution: "Omit the header to charge the principal's default run, or name a run that " +
+						"belongs to this principal.",
+					Docs: DocsBase + "/concepts/",
+				})
+				return
+			}
+			ctx = context.WithValue(ctx, ctxRun, runID)
+			if info := infoFrom(r.Context()); info != nil {
+				info.runID = runID
+			}
+		}
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
