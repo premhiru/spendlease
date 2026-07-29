@@ -32,6 +32,7 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	storePath := fs.String("store", "./spendlease.db", "SQLite file path")
 	openAIBase := fs.String("openai-url", openai.DefaultBaseURL, "OpenAI upstream base URL")
 	anthropicBase := fs.String("anthropic-url", anthropic.DefaultBaseURL, "Anthropic upstream base URL")
+	pricingDir := fs.String("pricing", "", "directory of price book YAML (default: the copy embedded in this binary)")
 	logLevel := fs.String("log-level", "info", "debug, info, warn or error")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -62,6 +63,12 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+
+	book, err := loadPriceBook(*pricingDir, logger)
+	if err != nil {
+		return err
+	}
+	summarisePriceBook(stdout, book)
 
 	// Then the master key, which in production must be supplied rather than
 	// generated. Resolving it before opening the store means a refused
