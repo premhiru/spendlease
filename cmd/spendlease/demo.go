@@ -202,7 +202,10 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 		stop()
 	case <-ctx.Done():
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Race instrumentation and a cold SQLite connection can make cancellation
+	// cleanup take a few seconds on Windows. Normal exits remain immediate;
+	// this is only the upper bound for in-flight handlers.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	shutdownErr := srv.Shutdown(shutdownCtx)
 	fleet.Wait()
