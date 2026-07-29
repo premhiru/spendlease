@@ -46,28 +46,9 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	st, err := sqlite.Open(ctx, *storePath, sqlite.Options{Logger: logger})
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := st.Close(); err != nil {
-			logger.Error("closing store", "error", err)
-		}
-	}()
-
-	masterKey, keySource, err := resolveMasterKey(*storePath)
-	if err != nil {
-		return err
-	}
-	// The source is logged; the key never is.
-	logger.Info("master key loaded", "source", keySource)
-
-	v, err := vault.New(masterKey, st)
-	if err != nil {
-		return err
-	}
-
+	// Everything that can be validated without side effects is validated
+	// first: configuration errors must not leave a migrated database or a
+	// generated key file behind on a startup that was never going to succeed.
 	oa, err := openai.NewWithBaseURL(*openAIBase)
 	if err != nil {
 		return fmt.Errorf("invalid -openai-url: %w", err)
@@ -78,6 +59,32 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	}
 
 	registry, err := providers.NewRegistry(oa, an)
+	if err != nil {
+		return err
+	}
+
+	// Then the master key, which in production must be supplied rather than
+	// generated. Resolving it before opening the store means a refused
+	// production startup creates nothing at all.
+	masterKey, keySource, err := resolveMasterKey(*storePath)
+	if err != nil {
+		return err
+	}
+	// The source is logged; the key never is.
+	logger.Info("master key loaded", "source", keySource)
+
+	// Only now does anything touch disk.
+	st, err := sqlite.Open(ctx, *storePath, sqlite.Options{Logger: logger})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := st.Close(); err != nil {
+			logger.Error("closing store", "error", err)
+		}
+	}()
+
+	v, err := vault.New(masterKey, st)
 	if err != nil {
 		return err
 	}
