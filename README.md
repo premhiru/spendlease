@@ -17,9 +17,8 @@ This is **IAM for machine spend**, closer to `sts:AssumeRole` than to Expensify.
 ## Quickstart
 
 > [!NOTE]
-> The gateway, dashboard, accounting and budget enforcement work today. Lease
-> SDK packages and `spendlease demo` arrive in the final phase. Track
-> the exact boundary in [Status](#status).
+> The complete v0.1 feature set is implemented. The project remains pre-v1,
+> so pin a release before using it as load-bearing infrastructure.
 
 No signup, no config file, no database to provision.
 
@@ -27,15 +26,26 @@ No signup, no config file, no database to provision.
 docker run -p 4000:4000 ghcr.io/premhiru/spendlease:edge
 ```
 
-Open <http://localhost:4000>. The dashboard is live and empty. To fill it without wiring up your own application first:
+Open <http://localhost:4000>. The dashboard is live and empty. To explore the
+whole flow without vendor credentials or application wiring, run the
+self-contained demo instead:
 
 ```bash
-spendlease keys principal create --name checkout-agent
-spendlease keys provider set openai --key "$OPENAI_API_KEY"
+spendlease demo
 ```
 
-Use the shown-once `slk_` principal key in the integration below. The
-zero-credential simulated fleet command, `spendlease demo`, arrives in phase 9.
+Or run the demo directly from the image (stop the regular gateway container
+first if it already owns port 4000):
+
+```bash
+docker run --rm -p 4000:4000 ghcr.io/premhiru/spendlease:edge \
+  demo --target http://0.0.0.0:4000
+```
+
+It launches a mock provider and three leased agents, including a runaway retry
+loop. Visit the printed dashboard URL to watch spend accumulate, the budget
+block requests, and the kill switch revoke the loop's lease. The demo uses an
+in-memory database and removes all state when it exits.
 
 Prefer a binary?
 
@@ -50,6 +60,25 @@ optional PostgreSQL backend is planned but not implemented yet.
 ## Integration
 
 One line. Override the base URL. This works with every vendor SDK in every language, because it is just an HTTP endpoint.
+
+The optional thin SDK packages validate the lease and produce the vendor
+client options without wrapping the vendor API:
+
+```python
+from openai import OpenAI
+from spendlease import Lease
+
+client = OpenAI(**Lease.from_env().openai_kwargs())
+```
+
+```typescript
+import OpenAI from "openai";
+import { Lease } from "@spendlease/sdk";
+
+const client = new OpenAI(Lease.fromEnv().openAIOptions());
+```
+
+Or configure the vendor SDK directly:
 
 ```python
 from openai import OpenAI
@@ -136,7 +165,11 @@ The hard part is that you cannot know an LLM call's cost until it finishes, but 
 
 ### Overhead
 
-Gateway overhead is held under **10ms p99**, excluding upstream provider time, and CI fails the build if the streaming benchmark exceeds it. Measured figures are published here once that benchmark lands.
+Gateway overhead is held under **10ms p99**, excluding upstream provider time,
+and CI fails the build if the streaming benchmark exceeds it. The current
+steady-state measurement is **0.74ms p99** over 300 in-memory SSE requests on
+Windows/amd64 (Intel i7-1065G7); run `go test ./internal/gateway -run
+TestStreamingGatewayOverheadP99 -v` to measure the same path locally.
 
 ### Pricing data
 
@@ -176,7 +209,8 @@ Full site: **<https://premhiru.github.io/spendlease>**
 
 ## Status
 
-Pre-v0.1 and under active construction. Everything above describes v0.1 as designed and is the specification the build works towards; this table is what actually exists today. `main` stays working at every step.
+The v0.1 feature set is complete and the project remains pre-v1. This table is
+the implementation history; `main` stayed working at every phase.
 
 | Phase | | |
 |---|---|---|
@@ -190,9 +224,16 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 6 | Dashboard | ✅ shipped |
 | 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ✅ shipped |
 | 8 | Leases, scoping, revocation set, kill switch | ✅ shipped |
-| 9 | Python + TypeScript SDKs, `demo`, examples | ⬜ next |
+| 9 | Python + TypeScript SDKs, `demo`, examples | ✅ shipped |
 
-**What runs today:** `spendlease serve` starts a working reverse proxy. It authenticates agents by principal key, swaps that key for the real vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or Anthropic by path, streams SSE responses through unbuffered, and logs every request with per-principal and per-provider attribution. `spendlease keys principal` and `spendlease keys provider` manage identities and vendor credentials. Underneath sits a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
+**What runs today:** `spendlease serve` starts a working reverse proxy. It
+authenticates agents with short-lived leases, swaps each lease for the real
+vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or
+Anthropic by path, streams SSE responses through unbuffered, and logs every
+request with per-principal and per-provider attribution. `spendlease keys`
+manages principals, runs, leases, revocation, and vendor credentials.
+Underneath sits a self-migrating SQLite database holding principals, runs,
+leases, reservations and a hash-chained, trigger-enforced append-only ledger.
 
 The price book prices any request exactly — 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
 
@@ -206,8 +247,11 @@ sweeper reclaims abandoned reservations after their TTL.
 
 **The dashboard is live** at `http://localhost:4000` — one table, sorted by spend descending, with a one-click observe/enforce toggle and a badge on every agent whose run exceeded its budget. That badge is the point of observe mode: each of those requests was served, and would not have been under enforcement.
 
-**What does not:** The Python and TypeScript SDK packages and `demo` command do
-not exist yet.
+**The SDKs and demo are live.** [`sdk/python`](sdk/python/) and
+[`sdk/typescript`](sdk/typescript/) contain dependency-free helpers for the
+official vendor clients, with runnable integrations under [`examples`](examples/).
+`spendlease demo` exercises the real gateway, accounting, enforcement,
+dashboard, and revocation paths against a local mock provider.
 
 ## Contributing
 

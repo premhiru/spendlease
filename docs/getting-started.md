@@ -3,8 +3,8 @@
 Install, register an agent, store a vendor key, and make your first proxied call.
 
 > [!NOTE]
-> `spendlease` is pre-v0.1. The gateway, ledger, enforcement, leases and kill
-> switch work; packaged SDKs and the simulated fleet demo arrive next.
+> `spendlease` is pre-v1. The complete v0.1 feature set is implemented, but
+> pin a release before production use.
 
 ## Install
 
@@ -17,6 +17,20 @@ Or as a binary:
 ```bash
 go install github.com/premhiru/spendlease/cmd/spendlease@latest
 ```
+
+## Try the zero-credential demo
+
+Before configuring anything, exercise the complete system locally:
+
+```bash
+spendlease demo
+```
+
+Open the printed dashboard URL. Three simulated agents call a mock provider;
+the `retry-loop` agent exhausts its fake budget and then has its lease revoked
+by the real kill switch. The command exits after 30 seconds by default. Use
+`--duration 0` to run until Ctrl+C. No vendor key or persistent database is
+created.
 
 ## 1. Register a principal
 
@@ -82,7 +96,22 @@ Store the shown-once `sll_` token in `SPENDLEASE_LEASE_TOKEN`.
 
 ## 5. Point an SDK at it
 
-One line: override the base URL, and use the principal key where the vendor key would go.
+The thin Python package validates the lease token and supplies the right vendor
+SDK settings:
+
+```bash
+pip install ./sdk/python
+```
+
+```python
+from openai import OpenAI
+from spendlease import Lease
+
+client = OpenAI(**Lease.from_env().openai_kwargs())
+```
+
+The package does not wrap model APIs. You can always override the base URL
+directly and use the lease token where the vendor key would go:
 
 ```python
 import os
@@ -109,6 +138,8 @@ client = Anthropic(
 ```
 
 Streaming works exactly as it does against the vendor directly: chunks pass through as they arrive, with no buffering.
+
+See [SDKs and examples](sdks.md) for TypeScript and admin-client usage.
 
 Or with `curl`:
 

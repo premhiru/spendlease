@@ -115,18 +115,6 @@ func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
 	return fs
 }
 
-// runDemo starts the simulated agent fleet.
-func runDemo(args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("demo", stderr)
-	target := fs.String("target", "http://localhost:4000", "address of the gateway to drive")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(stdout, "demo is not implemented yet; would drive %s\n", *target)
-	return nil
-}
-
 // runVersion prints build and runtime information.
 func runVersion(args []string, stdout io.Writer) error {
 	if len(args) > 0 {

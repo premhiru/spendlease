@@ -51,6 +51,7 @@ plugins:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - SDKs and examples: sdks.md
   - Concepts: concepts.md
   - Reserve and settle: reserve-and-settle.md
   - Policy reference: policy-reference.md

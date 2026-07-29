@@ -59,5 +59,5 @@ rates and fallback ceiling; they are never treated as free.
 
 There is no per-endpoint policy, time-of-day policy, approval workflow,
 multi-currency rule, RBAC, anomaly detector or general expression language in
-v0.1. Provider scope and per-lease ceilings arrive with leases; they do not
-expand the principal policy into a generic capability system.
+v0.1. Provider scope and per-lease ceilings are enforced on every lease; they
+do not expand the principal policy into a generic capability system.

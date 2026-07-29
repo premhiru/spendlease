@@ -3,9 +3,8 @@
 Production deployment, PostgreSQL, and key management.
 
 > [!NOTE]
-> This page is incomplete. The PostgreSQL backend and key management it will
-> describe do not exist yet; they arrive with the deployment work in later
-> phases. What is documented below is implemented and true today.
+> SQLite and master-key management are implemented. PostgreSQL is not yet a
+> supported backend; references to it describe a future option.
 
 ## SQLite, the default
 
@@ -52,8 +51,7 @@ The spend table and every admin mutation use the same guard. Static dashboard
 assets are public, contain no deployment data, and are embedded in the binary;
 the dashboard does not require an internet connection or CDN.
 
-## Not yet written
+## Remaining deployment work
 
 - PostgreSQL setup, and the guarantee that it runs the same schema
-- `SPENDLEASE_MASTER_KEY` generation, storage and rotation
 - Guarding against an older binary opening a newer database

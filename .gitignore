@@ -26,6 +26,7 @@ spendlease.key
 /sdk/python/dist/
 /sdk/python/build/
 /sdk/python/*.egg-info/
+/sdk/python/src/*.egg-info/
 /sdk/python/.venv/
 __pycache__/
 /sdk/typescript/dist/

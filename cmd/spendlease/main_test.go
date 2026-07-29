@@ -68,9 +68,9 @@ func TestRun(t *testing.T) {
 		},
 		{
 			name:     "demo accepts a target",
-			args:     []string{"demo", "-target", "http://localhost:4000"},
+			args:     []string{"demo", "-target", "http://127.0.0.1:0", "-duration", "50ms"},
 			wantCode: 0,
-			wantOut:  "http://localhost:4000",
+			wantOut:  "http://127.0.0.1:",
 		},
 		{
 			name:     "keys requires a subcommand",

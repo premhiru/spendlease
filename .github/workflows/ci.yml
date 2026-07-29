@@ -70,6 +70,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Streaming latency budget
+        if: matrix.os == 'ubuntu-latest'
+        run: go test -count=1 -run TestStreamingGatewayOverheadP99 ./internal/gateway
+
       # The race detector needs cgo. The shipped binary is still CGO_ENABLED=0;
       # this only affects how tests are compiled.
       - name: Test with race detector
@@ -109,6 +113,35 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -ldflags "-s -w" -o /dev/null ./cmd/spendlease
+
+  sdks:
+    name: SDKs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Test Python SDK
+        env:
+          PYTHONPATH: sdk/python/src
+        run: python -m unittest discover -s sdk/python/tests
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+
+      - name: Install TypeScript SDK
+        working-directory: sdk/typescript
+        run: npm ci
+
+      - name: Test TypeScript SDK
+        working-directory: sdk/typescript
+        run: npm test
 
   docker:
     name: Docker image

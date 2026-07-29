@@ -14,10 +14,9 @@ import (
 // authenticate resolves the caller's credential to a principal and attaches
 // it to the request context.
 //
-// In this phase the accepted credential is a principal key (slk_). Lease
-// tokens (sll_) arrive with the lease phase and will be accepted here
-// alongside them; the shape check below already tells the two apart so the
-// error can say which one was presented.
+// Short-lived lease tokens (sll_) are preferred for agents. Long-lived
+// principal keys (slk_) remain accepted as a compatibility and bootstrap
+// path; the shape check below keeps their resolution paths explicit.
 func (g *Gateway) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented, ok := credentialFrom(r)
@@ -25,8 +24,8 @@ func (g *Gateway) authenticate(next http.Handler) http.Handler {
 			writeError(w, g.logger, http.StatusUnauthorized, APIErrorDetail{
 				Type:    ErrTypeUnauthenticated,
 				Message: "No spendlease credential was presented.",
-				Resolution: "Send your principal key as `Authorization: Bearer slk_...`. " +
-					"Most vendor SDKs do this for you when you set api_key to the principal key " +
+				Resolution: "Send your lease as `Authorization: Bearer sll_...`. " +
+					"Most vendor SDKs do this for you when you set api_key to the lease token " +
 					"and base_url to this gateway.",
 				Docs: DocsBase + "/getting-started/",
 			})
@@ -73,7 +72,7 @@ func (g *Gateway) authenticate(next http.Handler) http.Handler {
 			writeError(w, g.logger, http.StatusUnauthorized, APIErrorDetail{
 				Type:    ErrTypeUnauthenticated,
 				Message: "The credential presented is not a spendlease key.",
-				Resolution: "spendlease keys start with `slk_`. If you passed a vendor API key, " +
+				Resolution: "spendlease credentials start with `sll_` or `slk_`. If you passed a vendor API key, " +
 					"remove it: the gateway holds the vendor credential for you and the agent " +
 					"never needs one.",
 				Docs: DocsBase + "/concepts/",
