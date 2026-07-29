@@ -1,0 +1,93 @@
+# OpenAI API prices, USD per one million tokens.
+#
+# Prices are the standard synchronous tier. Batch (50% discount) and priority
+# tiers are not modelled: spendlease prices what an agent actually spends on a
+# normal call, and modelling every discount tier would be guesswork about which
+# one a given request landed in.
+#
+# default_max_tokens is a RESERVATION default, not the model's output limit.
+# It is what gets held when a request specifies no max_tokens. Reserving a
+# model's full output window would tie up most of a budget for a request that
+# will almost certainly use a fraction of it.
+#
+# To update: see CONTRIBUTING.md. Link the vendor pricing page in your PR.
+
+version: 1
+effective: 2026-07-01
+
+providers:
+  openai:
+    source: https://developers.openai.com/api/docs/pricing
+
+    models:
+      # Flagship
+      gpt-5.6-sol:
+        input_per_1m: 5.00
+        output_per_1m: 30.00
+        default_max_tokens: 4096
+
+      gpt-5.6-terra:
+        input_per_1m: 2.50
+        output_per_1m: 15.00
+        default_max_tokens: 4096
+
+      gpt-5.6-luna:
+        input_per_1m: 1.00
+        output_per_1m: 6.00
+        default_max_tokens: 4096
+
+      gpt-5.5:
+        input_per_1m: 5.00
+        output_per_1m: 30.00
+        default_max_tokens: 4096
+
+      gpt-5.4:
+        input_per_1m: 2.50
+        output_per_1m: 15.00
+        default_max_tokens: 4096
+
+      # Standard
+      gpt-4o:
+        input_per_1m: 2.50
+        output_per_1m: 10.00
+        default_max_tokens: 4096
+
+      gpt-4o-mini:
+        input_per_1m: 0.15
+        output_per_1m: 0.60
+        default_max_tokens: 4096
+
+      # Reasoning models. A higher reservation default because reasoning
+      # tokens count as output and these models routinely produce far more
+      # than a chat completion would.
+      o1:
+        input_per_1m: 15.00
+        output_per_1m: 60.00
+        default_max_tokens: 16384
+
+      o1-pro:
+        input_per_1m: 150.00
+        output_per_1m: 600.00
+        default_max_tokens: 16384
+        note: Among the most expensive models available; a single unbounded call is costly.
+
+      o3:
+        input_per_1m: 2.00
+        output_per_1m: 8.00
+        default_max_tokens: 16384
+
+      o3-pro:
+        input_per_1m: 20.00
+        output_per_1m: 80.00
+        default_max_tokens: 16384
+
+      o3-mini:
+        input_per_1m: 1.10
+        output_per_1m: 4.40
+        default_max_tokens: 16384
+
+      # Legacy
+      gpt-3.5-turbo:
+        input_per_1m: 0.50
+        output_per_1m: 1.50
+        default_max_tokens: 4096

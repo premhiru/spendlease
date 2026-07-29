@@ -13,3 +13,5 @@ ADRs are immutable once merged. To change a decision, add a new ADR that superse
 | [0005](0005-ledger-integrity.md) | How ledger immutability is actually enforced | Accepted |
 | [0006](0006-provider-routing.md) | Routing requests to providers by path | Accepted |
 | [0007](0007-credential-vault-and-master-key.md) | The credential vault, and where the master key comes from | Accepted |
+| [0008](0008-token-estimation.md) | Estimating tokens without a tokenizer | Accepted |
+| [0009](0009-dated-price-supersession.md) | Prices are superseded by date, never edited | Accepted |

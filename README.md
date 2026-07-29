@@ -2,7 +2,9 @@
 
 **A spend authorization gateway for AI agents.** It holds your vendor API keys, issues short-lived scoped leases to agents, enforces hard spending caps before a request is allowed out, and records an immutable ledger of every dollar each agent spent.
 
-Agents spend real money on inference, search APIs, data APIs and scrapers, and almost nobody can answer "which agent spent this?" until the invoice arrives. A retry loop with no ceiling will burn $40,000 overnight, and the first signal is a billing alert three days later. `spendlease` puts an authorization decision in front of every one of those calls, so the loop dies at $50 instead.
+Agents spend real money on inference, search APIs, data APIs and scrapers, and almost nobody can answer "which agent spent this?" until the invoice arrives. An unattended retry loop — one call a second, twelve hours, a 4k prompt each time — costs **$864** on `gpt-4o`, **$43,200** across a fleet of fifty, and **$51,840** on `o1-pro`. The first signal is a billing alert three days later. `spendlease` puts an authorization decision in front of every one of those calls, so the loop dies at $50 instead.
+
+Those figures are computed from the shipped [price book](pricing/) by a [test](internal/pricing/pricebook_test.go), not estimated.
 
 This is **IAM for machine spend**, closer to `sts:AssumeRole` than to Expensify. It is meant to be load-bearing infrastructure that you install once and never rip out.
 
@@ -177,8 +179,8 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 | 2 | Store interface, SQLite, schema, ledger immutability | ✅ shipped |
 | 3 | Gateway passthrough, OpenAI + Anthropic adapters, SSE | ✅ shipped |
 | — | Encrypted vendor credential vault | ✅ shipped |
-| 4 | Price book, cost calculation, token estimation | ⬜ next |
-| 5 | Ledger writes, attribution, hash chaining | ⬜ |
+| 4 | Price book, cost calculation, token estimation | ✅ shipped |
+| 5 | Ledger writes, attribution, hash chaining | ⬜ next |
 | 6 | Dashboard | ⬜ |
 | 7 | Reserve/settle, TTL sweeper, enforce mode, `402` | ⬜ |
 | 8 | Leases, scoping, revocation set, kill switch | ⬜ |
@@ -186,7 +188,9 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 
 **What runs today:** `spendlease serve` starts a working reverse proxy. It authenticates agents by principal key, swaps that key for the real vendor credential from an AES-256-GCM encrypted vault, routes to OpenAI or Anthropic by path, streams SSE responses through unbuffered, and logs every request with per-principal and per-provider attribution. `spendlease keys principal` and `spendlease keys provider` manage identities and vendor credentials. Underneath sits a self-migrating SQLite database holding principals, runs, leases, reservations and a hash-chained, trigger-enforced append-only ledger.
 
-**What does not:** **nothing is priced, capped, reserved or recorded.** There is no cost calculation, no budget enforcement, no `402`, and no ledger entry is written for a proxied request — the ledger exists but nothing calls it yet. Runs and leases are stored but not issued or checked; agents authenticate with the long-lived principal key for now. `demo` and the dashboard do not exist. Today this is a credential-custody proxy, not a spend limiter.
+The price book is loaded and prices any request exactly: 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
+
+**What does not:** **nothing is capped, reserved or recorded.** Pricing exists as a library but the gateway does not call it yet — no ledger entry is written for a proxied request, there is no budget enforcement and no `402`. Runs and leases are stored but not issued or checked; agents authenticate with the long-lived principal key for now. `demo` and the dashboard do not exist. Today this is a credential-custody proxy that knows what things cost but does not yet count them.
 
 ## Contributing
 

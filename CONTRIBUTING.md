@@ -36,6 +36,7 @@ version: 1
 effective: 2026-07-01
 providers:
   openai:
+    source: https://developers.openai.com/api/docs/pricing
     models:
       gpt-4o:
         input_per_1m: 2.50      # USD per 1M input tokens
@@ -43,12 +44,19 @@ providers:
         default_max_tokens: 4096
 ```
 
+`source` is required: a price without a link to the vendor's pricing page cannot be reviewed. `default_max_tokens` is the output ceiling assumed when a request does not specify one — a *reservation* default, not the model's output limit.
+
 To submit an update:
 
-1. Edit the relevant provider file under `/pricing`.
-2. Set `effective` to the date the price actually takes effect, not today's date. Historical entries are kept. Never overwrite an old price; add a new dated entry alongside it, so past ledger entries stay explainable.
-3. **Link the vendor's public pricing page in your PR description.** This is the one hard requirement. A price without a source cannot be reviewed.
-4. Run `make test`. The price book is schema-validated by the test suite.
+1. **A price that has already changed:** edit the entry under `/pricing`.
+2. **A price that changes on a future date:** add a new file named for that date, such as `anthropic-2026-09-01.yaml`, containing only the models that change. Never overwrite an old price. The loader ignores a future-dated file until its date arrives, then applies it to those models only, leaving everything else alone. Past ledger entries have to stay explainable, and they can only be explained against the price that was in force when they were written.
+3. Set `effective` to the date the price actually takes effect, not today's date.
+4. **Link the vendor's public pricing page in your PR description.** This is the one hard requirement.
+5. Run `make test`.
+
+The test suite validates the shipped price book, so a mistake fails CI rather than reaching an invoice. It catches a missing `source`, an absent or non-positive `default_max_tokens`, a rate that is not a number, output priced below input, and prices large enough to suggest a units error — such as a per-thousand-token price entered into a per-million field.
+
+Full format reference, including how unknown models are priced: [docs/pricing-book.md](docs/pricing-book.md).
 
 Issues labelled [`good first issue`](https://github.com/premhiru/spendlease/labels/good%20first%20issue) are mostly price book updates and small provider adapters. Pick one up without asking.
 
