@@ -71,3 +71,4 @@ nav:
       - 9. Dated price supersession: adr/0009-dated-price-supersession.md
       - 10. Accounting observes the response: adr/0010-accounting-observes-the-response.md
       - 11. Implicit runs: adr/0011-implicit-runs.md
+      - 12. Stream options injection: adr/0012-stream-options-injection.md

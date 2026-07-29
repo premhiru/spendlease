@@ -2,6 +2,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 
@@ -105,9 +106,59 @@ func (p *Provider) UsageFromResponse(body []byte) (providers.Usage, bool) {
 
 // UsageFromStreamEvent reads usage from one streamed chunk.
 //
-// OpenAI sends usage only in a final chunk, and only when the caller set
-// stream_options.include_usage. Without it there is nothing to read and the
-// gateway falls back to its local estimate.
+// OpenAI sends usage only in a final chunk, and only when
+// stream_options.include_usage was set — by the caller, or by the gateway on
+// their behalf.
 func (p *Provider) UsageFromStreamEvent(data []byte) (providers.Usage, bool) {
 	return p.UsageFromResponse(data)
+}
+
+// EnableStreamUsage sets stream_options.include_usage on a streaming request.
+//
+// Without it OpenAI reports no usage for a streamed call and the cost can only
+// be estimated. The change is confined to that one field: the body is decoded,
+// the field is set, and everything else is re-encoded as it was.
+//
+// It returns false, and the body untouched, when the request is not streaming
+// or already asks for usage.
+func (p *Provider) EnableStreamUsage(body []byte) ([]byte, bool) {
+	m := providers.DecodeBody(body)
+	if m == nil || !providers.BoolField(m, "stream") {
+		return body, false
+	}
+
+	opts, _ := m["stream_options"].(map[string]any)
+	if opts == nil {
+		opts = map[string]any{}
+	} else if include, ok := opts["include_usage"].(bool); ok && include {
+		return body, false
+	}
+
+	opts["include_usage"] = true
+	m["stream_options"] = opts
+
+	modified, err := json.Marshal(m)
+	if err != nil {
+		// Leave the request exactly as it arrived. Losing exact accounting is
+		// a far smaller failure than corrupting somebody's request.
+		return body, false
+	}
+	return modified, true
+}
+
+// IsUsageOnlyEvent reports whether a chunk carries usage and no content.
+//
+// The chunk that include_usage produces has an empty choices array, which is
+// how it is told apart from an ordinary content chunk that happens to arrive
+// alongside usage.
+func (p *Provider) IsUsageOnlyEvent(data []byte) bool {
+	m := providers.DecodeBody(data)
+	if m == nil {
+		return false
+	}
+	if _, hasUsage := m["usage"].(map[string]any); !hasUsage {
+		return false
+	}
+	choices, ok := m["choices"].([]any)
+	return !ok || len(choices) == 0
 }

@@ -114,3 +114,17 @@ func (p *Provider) UsageFromResponse(body []byte) (providers.Usage, bool) {
 func (p *Provider) UsageFromStreamEvent(data []byte) (providers.Usage, bool) {
 	return p.UsageFromResponse(data)
 }
+
+// EnableStreamUsage does nothing for Anthropic.
+//
+// The Messages API reports usage on every streamed response without being
+// asked, so there is nothing to enable — and mutating a request that does not
+// need it would be gratuitous.
+func (p *Provider) EnableStreamUsage(body []byte) ([]byte, bool) { return body, false }
+
+// IsUsageOnlyEvent is always false for Anthropic.
+//
+// Its usage arrives on message_start and message_delta, which are part of the
+// normal event sequence a client expects. Withholding them would break the
+// stream rather than tidy it.
+func (p *Provider) IsUsageOnlyEvent([]byte) bool { return false }

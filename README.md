@@ -126,7 +126,9 @@ flowchart LR
 The hard part is that you cannot know an LLM call's cost until it finishes, but you have to authorize it before it starts. `spendlease` handles this like a fuel pump pre-authorization: reserve an upper bound up front, settle the real number afterward, release the difference. See [reserve-and-settle](docs/reserve-and-settle.md) for the full explanation, including what happens on mid-stream disconnects and provider errors.
 
 > [!IMPORTANT]
-> For OpenAI-compatible streaming endpoints, `spendlease` injects `stream_options: {include_usage: true}` when you have not set it, so it can read actual token counts. If you did not ask for usage, the extra usage chunk is stripped from the stream you receive. Your request is modified in flight. This is documented rather than hidden, and covered in detail in [reserve-and-settle](docs/reserve-and-settle.md).
+> For OpenAI-compatible streaming endpoints, `spendlease` injects `stream_options: {include_usage: true}` when you have not set it, so it can read actual token counts. The extra usage chunk that produces is withheld from the stream you receive, so what you read is byte-identical to what you would have read without spendlease in the path.
+>
+> Your request is modified in flight, and the response says so with `X-Spendlease-Stream-Options: injected`. Anthropic requests are never modified — the Messages API reports usage without being asked. Reasoning and rejected alternatives in [ADR-0012](docs/adr/0012-stream-options-injection.md).
 
 ### Overhead
 
@@ -190,7 +192,7 @@ Pre-v0.1 and under active construction. Everything above describes v0.1 as desig
 
 The price book prices any request exactly — 26 models across both vendors, with dated supersession so a scheduled price change takes effect on its own day.
 
-**Spend is now recorded.** Every successful request produces an append-only, hash-chained ledger entry attributed to a principal and a run, priced from the token counts the vendor reported. Failed requests are not charged. Entries the gateway could not price exactly are marked `estimated` and say why. This is **observe mode**: everything is recorded, nothing is blocked.
+**Spend is now recorded.** Every successful request produces an append-only, hash-chained ledger entry attributed to a principal and a run, priced from the token counts the vendor reported — including streamed responses on both vendors. Failed requests are not charged. Entries the gateway could not price exactly are marked `estimated` and say why. This is **observe mode**: everything is recorded, nothing is blocked.
 
 **What does not:** **nothing is capped.** There is no reservation, no budget enforcement and no `402` — a run can exceed its budget freely and only the record shows it. Leases are stored but not issued; agents authenticate with the long-lived principal key. The dashboard and `demo` do not exist, so reading the ledger currently means querying SQLite yourself.
 

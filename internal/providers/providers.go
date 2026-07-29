@@ -55,6 +55,23 @@ type Provider interface {
 	// event payload, which vendors report in pieces across a stream. The
 	// bool is false for the majority of events, which carry only content.
 	UsageFromStreamEvent(data []byte) (Usage, bool)
+
+	// EnableStreamUsage returns a request body modified to make the vendor
+	// report usage on a streamed response, and whether anything changed.
+	//
+	// This exists because OpenAI reports usage on a stream only when asked.
+	// Without it a streamed call cannot be priced exactly. It mutates the
+	// caller's request, which is surprising, so a provider that already
+	// reports usage must return the body unchanged and false.
+	EnableStreamUsage(body []byte) ([]byte, bool)
+
+	// IsUsageOnlyEvent reports whether a streamed event carries usage and no
+	// content — the extra chunk that EnableStreamUsage causes.
+	//
+	// When the gateway asked for usage on the caller's behalf, that chunk is
+	// withheld so the caller's stream looks exactly as it would have without
+	// spendlease in the path.
+	IsUsageOnlyEvent(data []byte) bool
 }
 
 // Registry resolves an incoming request to a provider.

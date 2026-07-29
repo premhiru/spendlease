@@ -22,6 +22,15 @@ import (
 // get real per-run attribution without waiting.
 const RunHeader = "X-Spendlease-Run"
 
+// StreamUsageHeader appears on a streamed response whose request spendlease
+// modified to enable usage reporting.
+//
+// The modification is necessary — an OpenAI-compatible stream reports no
+// usage unless asked, and unpriced spend is the thing this product exists to
+// prevent — but changing somebody's request without telling them is not
+// acceptable. This makes it visible from a single `curl -i`.
+const StreamUsageHeader = "X-Spendlease-Stream-Options"
+
 // LedgerStore is the slice of the store the recorder needs.
 type LedgerStore interface {
 	// AppendLedger seals and persists a spend entry.

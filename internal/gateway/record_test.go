@@ -282,8 +282,13 @@ func TestStreamingStillStreamsWhileRecording(t *testing.T) {
 	_, _ = io.ReadAll(resp.Body)
 }
 
-// TestEstimatesWhenVendorReportsNoUsage covers OpenAI streaming without
-// stream_options, which is the common case until the injection lands.
+// TestEstimatesWhenVendorReportsNoUsage covers a vendor that reports no usage
+// even after being asked.
+//
+// spendlease now injects stream_options on OpenAI-compatible streams, so this
+// upstream is standing in for one that ignores it: an OpenAI-compatible
+// gateway, a proxy, or a future API change. The entry must fall back to an
+// estimate and say why rather than recording nothing.
 func TestEstimatesWhenVendorReportsNoUsage(t *testing.T) {
 	t.Parallel()
 

@@ -44,12 +44,10 @@ Token counts come from the vendor where it reports them. An entry is marked `est
 |---|---|
 | Non-streaming, either vendor | Exact |
 | Streaming, Anthropic | Exact — usage is always reported |
-| Streaming, OpenAI **with** `stream_options: {include_usage: true}` | Exact |
-| Streaming, OpenAI **without** it | Estimated |
+| Streaming, OpenAI | Exact — `stream_options` is injected if you did not set it |
+| Vendor reports no usage even when asked | Estimated |
 | Model not in the price book | Estimated, at the fallback rate |
 | Client disconnected mid-response | Estimated, from partial usage |
-
-Setting `stream_options` yourself is currently the only way to get exact accounting for streamed OpenAI calls. Injecting it automatically is planned and would mutate your request, so it is not done silently today.
 
 ## Proxy endpoints
 
@@ -84,7 +82,18 @@ POST /anthropic/v1/models           ->  https://api.anthropic.com/v1/models
 
 Server-sent event responses are proxied through **unbuffered**. Each chunk is flushed to the client as it arrives, so first-token latency matches calling the vendor directly.
 
-The request body is currently forwarded **unmodified**. When cost accounting lands, OpenAI-compatible streaming requests will have `stream_options: {include_usage: true}` injected if not already present, and the extra usage chunk stripped from the client-bound stream. That is not happening yet.
+> [!IMPORTANT]
+> **Streaming requests to OpenAI-compatible endpoints are modified.** If you did not set `stream_options: {include_usage: true}`, spendlease sets it, because otherwise the vendor reports no token counts and the call cannot be priced exactly.
+>
+> The extra usage chunk this produces is **withheld** from the stream you read, so what you receive is byte-identical to what you would have received without spendlease in the path.
+>
+> The modification announces itself on the response:
+>
+> ```
+> X-Spendlease-Stream-Options: injected
+> ```
+>
+> Nothing else in your request is touched, and requests you already set `stream_options` on are forwarded unchanged. Anthropic requests are never modified — the Messages API reports usage without being asked. See [ADR-0012](adr/0012-stream-options-injection.md).
 
 ### Vendor responses
 

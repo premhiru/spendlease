@@ -87,6 +87,26 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		info.model = requestInfo.Model
 	}
 
+	// Ask the vendor to report usage on a streamed response when the caller
+	// did not. Without this an OpenAI-compatible stream cannot be priced
+	// exactly, and the whole point of recording is that the numbers are real.
+	//
+	// This modifies the caller's request, which is surprising, so it is
+	// announced on the response and documented prominently. The extra chunk
+	// it produces is withheld below, so the stream the caller reads is the
+	// one they would have got without spendlease in the path.
+	injectedUsage := false
+	if requestInfo.Stream && !requestInfo.WantsUsage && len(body) > 0 {
+		if modified, changed := provider.EnableStreamUsage(body); changed {
+			body = modified
+			injectedUsage = true
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			r.ContentLength = int64(len(body))
+			g.logger.Debug("enabled usage reporting on a streamed request",
+				"principal", principal.ID, "provider", provider.Name(), "model", requestInfo.Model)
+		}
+	}
+
 	base := provider.BaseURL()
 
 	proxy := &httputil.ReverseProxy{
@@ -116,7 +136,7 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		// to the client and closes it afterwards. The hook wraps it, it does
 		// not take ownership of it.
 		//nolint:bodyclose // the body is closed by ReverseProxy after copying
-		ModifyResponse: g.observeResponse(principal, provider, requestInfo, r),
+		ModifyResponse: g.observeResponse(principal, provider, requestInfo, injectedUsage, r),
 
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			if errors.Is(err, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
@@ -177,6 +197,7 @@ func (g *Gateway) observeResponse(
 	principal store.Principal,
 	provider providers.Provider,
 	info providers.RequestInfo,
+	injectedUsage bool,
 	req *http.Request,
 ) func(*http.Response) error {
 	if g.recorder == nil {
@@ -194,6 +215,13 @@ func (g *Gateway) observeResponse(
 
 		streaming := isEventStream(res.Header.Get("Content-Type"))
 
+		// Say so on the response. A modified request that leaves no trace is
+		// the surprising kind; one that announces itself is discoverable from
+		// a single curl -i.
+		if injectedUsage {
+			res.Header.Set(StreamUsageHeader, "injected")
+		}
+
 		var (
 			mu    sync.Mutex
 			usage providers.Usage
@@ -201,6 +229,15 @@ func (g *Gateway) observeResponse(
 		)
 
 		obs := newObservingReader(res.Body, streaming)
+
+		// Withhold the chunk the injection produced, so the caller's stream
+		// looks exactly as it would have without spendlease. Only requests
+		// spendlease modified take this path; everything else stays a
+		// byte-for-byte pass-through.
+		if injectedUsage && streaming {
+			obs.drop = provider.IsUsageOnlyEvent
+		}
+
 		obs.onEvent = func(payload []byte) {
 			if u, ok := provider.UsageFromStreamEvent(payload); ok {
 				mu.Lock()
