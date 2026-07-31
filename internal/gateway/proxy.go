@@ -208,10 +208,8 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 		Transport: g.transport,
 
-		// bodyclose cannot see that ReverseProxy owns this body: it copies it
-		// to the client and closes it afterwards. The hook wraps it, it does
-		// not take ownership of it.
-		//nolint:bodyclose // the body is closed by ReverseProxy after copying
+		// ReverseProxy owns the response body: it copies it to the client and
+		// closes it afterwards. The hook wraps it without taking ownership.
 		ModifyResponse: g.modifyResponse(principal, provider, requestInfo, injectedUsage, reservationID, r, metered, unmeteredReason),
 
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -330,6 +328,9 @@ func (g *Gateway) modifyResponse(
 	unmeteredReason string,
 ) func(*http.Response) error {
 	if metered {
+		// bodyclose cannot see that ReverseProxy owns the response body and
+		// closes it after the returned hook wraps or observes it.
+		//nolint:bodyclose // response body ownership remains with ReverseProxy
 		return g.observeResponse(principal, provider, info, injectedUsage, reservationID, req)
 	}
 	if unmeteredReason == "" {
