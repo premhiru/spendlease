@@ -179,8 +179,11 @@ func (r *Recorder) Record(ctx context.Context, obs observation) {
 	}
 
 	cost := price.Cost(pricing.Usage{
-		InputTokens:  usage.InputTokens,
-		OutputTokens: usage.OutputTokens,
+		InputTokens:        usage.InputTokens,
+		CachedInputTokens:  usage.CachedInputTokens,
+		CacheWrite5mTokens: usage.CacheWrite5mTokens,
+		CacheWrite1hTokens: usage.CacheWrite1hTokens,
+		OutputTokens:       usage.OutputTokens,
 	})
 
 	toAppend := ledger.Entry{
@@ -188,7 +191,7 @@ func (r *Recorder) Record(ctx context.Context, obs observation) {
 		PrincipalID:  obs.principal.ID,
 		Provider:     obs.provider,
 		Model:        model,
-		InputTokens:  usage.InputTokens,
+		InputTokens:  usage.TotalInputTokens(),
 		OutputTokens: usage.OutputTokens,
 		Cost:         cost,
 		Estimated:    estimated,

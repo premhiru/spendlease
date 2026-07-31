@@ -1,0 +1,87 @@
+# OpenAI standard synchronous text-token prices checked 2026-07-31.
+# Cache writes are reported separately only by the GPT-5.6 family. Long-context
+# pricing applies to the whole request once input reaches 272,001 tokens.
+version: 2
+effective: 2026-07-31
+providers:
+  openai:
+    source: https://developers.openai.com/api/docs/pricing
+    models:
+      gpt-5.6-sol:
+        aliases: [gpt-5.6]
+        input_per_1m: 5.00
+        cached_input_per_1m: 0.50
+        cache_write_5m_per_1m: 6.25
+        output_per_1m: 30.00
+        long_context_threshold: 272001
+        long_input_per_1m: 10.00
+        long_cached_input_per_1m: 1.00
+        long_cache_write_per_1m: 12.50
+        long_output_per_1m: 45.00
+        default_max_tokens: 4096
+      gpt-5.6-terra:
+        input_per_1m: 2.00
+        cached_input_per_1m: 0.20
+        cache_write_5m_per_1m: 2.50
+        output_per_1m: 12.00
+        long_context_threshold: 272001
+        long_input_per_1m: 4.00
+        long_cached_input_per_1m: 0.40
+        long_cache_write_per_1m: 5.00
+        long_output_per_1m: 18.00
+        default_max_tokens: 4096
+      gpt-5.6-luna:
+        input_per_1m: 0.20
+        cached_input_per_1m: 0.02
+        cache_write_5m_per_1m: 0.25
+        output_per_1m: 1.20
+        long_context_threshold: 272001
+        long_input_per_1m: 0.40
+        long_cached_input_per_1m: 0.04
+        long_cache_write_per_1m: 0.50
+        long_output_per_1m: 1.80
+        default_max_tokens: 4096
+      gpt-5.5:
+        input_per_1m: 5.00
+        cached_input_per_1m: 0.50
+        output_per_1m: 30.00
+        long_context_threshold: 272001
+        long_input_per_1m: 10.00
+        long_cached_input_per_1m: 1.00
+        long_output_per_1m: 45.00
+        default_max_tokens: 4096
+      gpt-5.5-pro:
+        input_per_1m: 30.00
+        output_per_1m: 180.00
+        long_context_threshold: 272001
+        long_input_per_1m: 60.00
+        long_cached_input_per_1m: 60.00
+        long_output_per_1m: 270.00
+        default_max_tokens: 16384
+      gpt-5.4:
+        input_per_1m: 2.50
+        cached_input_per_1m: 0.25
+        output_per_1m: 15.00
+        long_context_threshold: 272001
+        long_input_per_1m: 5.00
+        long_cached_input_per_1m: 0.50
+        long_output_per_1m: 22.50
+        default_max_tokens: 4096
+      gpt-5.4-mini:
+        input_per_1m: 0.75
+        cached_input_per_1m: 0.075
+        output_per_1m: 4.50
+        default_max_tokens: 4096
+      gpt-5.4-nano:
+        input_per_1m: 0.20
+        cached_input_per_1m: 0.02
+        output_per_1m: 1.25
+        default_max_tokens: 4096
+      gpt-5.4-pro:
+        input_per_1m: 30.00
+        output_per_1m: 180.00
+        long_context_threshold: 272001
+        long_input_per_1m: 60.00
+        long_cached_input_per_1m: 60.00
+        long_output_per_1m: 270.00
+        default_max_tokens: 16384

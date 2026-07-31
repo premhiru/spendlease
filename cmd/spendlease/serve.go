@@ -29,6 +29,14 @@ import (
 // is generous rather than snappy.
 const shutdownGrace = 30 * time.Second
 
+const (
+	defaultKimiURL     = "https://api.moonshot.ai"
+	defaultDeepSeekURL = "https://api.deepseek.com"
+	defaultXAIURL      = "https://api.x.ai"
+	defaultGeminiURL   = "https://generativelanguage.googleapis.com"
+	defaultZAIURL      = "https://api.z.ai"
+)
+
 // runServe starts the gateway and blocks until the process is signalled.
 func runServe(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("serve", stderr)
@@ -36,6 +44,11 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	storePath := fs.String("store", "./spendlease.db", "SQLite file path")
 	openAIBase := fs.String("openai-url", openai.DefaultBaseURL, "OpenAI upstream base URL")
 	anthropicBase := fs.String("anthropic-url", anthropic.DefaultBaseURL, "Anthropic upstream base URL")
+	kimiBase := fs.String("kimi-url", defaultKimiURL, "Kimi upstream base URL")
+	deepSeekBase := fs.String("deepseek-url", defaultDeepSeekURL, "DeepSeek upstream base URL")
+	xaiBase := fs.String("xai-url", defaultXAIURL, "xAI upstream base URL")
+	geminiBase := fs.String("gemini-url", defaultGeminiURL, "Gemini upstream base URL")
+	zaiBase := fs.String("zai-url", defaultZAIURL, "Z.AI upstream base URL")
 	pricingDir := fs.String("pricing", "", "directory of price book YAML (default: the copy embedded in this binary)")
 	defaultBudget := fs.String("default-run-budget", "10.00",
 		"budget on a principal's implicit run")
@@ -70,8 +83,26 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("invalid -anthropic-url: %w", err)
 	}
+	compatible := []struct {
+		name string
+		raw  string
+	}{
+		{name: "kimi", raw: *kimiBase},
+		{name: "deepseek", raw: *deepSeekBase},
+		{name: "xai", raw: *xaiBase},
+		{name: "gemini", raw: *geminiBase},
+		{name: "zai", raw: *zaiBase},
+	}
+	adapters := []providers.Provider{oa, an}
+	for _, cfg := range compatible {
+		p, err := openai.NewCompatible(cfg.name, cfg.raw)
+		if err != nil {
+			return fmt.Errorf("invalid -%s-url: %w", cfg.name, err)
+		}
+		adapters = append(adapters, p)
+	}
 
-	registry, err := providers.NewRegistry(oa, an)
+	registry, err := providers.NewRegistry(adapters...)
 	if err != nil {
 		return err
 	}

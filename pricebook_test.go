@@ -24,11 +24,11 @@ func TestEmbeddedPriceBookLoads(t *testing.T) {
 	}
 
 	providers := b.Providers()
-	if len(providers) < 2 {
-		t.Fatalf("embedded providers = %v, want at least two", providers)
+	if len(providers) != 7 {
+		t.Fatalf("embedded providers = %v, want seven", providers)
 	}
 
-	at := time.Date(2026, time.July, 15, 0, 0, 0, 0, time.UTC)
+	at := time.Date(2026, time.July, 31, 0, 0, 0, 0, time.UTC)
 	p, known := b.Lookup("openai", "gpt-4o", at)
 	if !known {
 		t.Fatal("gpt-4o is not in the embedded price book")
@@ -48,14 +48,15 @@ func TestEmbeddedMatchesDisk(t *testing.T) {
 		t.Fatalf("loading embedded: %v", err)
 	}
 
-	at := time.Date(2026, time.July, 15, 0, 0, 0, 0, time.UTC)
+	at := time.Date(2026, time.July, 31, 0, 0, 0, 0, time.UTC)
 	for _, provider := range embedded.Providers() {
 		models := embedded.Models(provider, at)
 		if len(models) == 0 {
 			t.Errorf("embedded provider %s has no models", provider)
 		}
 		for _, m := range models {
-			if p, known := embedded.Lookup(provider, m, at); !known || p.InputPer1M <= 0 {
+			if p, known := embedded.Lookup(provider, m, at); !known ||
+				(!p.Free && (p.InputPer1M <= 0 || p.OutputPer1M <= 0)) {
 				t.Errorf("embedded %s/%s did not resolve to a usable price", provider, m)
 			}
 		}

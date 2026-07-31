@@ -241,6 +241,74 @@ func TestUsageFromResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleCacheUsage(t *testing.T) {
+	t.Parallel()
+
+	p := openai.New()
+	tests := []struct {
+		name   string
+		body   string
+		plain  int64
+		cached int64
+		write  int64
+	}{
+		{
+			name:  "OpenAI and xAI details",
+			body:  `{"usage":{"prompt_tokens":125,"completion_tokens":48,"prompt_tokens_details":{"cached_tokens":98}}}`,
+			plain: 27, cached: 98,
+		},
+		{
+			name:  "DeepSeek hit and miss",
+			body:  `{"usage":{"prompt_tokens":125,"completion_tokens":48,"prompt_cache_hit_tokens":100,"prompt_cache_miss_tokens":25}}`,
+			plain: 25, cached: 100,
+		},
+		{
+			name:  "Kimi top-level cached tokens",
+			body:  `{"usage":{"prompt_tokens":125,"completion_tokens":48,"cached_tokens":50}}`,
+			plain: 75, cached: 50,
+		},
+		{
+			name:  "OpenAI explicit cache write",
+			body:  `{"usage":{"input_tokens":125,"output_tokens":48,"input_tokens_details":{"cached_tokens":50,"cache_write_tokens":25}}}`,
+			plain: 50, cached: 50, write: 25,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			u, ok := p.UsageFromResponse([]byte(tt.body))
+			if !ok {
+				t.Fatal("usage was not detected")
+			}
+			if u.InputTokens != tt.plain || u.CachedInputTokens != tt.cached || u.CacheWrite5mTokens != tt.write {
+				t.Errorf("usage = plain %d cached %d write %d, want %d/%d/%d",
+					u.InputTokens, u.CachedInputTokens, u.CacheWrite5mTokens, tt.plain, tt.cached, tt.write)
+			}
+			if got := u.TotalInputTokens(); got != 125 {
+				t.Errorf("total input = %d, want 125", got)
+			}
+		})
+	}
+}
+
+func TestAnthropicCacheUsage(t *testing.T) {
+	t.Parallel()
+
+	body := `{"usage":{"input_tokens":50,"cache_read_input_tokens":100,"cache_creation_input_tokens":75,"cache_creation":{"ephemeral_5m_input_tokens":25,"ephemeral_1h_input_tokens":50},"output_tokens":20}}`
+	u, ok := anthropic.New().UsageFromResponse([]byte(body))
+	if !ok {
+		t.Fatal("usage was not detected")
+	}
+	if u.InputTokens != 50 || u.CachedInputTokens != 100 ||
+		u.CacheWrite5mTokens != 25 || u.CacheWrite1hTokens != 50 || u.OutputTokens != 20 {
+		t.Errorf("unexpected usage: %+v", u)
+	}
+	if got := u.TotalInputTokens(); got != 225 {
+		t.Errorf("total input = %d, want 225", got)
+	}
+}
+
 // TestAnthropicStreamUsageIsAssembledFromEvents covers the two-part report
 // that makes exact pricing possible for a streamed Anthropic call.
 func TestAnthropicStreamUsageIsAssembledFromEvents(t *testing.T) {

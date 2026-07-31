@@ -21,6 +21,11 @@ Starts the proxy, dashboard, reservation sweeper, and SQLite store.
 | `--reservation-sweep-interval` | `30s` | Expired-hold scan interval. |
 | `--openai-url` | `https://api.openai.com` | OpenAI upstream base URL. Useful for tests and private compatible endpoints. |
 | `--anthropic-url` | `https://api.anthropic.com` | Anthropic upstream base URL. |
+| `--kimi-url` | `https://api.moonshot.ai` | Kimi upstream base URL. |
+| `--deepseek-url` | `https://api.deepseek.com` | DeepSeek upstream base URL. |
+| `--xai-url` | `https://api.x.ai` | xAI upstream base URL. |
+| `--gemini-url` | `https://generativelanguage.googleapis.com` | Gemini upstream base URL. |
+| `--zai-url` | `https://api.z.ai` | Z.AI upstream base URL. |
 | `--log-level` | `info` | `debug`, `info`, `warn`, or `error`. |
 
 ### `spendlease demo`

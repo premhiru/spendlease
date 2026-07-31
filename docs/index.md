@@ -1,6 +1,7 @@
 # spendlease
 
-A self-hosted reverse proxy for OpenAI and Anthropic. It keeps vendor keys in
+A self-hosted reverse proxy for OpenAI, Anthropic, Kimi, DeepSeek, xAI,
+Gemini, and Z.AI. It keeps vendor keys in
 an encrypted local vault, gives agents short-lived leases, checks run budgets
 before forwarding requests, and records calculated token cost in an
 append-only ledger.
@@ -27,6 +28,7 @@ a ceiling below the run budget.
 | | |
 |---|---|
 | [Getting started](getting-started.md) | Install, first principal, first lease |
+| [Providers](providers.md) | Credentials, base URLs, routing, and pricing scope |
 | [CLI reference](cli-reference.md) | Commands, flags, and environment variables |
 | [SDKs and examples](sdks.md) | Python and TypeScript helpers |
 | [Dashboard](dashboard.md) | Spend table, controls, and access |

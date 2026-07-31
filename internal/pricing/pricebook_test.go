@@ -30,11 +30,13 @@ func TestShippedPriceBookLoads(t *testing.T) {
 	b := loadShipped(t)
 
 	providers := b.Providers()
-	if len(providers) < 2 {
-		t.Fatalf("providers = %v, want at least openai and anthropic", providers)
+	want := map[string]bool{
+		"openai": false, "anthropic": false, "kimi": false, "deepseek": false,
+		"xai": false, "gemini": false, "zai": false,
 	}
-
-	want := map[string]bool{"openai": false, "anthropic": false}
+	if len(providers) != len(want) {
+		t.Fatalf("providers = %v, want all seven supported providers", providers)
+	}
 	for _, p := range providers {
 		if _, ok := want[p]; ok {
 			want[p] = true
@@ -68,10 +70,12 @@ func TestShippedPricesAreSane(t *testing.T) {
 			}
 
 			switch {
-			case p.InputPer1M <= 0:
+			case !p.Free && p.InputPer1M <= 0:
 				t.Errorf("%s/%s has a non-positive input price (%s)", provider, model, p.InputPer1M)
-			case p.OutputPer1M <= 0:
+			case !p.Free && p.OutputPer1M <= 0:
 				t.Errorf("%s/%s has a non-positive output price (%s)", provider, model, p.OutputPer1M)
+			case p.Free && (p.InputPer1M != 0 || p.OutputPer1M != 0):
+				t.Errorf("%s/%s is marked free but has non-zero rates", provider, model)
 			case p.InputPer1M > ceiling:
 				t.Errorf("%s/%s input %s exceeds %s; check the units", provider, model, p.InputPer1M, ceiling)
 			case p.OutputPer1M > ceiling:
@@ -130,6 +134,48 @@ func TestKnownModelsArePriced(t *testing.T) {
 			}
 			if p.OutputPer1M != money.MustParseUSD(tt.wantOut) {
 				t.Errorf("output = %s, want %s", p.OutputPer1M, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestCurrentProviderRates(t *testing.T) {
+	t.Parallel()
+
+	b := loadShipped(t)
+	at := time.Date(2026, time.July, 31, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		provider, model       string
+		input, cached, output string
+		longContextThreshold  int64
+	}{
+		{provider: "openai", model: "gpt-5.6-terra", input: "2.00", cached: "0.20", output: "12.00", longContextThreshold: 272_001},
+		{provider: "anthropic", model: "claude-sonnet-5", input: "2.00", cached: "0.20", output: "10.00"},
+		{provider: "kimi", model: "kimi-k2.6", input: "0.95", cached: "0.16", output: "4.00"},
+		{provider: "deepseek", model: "deepseek-v4-flash", input: "0.14", cached: "0.0028", output: "0.28"},
+		{provider: "xai", model: "grok-4.5", input: "2.00", cached: "0.30", output: "6.00", longContextThreshold: 200_000},
+		{provider: "gemini", model: "gemini-3.1-pro-preview", input: "2.00", cached: "0.20", output: "12.00", longContextThreshold: 200_001},
+		{provider: "zai", model: "glm-5.2", input: "1.40", cached: "0.26", output: "4.40"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider+"/"+tt.model, func(t *testing.T) {
+			t.Parallel()
+			p, known := b.Lookup(tt.provider, tt.model, at)
+			if !known {
+				t.Fatalf("model is not in the current price book")
+			}
+			if p.InputPer1M != money.MustParseUSD(tt.input) {
+				t.Errorf("input = %s, want %s", p.InputPer1M, tt.input)
+			}
+			if p.CachedInputPer1M != money.MustParseUSD(tt.cached) {
+				t.Errorf("cached input = %s, want %s", p.CachedInputPer1M, tt.cached)
+			}
+			if p.OutputPer1M != money.MustParseUSD(tt.output) {
+				t.Errorf("output = %s, want %s", p.OutputPer1M, tt.output)
+			}
+			if p.LongContextThreshold != tt.longContextThreshold {
+				t.Errorf("long-context threshold = %d, want %d", p.LongContextThreshold, tt.longContextThreshold)
 			}
 		})
 	}

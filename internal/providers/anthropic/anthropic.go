@@ -100,9 +100,7 @@ func (p *Provider) UsageFromResponse(body []byte) (providers.Usage, bool) {
 	if m == nil {
 		return providers.Usage{}, false
 	}
-	return providers.UsageFrom(m,
-		[]string{"input_tokens"},
-		[]string{"output_tokens"})
+	return usageFrom(m)
 }
 
 // UsageFromStreamEvent reads usage from one streamed event.
@@ -128,3 +126,31 @@ func (p *Provider) EnableStreamUsage(body []byte) ([]byte, bool) { return body, 
 // normal event sequence a client expects. Withholding them would break the
 // stream rather than tidy it.
 func (p *Provider) IsUsageOnlyEvent([]byte) bool { return false }
+
+func usageFrom(m map[string]any) (providers.Usage, bool) {
+	raw, ok := m["usage"].(map[string]any)
+	if !ok {
+		if nested, ok := m["message"].(map[string]any); ok {
+			return usageFrom(nested)
+		}
+		return providers.Usage{}, false
+	}
+
+	u := providers.Usage{
+		InputTokens:       providers.IntField(raw, "input_tokens"),
+		CachedInputTokens: providers.IntField(raw, "cache_read_input_tokens"),
+		OutputTokens:      providers.IntField(raw, "output_tokens"),
+	}
+	if creation, ok := raw["cache_creation"].(map[string]any); ok {
+		u.CacheWrite5mTokens = providers.IntField(creation, "ephemeral_5m_input_tokens")
+		u.CacheWrite1hTokens = providers.IntField(creation, "ephemeral_1h_input_tokens")
+	}
+	// Older responses report only the aggregate. Anthropic's default cache
+	// lifetime is five minutes, so any unexplained creation tokens belong in
+	// that bucket.
+	totalCreation := providers.IntField(raw, "cache_creation_input_tokens")
+	if remainder := totalCreation - u.CacheWrite5mTokens - u.CacheWrite1hTokens; remainder > 0 {
+		u.CacheWrite5mTokens += remainder
+	}
+	return u, !u.IsZero()
+}

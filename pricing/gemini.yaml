@@ -1,0 +1,56 @@
+# Gemini Developer API paid-tier standard text-token prices checked 2026-07-31.
+# Batch, Flex, Priority, audio, cache storage and grounding charges are separate.
+version: 2
+effective: 2026-07-31
+providers:
+  gemini:
+    source: https://ai.google.dev/gemini-api/docs/pricing
+    models:
+      gemini-3.6-flash:
+        input_per_1m: 1.50
+        cached_input_per_1m: 0.15
+        output_per_1m: 7.50
+        default_max_tokens: 8192
+      gemini-3.5-flash:
+        input_per_1m: 1.50
+        cached_input_per_1m: 0.15
+        output_per_1m: 9.00
+        default_max_tokens: 8192
+      gemini-3.5-flash-lite:
+        input_per_1m: 0.30
+        cached_input_per_1m: 0.03
+        output_per_1m: 2.50
+        default_max_tokens: 8192
+      gemini-3.1-flash-lite:
+        input_per_1m: 0.25
+        cached_input_per_1m: 0.025
+        output_per_1m: 1.50
+        default_max_tokens: 8192
+      gemini-3.1-pro-preview:
+        input_per_1m: 2.00
+        cached_input_per_1m: 0.20
+        output_per_1m: 12.00
+        long_context_threshold: 200001
+        long_input_per_1m: 4.00
+        long_cached_input_per_1m: 0.40
+        long_output_per_1m: 18.00
+        default_max_tokens: 8192
+      gemini-2.5-pro:
+        input_per_1m: 1.25
+        cached_input_per_1m: 0.125
+        output_per_1m: 10.00
+        long_context_threshold: 200001
+        long_input_per_1m: 2.50
+        long_cached_input_per_1m: 0.25
+        long_output_per_1m: 15.00
+        default_max_tokens: 8192
+      gemini-2.5-flash:
+        input_per_1m: 0.30
+        cached_input_per_1m: 0.03
+        output_per_1m: 2.50
+        default_max_tokens: 8192
+      gemini-2.5-flash-lite:
+        input_per_1m: 0.10
+        cached_input_per_1m: 0.01
+        output_per_1m: 0.40
+        default_max_tokens: 8192

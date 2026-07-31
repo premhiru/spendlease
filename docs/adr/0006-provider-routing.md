@@ -32,9 +32,12 @@ An unrecognised path is a `404` naming the known providers and showing the expli
 
 ## Consequences
 
-- The one-line integration works unmodified for both vendors, which is the property the whole adoption story rests on.
+- The one-line integration works unmodified for OpenAI and Anthropic, which is
+  the property the original adoption story rests on.
 - A vendor adding a new endpoint needs a one-line change to that adapter's `Paths()`, and until then the explicit prefix keeps callers unblocked. Nobody has to wait for a release.
-- Adding a third provider whose paths collide with an existing one will need a new tie-breaker. The registry is the single place that changes.
+- OpenAI-compatible vendors use an explicit provider prefix because their
+  paths collide. This preserves deterministic routing without inspecting the
+  model name or relying on client-specific headers.
 - Routing never reads the request body, so it costs nothing on a streaming request and cannot be confused by a malformed one.
 - A caller who points an Anthropic SDK at the gateway and asks for `/v1/models` without the version header gets OpenAI's model list. This is the one genuinely surprising outcome, and it is why the explicit prefix is documented in the error message.
 

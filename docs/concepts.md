@@ -87,7 +87,7 @@ A lease is scoped three ways:
 
 | Scope | Meaning |
 |---|---|
-| **Providers** | Which vendors it may reach — `openai`, `anthropic` |
+| **Providers** | Which vendors it may reach, such as `openai`, `anthropic`, or `gemini` |
 | **Ceiling** | The most this single lease may spend, which may be lower than the run's remaining budget |
 | **TTL** | When it stops working, regardless of budget left |
 

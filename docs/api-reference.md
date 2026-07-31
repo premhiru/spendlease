@@ -51,15 +51,16 @@ the formula, concurrency guarantee and lifecycle.
 ## Accounting
 
 Every successful request produces a ledger entry containing the provider,
-model, reported or estimated token counts, calculated base token cost, run,
+model, reported or estimated token counts, calculated token cost, run,
 and principal. Entries are append-only and hash-chained.
 
 The cost is exact for the price-book rate and token counts used in the
-calculation. It may not equal the complete vendor charge because cache and
-long-context multipliers, regional tiers, tool fees, and other non-token
-charges are not modeled. The `estimated` field identifies missing token usage
-or an unknown model; it does not currently flag every unmodeled billing
-dimension. See [Price book](pricing-book.md#what-is-not-modeled).
+calculation. Reported cache usage and documented long-context tiers are
+included. It may not equal the complete vendor charge because batch, speed,
+regional, cache-storage, tool, media, and other non-token charges are not
+modeled. The `estimated` field identifies missing token usage or an unknown
+model; it does not flag every unmodeled billing dimension. See
+[Price book](pricing-book.md#what-is-not-modeled).
 
 **Failed requests are not charged.** A non-2xx from the vendor produces no entry, because vendors do not bill for failures.
 
@@ -68,9 +69,9 @@ Token counts come from the vendor where it reports them. An entry is marked
 
 | Situation | Token-cost basis |
 |---|---|
-| Non-streaming, either vendor | Reported usage |
+| Non-streaming, supported provider | Reported usage |
 | Streaming, Anthropic | Reported usage |
-| Streaming, OpenAI | Reported usage; `stream_options` is injected if needed |
+| Streaming, OpenAI-compatible provider | Reported usage; `stream_options` is injected if needed |
 | Vendor reports no usage even when asked | Estimated |
 | Model not in the price book | Estimated, at the fallback rate |
 | Client disconnected mid-response | Estimated, from partial usage |
@@ -92,17 +93,26 @@ Everything not listed under [operational endpoints](#operational-endpoints) is p
 | `/v1/messages/batches` | Anthropic |
 | `/v1/complete` | Anthropic |
 | `/v1/models` | **Ambiguous** — see below |
+| `/<provider>/...` | Named provider; the prefix is removed before forwarding |
 
 ### Ambiguous and unknown paths
 
-`/v1/models` is claimed by both vendors. The `anthropic-version` header selects Anthropic; otherwise OpenAI wins.
+`/v1/models` is claimed by OpenAI and Anthropic. The `anthropic-version`
+header selects Anthropic; otherwise OpenAI wins.
 
 To force a provider, or to reach an endpoint no adapter knows about yet, use an explicit prefix. It is stripped before forwarding:
 
 ```
 POST /openai/v1/some/new/endpoint   ->  https://api.openai.com/v1/some/new/endpoint
 POST /anthropic/v1/models           ->  https://api.anthropic.com/v1/models
+POST /xai/v1/chat/completions       ->  https://api.x.ai/v1/chat/completions
+POST /gemini/v1beta/openai/chat/completions
+                                     ->  https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
 ```
+
+The registered provider names are `openai`, `anthropic`, `kimi`, `deepseek`,
+`xai`, `gemini`, and `zai`. See [Providers](providers.md) for application base
+URLs and credential setup.
 
 ### Streaming
 

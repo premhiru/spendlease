@@ -28,9 +28,10 @@ import (
 	"github.com/premhiru/spendlease/internal/money"
 )
 
-// SupportedVersion is the price book schema version this code understands.
-// A file declaring anything else is refused rather than guessed at.
-const SupportedVersion = 1
+// SupportedVersion is the newest price-book schema this code understands.
+// Older supported versions remain readable so dated price history does not
+// need to be rewritten.
+const SupportedVersion = 2
 
 // Errors returned by this package.
 var (
@@ -75,6 +76,24 @@ type Model struct {
 	InputPer1M Rate `yaml:"input_per_1m"`
 	// OutputPer1M is the price of one million output tokens.
 	OutputPer1M Rate `yaml:"output_per_1m"`
+	// CachedInputPer1M is the discounted cache-hit rate. Nil means cached
+	// tokens are billed at the ordinary input rate.
+	CachedInputPer1M *Rate `yaml:"cached_input_per_1m"`
+	// CacheWrite5mPer1M and CacheWrite1hPer1M are cache creation rates. The
+	// 5-minute field is also used by vendors that expose one undifferentiated
+	// cache-write category.
+	CacheWrite5mPer1M *Rate `yaml:"cache_write_5m_per_1m"`
+	CacheWrite1hPer1M *Rate `yaml:"cache_write_1h_per_1m"`
+	// LongContextThreshold selects the long-context rates for the entire
+	// request once total input tokens exceed this value.
+	LongContextThreshold int64 `yaml:"long_context_threshold"`
+	LongInputPer1M       *Rate `yaml:"long_input_per_1m"`
+	LongCachedInputPer1M *Rate `yaml:"long_cached_input_per_1m"`
+	LongCacheWritePer1M  *Rate `yaml:"long_cache_write_per_1m"`
+	LongOutputPer1M      *Rate `yaml:"long_output_per_1m"`
+	// Free explicitly marks a zero-priced model. Without it, missing or zero
+	// base rates are rejected as a likely price-book mistake.
+	Free bool `yaml:"free"`
 	// DefaultMaxTokens is the output ceiling assumed when a request does not
 	// specify one.
 	//
@@ -101,7 +120,7 @@ type Provider struct {
 
 // File is one price book document.
 type File struct {
-	// Version must equal SupportedVersion.
+	// Version must be between 1 and SupportedVersion.
 	Version int `yaml:"version"`
 	// Effective is the date these prices take effect. Prices are never
 	// overwritten; a change is a new file with a later effective date.
@@ -119,8 +138,18 @@ type Price struct {
 	Provider string
 	Model    string
 	// InputPer1M and OutputPer1M are prices per one million tokens.
-	InputPer1M  money.Nanos
-	OutputPer1M money.Nanos
+	InputPer1M           money.Nanos
+	OutputPer1M          money.Nanos
+	CachedInputPer1M     money.Nanos
+	CacheWrite5mPer1M    money.Nanos
+	CacheWrite1hPer1M    money.Nanos
+	LongContextThreshold int64
+	LongInputPer1M       money.Nanos
+	LongCachedInputPer1M money.Nanos
+	LongCacheWritePer1M  money.Nanos
+	LongOutputPer1M      money.Nanos
+	// Free is true only for a model explicitly marked as zero-priced.
+	Free bool
 	// DefaultMaxTokens is the output ceiling to assume when a request does
 	// not specify one.
 	DefaultMaxTokens int64
@@ -274,8 +303,8 @@ func readDir(fsys fs.FS, dir string) ([]File, error) {
 // validate rejects a file that would price things wrongly, rather than
 // loading it and producing quietly incorrect costs.
 func (f File) validate() error {
-	if f.Version != SupportedVersion {
-		return fmt.Errorf("pricing: %s declares version %d, but this build understands version %d",
+	if f.Version < 1 || f.Version > SupportedVersion {
+		return fmt.Errorf("pricing: %s declares version %d, but this build understands versions 1 through %d",
 			f.name, f.Version, SupportedVersion)
 	}
 	if f.Effective.IsZero() {
@@ -295,10 +324,43 @@ func (f File) validate() error {
 			return fmt.Errorf("pricing: %s: provider %q lists no models", f.name, provider)
 		}
 		for name, m := range p.Models {
+			if m.Free {
+				if m.InputPer1M.Nanos() != 0 || m.OutputPer1M.Nanos() != 0 ||
+					nonZeroRate(m.CachedInputPer1M) || nonZeroRate(m.CacheWrite5mPer1M) ||
+					nonZeroRate(m.CacheWrite1hPer1M) || m.LongContextThreshold != 0 ||
+					nonZeroRate(m.LongInputPer1M) || nonZeroRate(m.LongCachedInputPer1M) ||
+					nonZeroRate(m.LongCacheWritePer1M) || nonZeroRate(m.LongOutputPer1M) {
+					return fmt.Errorf("pricing: %s: %s/%s is marked free but has a non-zero rate or long-context threshold",
+						f.name, provider, name)
+				}
+			} else if m.InputPer1M.Nanos() <= 0 || m.OutputPer1M.Nanos() <= 0 {
+				return fmt.Errorf("pricing: %s: %s/%s has a missing or zero base rate; mark an intentionally zero-priced model free",
+					f.name, provider, name)
+			}
 			if m.DefaultMaxTokens <= 0 {
 				return fmt.Errorf("pricing: %s: %s/%s has default_max_tokens %d; "+
 					"it must be positive, because a request without max_tokens must never reserve unbounded",
 					f.name, provider, name, m.DefaultMaxTokens)
+			}
+			if f.Version == 1 && (m.Free || m.CachedInputPer1M != nil || m.CacheWrite5mPer1M != nil ||
+				m.CacheWrite1hPer1M != nil || m.LongContextThreshold != 0 ||
+				m.LongInputPer1M != nil || m.LongCachedInputPer1M != nil ||
+				m.LongCacheWritePer1M != nil || m.LongOutputPer1M != nil) {
+				return fmt.Errorf("pricing: %s: %s/%s uses cache or long-context fields that require version 2",
+					f.name, provider, name)
+			}
+			longFields := []*Rate{m.LongInputPer1M, m.LongCachedInputPer1M, m.LongOutputPer1M}
+			longCount := 0
+			for _, rate := range longFields {
+				if rate != nil {
+					longCount++
+				}
+			}
+			if m.LongContextThreshold > 0 && longCount != len(longFields) {
+				return fmt.Errorf("pricing: %s: %s/%s has incomplete long-context rates", f.name, provider, name)
+			}
+			if m.LongContextThreshold == 0 && (longCount > 0 || m.LongCacheWritePer1M != nil) {
+				return fmt.Errorf("pricing: %s: %s/%s has long-context rates without a threshold", f.name, provider, name)
 			}
 		}
 	}
@@ -346,28 +408,52 @@ func (b *Book) Lookup(provider, model string, at time.Time) (Price, bool) {
 
 // price builds a resolved Price from a book entry.
 func price(provider, model string, m Model, f File, source string) Price {
+	cached := rateOr(m.CachedInputPer1M, m.InputPer1M.Nanos())
+	write5m := rateOr(m.CacheWrite5mPer1M, m.InputPer1M.Nanos())
+	write1h := rateOr(m.CacheWrite1hPer1M, write5m)
 	return Price{
-		Provider:         provider,
-		Model:            model,
-		InputPer1M:       m.InputPer1M.Nanos(),
-		OutputPer1M:      m.OutputPer1M.Nanos(),
-		DefaultMaxTokens: m.DefaultMaxTokens,
-		Effective:        f.Effective,
-		Source:           source,
+		Provider:             provider,
+		Model:                model,
+		InputPer1M:           m.InputPer1M.Nanos(),
+		OutputPer1M:          m.OutputPer1M.Nanos(),
+		CachedInputPer1M:     cached,
+		CacheWrite5mPer1M:    write5m,
+		CacheWrite1hPer1M:    write1h,
+		LongContextThreshold: m.LongContextThreshold,
+		LongInputPer1M:       rateOr(m.LongInputPer1M, m.InputPer1M.Nanos()),
+		LongCachedInputPer1M: rateOr(m.LongCachedInputPer1M, cached),
+		LongCacheWritePer1M:  rateOr(m.LongCacheWritePer1M, write5m),
+		LongOutputPer1M:      rateOr(m.LongOutputPer1M, m.OutputPer1M.Nanos()),
+		Free:                 m.Free,
+		DefaultMaxTokens:     m.DefaultMaxTokens,
+		Effective:            f.Effective,
+		Source:               source,
 	}
 }
 
 // fallbackPrice returns the estimated price for an unknown model.
 func (b *Book) fallbackPrice(provider, model string) Price {
 	return Price{
-		Provider:         provider,
-		Model:            model,
-		InputPer1M:       b.opts.Fallback.InputPer1M,
-		OutputPer1M:      b.opts.Fallback.OutputPer1M,
-		DefaultMaxTokens: b.opts.Fallback.DefaultMaxTokens,
-		Estimated:        true,
+		Provider:          provider,
+		Model:             model,
+		InputPer1M:        b.opts.Fallback.InputPer1M,
+		OutputPer1M:       b.opts.Fallback.OutputPer1M,
+		CachedInputPer1M:  b.opts.Fallback.InputPer1M,
+		CacheWrite5mPer1M: b.opts.Fallback.InputPer1M,
+		CacheWrite1hPer1M: b.opts.Fallback.InputPer1M,
+		DefaultMaxTokens:  b.opts.Fallback.DefaultMaxTokens,
+		Estimated:         true,
 	}
 }
+
+func rateOr(r *Rate, fallback money.Nanos) money.Nanos {
+	if r == nil {
+		return fallback
+	}
+	return r.Nanos()
+}
+
+func nonZeroRate(r *Rate) bool { return r != nil && r.Nanos() != 0 }
 
 // warnUnknown reports an unpriced model once.
 func (b *Book) warnUnknown(provider, model string) {
