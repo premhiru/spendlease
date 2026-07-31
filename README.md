@@ -165,11 +165,16 @@ flowchart LR
 ```
 
 An LLM call has to be authorized before its final token usage is known.
-`spendlease` reserves a price-book upper bound, replaces that hold with the
+`spendlease` reserves a conservative price-book ceiling, replaces that hold with the
 calculated token charge when the response finishes, and releases the
 difference. [Reserve and
 settle](docs/reserve-and-settle.md) explains the calculation and the behavior
 on disconnects and provider errors.
+
+Enforce mode only forwards routes and request features whose billing model it
+can bound. Media, provider-hosted tools, batches, oversized bodies, and other
+unreviewed spend return `422 spend_not_enforceable`; observe mode forwards
+them with `X-Spendlease-Accounting: unmetered` and a warning.
 
 > [!IMPORTANT]
 > For OpenAI-compatible streaming endpoints, `spendlease` injects `stream_options: {include_usage: true}` when you have not set it, so it can read actual token counts. The extra usage chunk that produces is withheld from the stream you receive, so what you read is byte-identical to what you would have read without spendlease in the path.
@@ -178,15 +183,17 @@ on disconnects and provider errors.
 
 ### Overhead
 
-Gateway overhead is held under **10ms p99**, excluding upstream provider time,
-and CI fails the build if the streaming benchmark exceeds it. The current
+Proxy-path overhead is held under **10ms p99**, excluding upstream provider,
+SQLite reservation, and settlement time. CI fails the build if the streaming benchmark exceeds it. The current
 steady-state measurement is **0.74ms p99** over 300 in-memory SSE requests on
 Windows/amd64 (Intel i7-1065G7); run `go test ./internal/gateway -run
 TestStreamingGatewayOverheadP99 -v` to measure the same path locally.
 
 ### Pricing data
 
-Costs come from a versioned price book in [`/pricing`](pricing/): plain YAML with effective dates, hot-reloadable, data rather than code.
+Costs come from a versioned price book in [`/pricing`](pricing/): plain YAML
+with effective dates, loaded at gateway startup and atomically reloadable by
+the pricing library.
 
 ```yaml
 version: 2
@@ -201,7 +208,8 @@ providers:
         default_max_tokens: 4096
 ```
 
-Unknown models never silently cost zero. They log loudly, apply a configurable fallback rate, and mark the ledger entry `estimated: true`.
+Unknown models never silently cost zero. They log a warning, apply a
+conservative built-in fallback rate, and mark the ledger entry `estimated: true`.
 
 Vendor prices change often. Price book updates are plain YAML and are a useful
 first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).

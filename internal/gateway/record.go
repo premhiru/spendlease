@@ -14,12 +14,9 @@ import (
 	"github.com/premhiru/spendlease/internal/store"
 )
 
-// RunHeader lets a caller attribute a request to a run it created.
-//
-// Runs are not issued yet — that arrives with leases — so a request without
-// this header is attributed to an implicit run belonging to its principal.
-// The header exists now so an application that already models executions can
-// get real per-run attribution without waiting.
+// RunHeader lets a principal-key caller attribute a request to a run it
+// created. Lease authentication always uses the run attached to the lease.
+// A principal-key request without this header uses its implicit run.
 const RunHeader = "X-Spendlease-Run"
 
 // StreamUsageHeader appears on a streamed response whose request spendlease
@@ -30,6 +27,10 @@ const RunHeader = "X-Spendlease-Run"
 // prevent — but changing somebody's request without telling them is not
 // acceptable. This makes it visible from a single `curl -i`.
 const StreamUsageHeader = "X-Spendlease-Stream-Options"
+
+// AccountingHeader reports requests that observe mode forwarded without a
+// trustworthy cost model. Enforce mode rejects the same request before egress.
+const AccountingHeader = "X-Spendlease-Accounting"
 
 // LedgerStore is the slice of the store the recorder needs.
 type LedgerStore interface {
@@ -113,8 +114,11 @@ func (r *Recorder) Reserve(
 	request providers.RequestInfo,
 ) (store.Reservation, store.BudgetDecision, error) {
 	price, _ := r.book.Lookup(provider, request.Model, time.Now())
-	input := pricing.EstimateFromChars(request.PromptChars).Tokens
-	output := pricing.ReservationTokens(request.MaxTokens, price)
+	input := pricing.ReservationInputTokens(request.RequestBytes)
+	output := int64(0)
+	if !request.NoOutput {
+		output = pricing.ReservationTokens(request.MaxTokens, price)
+	}
 	amount := price.Cost(pricing.Usage{InputTokens: input, OutputTokens: output})
 	now := time.Now()
 	reservation := store.Reservation{

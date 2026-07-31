@@ -88,9 +88,11 @@ summary table above is never changed by event filters.
 
 ## Remote access
 
-Loopback access does not require a credential. Non-loopback access is refused
-unless `SPENDLEASE_ADMIN_TOKEN` or `--admin-token` is configured. Browsers use
-HTTP Basic authentication with any username and the token as the password.
+Credential-free access requires both a loopback TCP peer and loopback HTTP
+host. Non-local access is refused unless `SPENDLEASE_ADMIN_TOKEN` or
+`--admin-token` is configured. Browsers use HTTP Basic authentication with any
+username and the token as the password. Mutations also require the dashboard's
+anti-CSRF header and a same-origin browser request.
 
 Place TLS and a network access policy in front of a remotely reachable
 dashboard. See [Self-hosting](self-hosting.md#dashboard-and-admin-access).

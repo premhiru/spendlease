@@ -114,6 +114,7 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "localhost:4000"
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -387,6 +388,8 @@ func TestRevokeReturnsVisibleConfirmation(t *testing.T) {
 	h := newTestDashboardWithRevoker(t, st, fakeRevoker{count: 2})
 	req := httptest.NewRequest(http.MethodPost, "/admin/principals/prn_a/revoke", nil)
 	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "localhost:4000"
+	req.Header.Set(AdminRequestHeader, "1")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
@@ -443,6 +446,8 @@ func TestModeToggle(t *testing.T) {
 				strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.RemoteAddr = "127.0.0.1:54321"
+			req.Host = "localhost:4000"
+			req.Header.Set(AdminRequestHeader, "1")
 
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)

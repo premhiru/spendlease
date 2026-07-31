@@ -8,7 +8,7 @@ and the price book supplies reservation defaults.
 
 | Value | Default | Behavior |
 |---|---:|---|
-| `observe` | yes | Price, reserve, settle and log every request, but never reject for budget. Would-block decisions remain visible. |
+| `observe` | yes | Price, reserve and settle supported token spend, but never reject for budget. Unsupported billing shapes pass through as visibly unmetered traffic. |
 | `enforce` | no | Reject a reservation that does not fit with `402 budget_exceeded`. Datastore decision failures fail closed. |
 
 Change mode from the dashboard, with the CLI:
@@ -90,7 +90,7 @@ These are gateway lifecycle settings rather than per-principal policy:
 | `--reservation-sweep-interval` | `30s` | How often expired pending holds are reclaimed. |
 
 The price book's model-level `default_max_tokens` is used when a request omits
-its output ceiling. Unknown models use the configured fallback input/output
+its output ceiling. Unknown models use the built-in fallback input/output
 rates and fallback ceiling; they are never treated as free.
 
 ## Not implemented

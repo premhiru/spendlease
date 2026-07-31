@@ -4,6 +4,12 @@
 The provider name is also the value used when storing a credential and scoping
 a lease.
 
+Provider routing and billing certification are separate. The gateway can pass
+through more routes than it can safely price. Enforce mode supports ordinary
+text generation and embeddings, permits reviewed no-spend routes, and blocks
+media, batches, provider-hosted tools, and unknown billing shapes. Observe
+mode forwards unsupported traffic with `X-Spendlease-Accounting: unmetered`.
+
 | Provider | Credential name | Application base URL | Default upstream |
 |---|---|---|---|
 | OpenAI | `openai` | `http://localhost:4000/v1` | `https://api.openai.com` |
@@ -60,10 +66,11 @@ the required token counts.
 
 It does not try to reproduce every invoice line. Batch, flex, fast, priority,
 regional, cache-storage, tool, image, audio, grounding, and other non-token
-charges remain outside the budget calculation. Start a new workload in
-observe mode and compare its ledger entries with the provider console before
-turning on enforcement. See [Price book](pricing-book.md) for the exact fields
-and source links.
+charges remain outside the budget calculation. Known unsupported shapes are
+refused before egress in enforce mode rather than being assigned a misleading
+token cost. Start a new workload in observe mode and compare its ledger entries
+with the provider console before turning on enforcement. See [Price
+book](pricing-book.md) for the exact fields and source links.
 
 ## Override an upstream
 

@@ -66,7 +66,8 @@ Use `lease.anthropicOptions()` with the official Anthropic client.
 Both packages export `AdminClient`, with `set_mode`/`setMode` and `revoke`
 methods. Supply the gateway's admin token when calling from off-machine. The
 methods return the refreshed dashboard table HTML because they use the same
-endpoints as the dashboard controls.
+endpoints as the dashboard controls. They also send the required
+`X-Spendlease-Admin: 1` anti-CSRF header.
 
 The admin client is for operator tooling, not agent code. Do not place
 `SPENDLEASE_ADMIN_TOKEN` in an agent environment.

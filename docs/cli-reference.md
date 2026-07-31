@@ -62,7 +62,8 @@ spendlease keys provider list [--store PATH]
 spendlease keys provider rm PROVIDER [--store PATH]
 ```
 
-`PROVIDER` is currently `openai` or `anthropic`. Omitting `--key` makes `set`
+`PROVIDER` is currently `openai`, `anthropic`, `kimi`, `deepseek`, `xai`,
+`gemini`, or `zai`. Omitting `--key` makes `set`
 read the value from standard input. `list` prints provider names only; it never
 prints stored values.
 

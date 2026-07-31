@@ -165,3 +165,13 @@ func TestReservationTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestReservationInputTokensUsesAConservativeByteCeiling(t *testing.T) {
+	t.Parallel()
+	if got := ReservationInputTokens(4096); got != 4096+ReservationInputOverhead {
+		t.Fatalf("ReservationInputTokens = %d", got)
+	}
+	if got := ReservationInputTokens(-1); got != ReservationInputOverhead {
+		t.Fatalf("negative byte count produced %d", got)
+	}
+}

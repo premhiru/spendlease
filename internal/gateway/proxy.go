@@ -19,9 +19,9 @@ import (
 // maxRequestBody caps how much of a request body is read in order to measure
 // it.
 //
-// Unlike a response, the request has to be buffered anyway to be replayed
-// upstream, so the cap is about memory rather than streaming. A body larger
-// than this is still proxied in full; only the measurement is skipped.
+// Unlike a response, the request has to be buffered to inspect it before
+// egress. A larger body is rejected in enforce mode and replayed unchanged,
+// but explicitly marked unmetered, in observe mode.
 const maxRequestBody = 8 << 20 // 8 MiB
 
 // handleProxy forwards an authenticated request to its vendor.
@@ -62,6 +62,12 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	billing := provider.Billing(r.Method, upstreamPath)
+	if billing.Class == providers.BillingUnsupported && principal.Mode == store.ModeEnforce {
+		writeUnenforceableSpend(w, g.logger, principal, provider.Name(), billing.Reason)
+		return
+	}
+
 	if info := infoFrom(r.Context()); info != nil {
 		info.provider = provider.Name()
 	}
@@ -81,7 +87,7 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// Read the body so it can be measured, then hand a fresh reader to the
 	// proxy. Doing this before anything is forwarded keeps the request the
 	// vendor sees byte-identical to the one the caller sent.
-	body, err := readRequestBody(r)
+	body, inspectable, err := readRequestBody(r)
 	if err != nil {
 		writeError(w, g.logger, http.StatusBadRequest, APIErrorDetail{
 			Type:       ErrTypeInternal,
@@ -92,13 +98,40 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestInfo := provider.ParseRequest(body)
+	requestInfo := providers.RequestInfo{}
+	if inspectable {
+		requestInfo = provider.ParseRequest(body)
+	}
+	requestInfo.NoOutput = billing.NoOutput
 	if info := infoFrom(ctx); info != nil {
 		info.model = requestInfo.Model
 	}
 
+	metered := billing.Class == providers.BillingToken && inspectable && requestInfo.Model != "" &&
+		requestInfo.UnsupportedBilling == ""
+	unmeteredReason := ""
+	switch {
+	case billing.Class == providers.BillingUnsupported:
+		unmeteredReason = billing.Reason
+	case billing.Class == providers.BillingToken && !inspectable:
+		unmeteredReason = "the request body is larger than the inspection limit"
+	case billing.Class == providers.BillingToken && requestInfo.Model == "":
+		unmeteredReason = "the request body is not valid, inspectable JSON with a model"
+	case requestInfo.UnsupportedBilling != "":
+		unmeteredReason = requestInfo.UnsupportedBilling
+	}
+	if unmeteredReason != "" {
+		if principal.Mode == store.ModeEnforce {
+			writeUnenforceableSpend(w, g.logger, principal, provider.Name(), unmeteredReason)
+			return
+		}
+		g.logger.Warn("observe mode is forwarding spend that cannot be enforced",
+			"principal", principal.ID, "provider", provider.Name(), "path", upstreamPath,
+			"reason", unmeteredReason)
+	}
+
 	reservationID := ""
-	if g.recorder != nil {
+	if g.recorder != nil && metered {
 		reservation, decision, reserveErr := g.recorder.Reserve(ctx, principal, provider.Name(), requestInfo)
 		if reserveErr != nil {
 			g.logger.Error("could not make budget decision",
@@ -139,7 +172,7 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// it produces is withheld below, so the stream the caller reads is the
 	// one they would have got without spendlease in the path.
 	injectedUsage := false
-	if requestInfo.Stream && !requestInfo.WantsUsage && len(body) > 0 {
+	if metered && requestInfo.Stream && !requestInfo.WantsUsage && len(body) > 0 {
 		if modified, changed := provider.EnableStreamUsage(body); changed {
 			body = modified
 			injectedUsage = true
@@ -179,7 +212,7 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		// to the client and closes it afterwards. The hook wraps it, it does
 		// not take ownership of it.
 		//nolint:bodyclose // the body is closed by ReverseProxy after copying
-		ModifyResponse: g.observeResponse(principal, provider, requestInfo, injectedUsage, reservationID, r),
+		ModifyResponse: g.modifyResponse(principal, provider, requestInfo, injectedUsage, reservationID, r, metered, unmeteredReason),
 
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			if g.recorder != nil {
@@ -210,6 +243,25 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
+func writeUnenforceableSpend(
+	w http.ResponseWriter,
+	logger *slog.Logger,
+	p store.Principal,
+	provider, reason string,
+) {
+	writeError(w, logger, http.StatusUnprocessableEntity, APIErrorDetail{
+		Type:      ErrTypeSpendNotEnforceable,
+		Principal: p.ID,
+		Provider:  provider,
+		Message:   "This request may incur spend that spendlease cannot conservatively reserve.",
+		Resolution: "Use a supported text-token request, reduce the request below the inspection limit, " +
+			"or switch to observe mode only if unmetered spend is acceptable.",
+		Docs: DocsBase + "/pricing-book/",
+	})
+	logger.Warn("blocked spend that cannot be enforced",
+		"principal", p.ID, "provider", provider, "reason", reason)
+}
+
 func writeBudgetExceeded(
 	w http.ResponseWriter,
 	logger *slog.Logger,
@@ -235,9 +287,9 @@ func writeBudgetExceeded(
 }
 
 // readRequestBody consumes and replaces the request body.
-func readRequestBody(r *http.Request) ([]byte, error) {
+func readRequestBody(r *http.Request) ([]byte, bool, error) {
 	if r.Body == nil {
-		return nil, nil
+		return nil, true, nil
 	}
 
 	original := r.Body
@@ -247,7 +299,7 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(io.LimitReader(original, maxRequestBody+1))
 	if err != nil {
 		_ = original.Close()
-		return nil, err
+		return nil, false, err
 	}
 
 	// Rewind for the proxy. For a large request the unread tail still belongs
@@ -259,12 +311,34 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 			Reader: io.MultiReader(bytes.NewReader(body), original),
 			Closer: original,
 		}
-		return nil, nil // too large to measure; still proxied in full
+		return nil, false, nil // too large to inspect; still replayable in observe mode
 	}
 	_ = original.Close()
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
-	return body, nil
+	return body, true, nil
+}
+
+func (g *Gateway) modifyResponse(
+	principal store.Principal,
+	provider providers.Provider,
+	info providers.RequestInfo,
+	injectedUsage bool,
+	reservationID string,
+	req *http.Request,
+	metered bool,
+	unmeteredReason string,
+) func(*http.Response) error {
+	if metered {
+		return g.observeResponse(principal, provider, info, injectedUsage, reservationID, req)
+	}
+	if unmeteredReason == "" {
+		return nil
+	}
+	return func(res *http.Response) error {
+		res.Header.Set(AccountingHeader, "unmetered")
+		return nil
+	}
 }
 
 // replayReadCloser replays a consumed prefix before continuing with—and

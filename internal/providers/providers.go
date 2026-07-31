@@ -31,6 +31,11 @@ type Provider interface {
 	// Paths returns the request path prefixes this provider claims.
 	Paths() []string
 
+	// Billing classifies an upstream route before it is contacted. The
+	// gateway uses this to avoid presenting best-effort token accounting as a
+	// hard limit for media, batch, tool-fee, or otherwise unsupported spend.
+	Billing(method, path string) BillingCapability
+
 	// Authorize attaches the vendor credential to an outbound request. It is
 	// called after the client's own Authorization header has been stripped,
 	// so an implementation should set rather than append.
@@ -40,10 +45,9 @@ type Provider interface {
 	// model, the output ceiling, whether the response streams, and the
 	// prompt size.
 	//
-	// It never fails. A body it cannot understand yields a zero-valued
-	// RequestInfo and the request is still proxied — refusing to forward a
-	// call over an unrecognised field would be a worse failure than an
-	// unmeasured one.
+	// It never returns an error. A body it cannot understand yields a
+	// zero-valued RequestInfo; the gateway forwards that only in observe mode
+	// and fails closed when spend enforcement is enabled.
 	ParseRequest(body []byte) RequestInfo
 
 	// UsageFromResponse reads the token counts a vendor reports on a
@@ -72,6 +76,30 @@ type Provider interface {
 	// withheld so the caller's stream looks exactly as it would have without
 	// spendlease in the path.
 	IsUsageOnlyEvent(data []byte) bool
+}
+
+// BillingClass describes whether spendlease can authorize a route's cost.
+type BillingClass string
+
+const (
+	// BillingToken means the route is priced from input and output tokens.
+	BillingToken BillingClass = "token"
+	// BillingNoSpend means the route is operational and is not expected to
+	// incur provider spend, such as listing models.
+	BillingNoSpend BillingClass = "no_spend"
+	// BillingUnsupported means the route may incur charges that the active
+	// token price book cannot bound.
+	BillingUnsupported BillingClass = "unsupported"
+)
+
+// BillingCapability is one route's accounting contract.
+type BillingCapability struct {
+	Class BillingClass
+	// NoOutput is true for token-billed routes such as embeddings that have
+	// input usage but no generated output to reserve.
+	NoOutput bool
+	// Reason is shown when enforcement refuses unsupported spend.
+	Reason string
 }
 
 // Registry resolves an incoming request to a provider.

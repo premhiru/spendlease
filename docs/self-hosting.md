@@ -103,8 +103,10 @@ credentials have been verified.
 
 ## Dashboard and admin access
 
-Loopback dashboard access does not require a credential. A request from any
-non-loopback address is refused unless an admin token is configured:
+Credential-free dashboard access requires both a loopback TCP peer and a
+loopback `Host` such as `localhost:4000`. This prevents a same-host reverse
+proxy or DNS-rebound hostname from inheriting local trust. Other requests are
+refused unless an admin token is configured:
 
 ```bash
 SPENDLEASE_ADMIN_TOKEN="a-long-random-secret" \
@@ -112,8 +114,10 @@ SPENDLEASE_ADMIN_TOKEN="a-long-random-secret" \
 ```
 
 `--admin-token` overrides the environment variable. Scripts can send
-`Authorization: Bearer <token>`. Browsers use HTTP Basic authentication with
-any username and the token as the password.
+`Authorization: Bearer <token>`. State-changing requests must also send
+`X-Spendlease-Admin: 1`; both bundled SDK clients do so. Browsers use HTTP
+Basic authentication with any username and the token as the password. The
+dashboard supplies the mutation header and rejects cross-origin writes.
 
 The admin token does not encrypt traffic. Put TLS at a trusted reverse proxy
 in front of any remotely reachable gateway, restrict network access, and do

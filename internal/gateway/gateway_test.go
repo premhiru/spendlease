@@ -641,12 +641,15 @@ func TestLargeRequestBodyIsNotTruncated(t *testing.T) {
 	want := bytes.Repeat([]byte("x"), maxRequestBody+257)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(want))
 
-	measured, err := readRequestBody(req)
+	measured, inspectable, err := readRequestBody(req)
 	if err != nil {
 		t.Fatalf("readRequestBody: %v", err)
 	}
 	if measured != nil {
 		t.Fatalf("measured %d bytes, want nil for an oversized body", len(measured))
+	}
+	if inspectable {
+		t.Fatal("an oversized body was reported as inspectable")
 	}
 
 	got, err := io.ReadAll(req.Body)

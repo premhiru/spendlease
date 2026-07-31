@@ -73,6 +73,7 @@ export class AdminClient {
   private async post(path: string, fields: Record<string, string>): Promise<string> {
     const headers: Record<string, string> = {
       "content-type": "application/x-www-form-urlencoded",
+      "x-spendlease-admin": "1",
     };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     const response = await fetch(this.baseURL + path, {

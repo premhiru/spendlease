@@ -20,6 +20,15 @@ type RequestInfo struct {
 	// to estimate input tokens. Characters rather than bytes, so multibyte
 	// text is not over-counted.
 	PromptChars int64
+	// RequestBytes is the inspected JSON body size. Reservations use this as
+	// a conservative tokenizer-independent input ceiling: a byte-level
+	// tokenizer cannot produce more content tokens than input bytes.
+	RequestBytes int64
+	// NoOutput is true for token-billed calls such as embeddings.
+	NoOutput bool
+	// UnsupportedBilling explains a request feature whose separate vendor fee
+	// is not represented by the token price book.
+	UnsupportedBilling string
 	// WantsUsage is true when the caller explicitly asked the vendor to
 	// report usage. Relevant only for OpenAI-compatible streaming, where
 	// usage is opt-in.
@@ -159,9 +168,9 @@ var structuralKeys = map[string]bool{
 // CountPromptChars sums the characters of every string reachable under a
 // prompt-bearing key in a decoded request body.
 //
-// It is deliberately forgiving: a body it cannot fully understand yields a
-// smaller count rather than an error, because refusing to proxy a request
-// over an unrecognised field would be a worse failure than a rough estimate.
+// It is deliberately forgiving because this value is used only for marked
+// fallback settlement. Authorization uses the conservative request-byte
+// ceiling instead.
 func CountPromptChars(m map[string]any) int64 {
 	return countChars(m, false)
 }
@@ -191,12 +200,80 @@ func countChars(v any, underPromptKey bool) int64 {
 	return 0
 }
 
+// UnsupportedBillingFeature finds request features that can carry provider
+// charges beyond ordinary text tokens. Enforcement must refuse these until a
+// matching price unit exists instead of pretending a token budget covers them.
+func UnsupportedBillingFeature(m map[string]any) string {
+	if containsAnyKey(m, map[string]bool{
+		"image_url": true, "input_image": true, "input_audio": true,
+		"audio": true, "file": true, "file_id": true,
+		"inline_data": true, "input_file": true, "attachments": true,
+	}) {
+		return "media or file inputs have billing dimensions outside the token price book"
+	}
+	if containsTypeValue(m, map[string]bool{
+		"image": true, "input_image": true, "audio": true, "input_audio": true,
+		"document": true, "file": true, "input_file": true,
+		"video": true, "input_video": true,
+	}) {
+		return "media or file inputs have billing dimensions outside the token price book"
+	}
+	if tools, ok := m["tools"].([]any); ok {
+		for _, raw := range tools {
+			tool, _ := raw.(map[string]any)
+			kind := StringField(tool, "type")
+			if kind != "" && kind != "function" && kind != "custom" {
+				return "provider-hosted tools may add charges outside the token price book"
+			}
+		}
+	}
+	return ""
+}
+
+func containsTypeValue(v any, types map[string]bool) bool {
+	switch value := v.(type) {
+	case []any:
+		for _, item := range value {
+			if containsTypeValue(item, types) {
+				return true
+			}
+		}
+	case map[string]any:
+		if kind, ok := value["type"].(string); ok && types[kind] {
+			return true
+		}
+		for _, item := range value {
+			if containsTypeValue(item, types) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsAnyKey(v any, keys map[string]bool) bool {
+	switch value := v.(type) {
+	case []any:
+		for _, item := range value {
+			if containsAnyKey(item, keys) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, item := range value {
+			if keys[key] || containsAnyKey(item, keys) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // DecodeBody parses a request or response body, returning nil when it is not
 // a JSON object.
 //
-// A body that will not parse is not an error. It may be a multipart upload or
-// a vendor shape this build does not know, and the request must still be
-// proxied; it simply cannot be measured.
+// A body that will not parse is not a parser error. The gateway decides whether
+// to forward it unmetered in observe mode or reject it in enforce mode.
 func DecodeBody(body []byte) map[string]any {
 	if len(body) == 0 {
 		return nil

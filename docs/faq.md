@@ -45,6 +45,15 @@ does not append a ledger entry. A client disconnect is different: the vendor
 may already have done billable work, so spendlease settles the usage observed
 before the disconnect or records a marked estimate.
 
+## What does `422 spend_not_enforceable` mean?
+
+The request uses an endpoint, feature, or body shape whose potential vendor
+charge cannot be bounded by the token price book. This includes oversized or
+unparseable bodies, media, batches, and provider-hosted tools. Enforce mode
+refuses it before the vendor is contacted. Observe mode can pass it through,
+but marks the response `X-Spendlease-Accounting: unmetered` and does not add a
+misleading token charge to the ledger.
+
 ## Does the dashboard need internet access?
 
 No. Its HTML, CSS and htmx are embedded in the binary. Loopback access is
