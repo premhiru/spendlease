@@ -453,6 +453,7 @@ func TestRevokeLeasesForPrincipal(t *testing.T) {
 	seedLease(t, s, runA.ID, time.Hour)
 	seedLease(t, s, runA.ID, time.Hour)
 	seedLease(t, s, runB.ID, time.Hour)
+	expired := seedLease(t, s, runB.ID, -time.Hour)
 	untouched := seedLease(t, s, otherRun.ID, time.Hour)
 
 	n, err := s.RevokeLeasesForPrincipal(ctx, target.ID, time.Now())
@@ -461,6 +462,10 @@ func TestRevokeLeasesForPrincipal(t *testing.T) {
 	}
 	if n != 3 {
 		t.Errorf("revoked %d leases, want 3", n)
+	}
+	stillExpired, _ := s.GetLease(ctx, expired.ID)
+	if stillExpired.RevokedAt != nil {
+		t.Error("an already-expired lease was relabeled as revoked")
 	}
 
 	for _, runID := range []string{runA.ID, runB.ID} {

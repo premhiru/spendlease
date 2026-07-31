@@ -41,6 +41,8 @@ type LedgerStore interface {
 	CreateRun(ctx context.Context, r store.Run) error
 	// TryReserve makes the atomic pre-egress budget decision.
 	TryReserve(ctx context.Context, r store.Reservation, enforce bool) (store.BudgetDecision, error)
+	// RecordBudgetEvent makes a would-block decision visible after the request.
+	RecordBudgetEvent(ctx context.Context, e store.BudgetEvent) error
 	// ResolveReservation releases a failed request's hold.
 	ResolveReservation(ctx context.Context, id string, status store.ReservationStatus, at time.Time) error
 	// SettleReservation records actual spend and resolves the hold atomically.
@@ -125,6 +127,24 @@ func (r *Recorder) Reserve(
 		CreatedAt: now,
 	}
 	decision, err := r.store.TryReserve(ctx, reservation, p.Mode == store.ModeEnforce)
+	if err == nil && decision.WouldBlock {
+		event := store.BudgetEvent{
+			PrincipalID: p.ID,
+			RunID:       decision.RunID,
+			LeaseID:     reservation.LeaseID,
+			Provider:    provider,
+			Model:       request.Model,
+			Enforced:    !decision.Allowed,
+			Requested:   decision.Requested,
+			Remaining:   decision.Remaining,
+			Shortfall:   decision.Shortfall,
+			CreatedAt:   now,
+		}
+		if recordErr := r.store.RecordBudgetEvent(ctx, event); recordErr != nil {
+			r.logger.Error("could not record budget decision",
+				"principal", p.ID, "run", decision.RunID, "error", recordErr)
+		}
+	}
 	return reservation, decision, err
 }
 

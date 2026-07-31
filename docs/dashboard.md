@@ -12,10 +12,13 @@ Rows are sorted by recorded spend, highest first.
 |---|---|
 | Agent | Principal name and `prn_...` ID. |
 | Mode | Current `observe` or `enforce` policy. Click to switch modes. |
+| Status | Whether the principal has an active lease, only revoked leases, only expired leases, or no leases yet. |
+| Leases | Counts of active, revoked, and expired credentials. |
 | Runs | Number of runs owned by the principal. |
 | Calls | Settled ledger entries. A `~N` marker means N entries used estimated token usage or fallback pricing. |
+| Blocked | Requests rejected before egress. Observe-mode would-block decisions are shown separately. |
 | Spend | Sum of calculated token cost across the principal's runs. |
-| Last seen | Time of the most recent settled entry. |
+| Last event | Most recent allowed call, budget decision, revocation, or expiration. |
 | Kill | Revokes every active lease for the principal. |
 
 The table refreshes every three seconds. Refresh pauses while a button has
@@ -44,8 +47,22 @@ Clicking **Revoke** invalidates every current lease for that principal. It does
 not stop a request that has already reached the vendor, delete the principal,
 or prevent a new lease from being issued later.
 
+The response confirms how many active leases were revoked. The row then shows
+`Revoked` when no active lease remains, and the revocations stay visible in
+the recent-events table.
+
 Both controls return an updated table fragment and use the same authorization
 guard as the rest of the dashboard.
+
+## Recent events
+
+The most recent operational events appear below the summary. Successful calls
+come from the append-only ledger. Budget blocks are stored separately because
+a rejected request has no cost and must not become a ledger entry. Revoked and
+expired events come from the durable lease records.
+
+This makes an enforced `402 budget_exceeded` visible without charging the
+vendor or requiring access to server logs.
 
 ## Remote access
 
@@ -59,5 +76,6 @@ dashboard. See [Self-hosting](self-hosting.md#dashboard-and-admin-access).
 ## Current limitations
 
 The dashboard does not provide charts, per-run drill-down, ledger export, or
-user accounts. There is also no operator CLI for verifying or exporting the
-hash chain in v0.1; `ledger.VerifyChain` is currently a Go library function.
+user accounts. The recent-events table is an operational view, not an invoice
+or full audit export. There is also no operator CLI for verifying or exporting
+the hash chain in v0.1; `ledger.VerifyChain` is currently a Go library function.

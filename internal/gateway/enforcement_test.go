@@ -62,6 +62,16 @@ func TestEnforceModeReturnsStructured402BeforeEgress(t *testing.T) {
 	if d.Requested == "" || d.Shortfall == "" || d.Resolution == "" {
 		t.Errorf("402 does not explain the amount and remedy: %+v", d)
 	}
+	events, err := h.store.RecentOperationalEvents(context.Background(), 10, time.Now())
+	if err != nil {
+		t.Fatalf("RecentOperationalEvents: %v", err)
+	}
+	if len(events) != 1 || events[0].Kind != store.EventBudgetBlocked {
+		t.Fatalf("events = %+v, want one durable budget-blocked event", events)
+	}
+	if events[0].PrincipalID != h.principal.ID || events[0].Amount.IsZero() {
+		t.Errorf("budget event attribution = %+v", events[0])
+	}
 }
 
 func TestMissingMaxTokensStillCreatesBoundedReservation(t *testing.T) {

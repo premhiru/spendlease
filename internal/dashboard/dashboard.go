@@ -8,6 +8,7 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -27,6 +28,9 @@ type SummaryStore interface {
 	PrincipalSummaries(ctx context.Context) ([]store.PrincipalSummary, error)
 	// SetPrincipalMode switches a principal between observe and enforce.
 	SetPrincipalMode(ctx context.Context, id string, m store.Mode) error
+	// RecentOperationalEvents supplies the allowed, blocked and lease-lifecycle
+	// timeline below the summary table.
+	RecentOperationalEvents(ctx context.Context, limit int, now time.Time) ([]store.OperationalEvent, error)
 }
 
 // PrincipalRevoker is the kill-switch surface used by the dashboard.
@@ -117,7 +121,13 @@ func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.logger.Warn("principal kill switch activated", "principal", id, "leases", n)
-	d.handleTable(w, r)
+	v, err := d.build(r.Context())
+	if err != nil {
+		d.fail(w, "building the table after revocation", err)
+		return
+	}
+	v.Notice = fmt.Sprintf("Revoked %d active %s. New leases can still be issued.", n, pluralWord(n, "lease"))
+	d.render(w, "table", v)
 }
 
 // view is what the templates render.
@@ -127,6 +137,8 @@ type view struct {
 	Warning    string
 	Principals []row
 	Total      money.Nanos
+	Notice     string
+	Events     []eventRow
 }
 
 // row is one principal in the table.
@@ -141,8 +153,25 @@ type row struct {
 	Entries          int
 	EstimatedEntries int
 	Spend            money.Nanos
-	LastSeen         string
 	OverBudget       bool
+	ActiveLeases     int
+	RevokedLeases    int
+	ExpiredLeases    int
+	BudgetBlocks     int
+	WouldBlockEvents int
+	Status           string
+	StatusClass      string
+	LeaseSummary     string
+	LastEvent        string
+}
+
+type eventRow struct {
+	Kind          string
+	KindClass     string
+	PrincipalName string
+	RunID         string
+	Detail        string
+	When          string
 }
 
 // handlePage renders the whole page.
@@ -203,6 +232,7 @@ func (d *Dashboard) build(ctx context.Context) (view, error) {
 
 	for _, s := range summaries {
 		v.Total += s.Spend
+		status, statusClass := principalStatus(s)
 		v.Principals = append(v.Principals, row{
 			ID:               s.ID,
 			Name:             s.Name,
@@ -211,11 +241,71 @@ func (d *Dashboard) build(ctx context.Context) (view, error) {
 			Entries:          s.Entries,
 			EstimatedEntries: s.EstimatedEntries,
 			Spend:            s.Spend,
-			LastSeen:         relative(s.LastActivity, now),
 			OverBudget:       s.OverBudgetRuns > 0,
+			ActiveLeases:     s.ActiveLeases,
+			RevokedLeases:    s.RevokedLeases,
+			ExpiredLeases:    s.ExpiredLeases,
+			BudgetBlocks:     s.BudgetBlocks,
+			WouldBlockEvents: s.WouldBlockEvents,
+			Status:           status,
+			StatusClass:      statusClass,
+			LeaseSummary:     leaseSummary(s),
+			LastEvent:        relative(s.LastEvent, now),
 		})
 	}
+
+	events, err := d.store.RecentOperationalEvents(ctx, 20, now)
+	if err != nil {
+		return view{}, err
+	}
+	for _, event := range events {
+		v.Events = append(v.Events, operationalEventRow(event, now))
+	}
 	return v, nil
+}
+
+func principalStatus(s store.PrincipalSummary) (string, string) {
+	switch {
+	case s.ActiveLeases > 0:
+		return "Active", "ok"
+	case s.RevokedLeases > 0:
+		return "Revoked", "danger"
+	case s.ExpiredLeases > 0:
+		return "Expired", "muted"
+	default:
+		return "No leases", "muted"
+	}
+}
+
+func leaseSummary(s store.PrincipalSummary) string {
+	return fmt.Sprintf("%d active · %d revoked · %d expired",
+		s.ActiveLeases, s.RevokedLeases, s.ExpiredLeases)
+}
+
+func operationalEventRow(event store.OperationalEvent, now time.Time) eventRow {
+	row := eventRow{
+		PrincipalName: event.PrincipalName,
+		RunID:         event.RunID,
+		When:          relative(&event.CreatedAt, now),
+	}
+	switch event.Kind {
+	case store.EventAllowed:
+		row.Kind, row.KindClass = "Allowed", "ok"
+		row.Detail = fmt.Sprintf("%s/%s · $%s", event.Provider, event.Model, event.Amount.String())
+	case store.EventBudgetBlocked:
+		row.Kind, row.KindClass = "Budget blocked", "danger"
+		row.Detail = fmt.Sprintf("needed $%s; $%s remaining", event.Amount.String(), event.Remaining.String())
+	case store.EventBudgetWouldBlock:
+		row.Kind, row.KindClass = "Would block", "warning"
+		row.Detail = fmt.Sprintf("needed $%s; $%s remaining", event.Amount.String(), event.Remaining.String())
+	case store.EventLeaseRevoked:
+		row.Kind, row.KindClass = "Lease revoked", "danger"
+		row.Detail = event.LeaseID
+	case store.EventLeaseExpired:
+		row.Kind, row.KindClass = "Lease expired", "muted"
+		row.Detail = event.LeaseID
+	}
+	return row
 }
 
 // render writes a template.
@@ -265,4 +355,11 @@ func plural(n int, unit string) string {
 		return "1 " + unit + " ago"
 	}
 	return strconv.Itoa(n) + " " + unit + "s ago"
+}
+
+func pluralWord(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
 }

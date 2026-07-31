@@ -18,11 +18,16 @@ import (
 // fakeStore serves fixed summaries and records mode changes.
 type fakeStore struct {
 	summaries []store.PrincipalSummary
+	events    []store.OperationalEvent
 	err       error
 
 	setID   string
 	setMode store.Mode
 	setErr  error
+}
+
+func (f *fakeStore) RecentOperationalEvents(context.Context, int, time.Time) ([]store.OperationalEvent, error) {
+	return f.events, f.err
 }
 
 func (f *fakeStore) PrincipalSummaries(context.Context) ([]store.PrincipalSummary, error) {
@@ -58,6 +63,10 @@ func principal(id, name string, mode store.Mode, spend string, runs, entries, es
 }
 
 func newTestDashboard(t *testing.T, st *fakeStore) http.Handler {
+	return newTestDashboardWithRevoker(t, st, nil)
+}
+
+func newTestDashboardWithRevoker(t *testing.T, st *fakeStore, revoker PrincipalRevoker) http.Handler {
 	t.Helper()
 
 	d, err := New(Options{
@@ -65,6 +74,7 @@ func newTestDashboard(t *testing.T, st *fakeStore) http.Handler {
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Version: "v-test",
 		Models:  26,
+		Revoker: revoker,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -74,6 +84,10 @@ func newTestDashboard(t *testing.T, st *fakeStore) http.Handler {
 	d.Routes(mux)
 	return mux
 }
+
+type fakeRevoker struct{ count int }
+
+func (f fakeRevoker) RevokePrincipal(context.Context, string) (int, error) { return f.count, nil }
 
 // get issues a request as if from the local machine.
 //
@@ -216,6 +230,59 @@ func TestEstimatedCountIsShown(t *testing.T) {
 	}
 	if !strings.Contains(body, "estimated") {
 		t.Error("nothing explains what the estimated count means")
+	}
+}
+
+func TestOperationalStatusAndRecentEventsAreShown(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	active := principal("prn_active", "active-agent", store.ModeEnforce, "0.10", 1, 2, 0, 0)
+	active.ActiveLeases = 2
+	active.RevokedLeases = 1
+	active.ExpiredLeases = 3
+	active.BudgetBlocks = 4
+	active.LastEvent = &now
+	revoked := principal("prn_revoked", "revoked-agent", store.ModeEnforce, "0.20", 1, 1, 0, 0)
+	revoked.RevokedLeases = 2
+	revoked.LastEvent = &now
+
+	st := &fakeStore{
+		summaries: []store.PrincipalSummary{active, revoked},
+		events: []store.OperationalEvent{
+			{Kind: store.EventBudgetBlocked, PrincipalName: "active-agent", RunID: "run_blocked", Amount: money.MustParseUSD("0.50"), Remaining: money.MustParseUSD("0.10"), CreatedAt: now},
+			{Kind: store.EventLeaseRevoked, PrincipalName: "revoked-agent", RunID: "run_revoked", LeaseID: "lse_revoked", CreatedAt: now},
+		},
+	}
+	body := get(t, newTestDashboard(t, st), "/table").Body.String()
+	for _, want := range []string{
+		"Active", "2 active · 1 revoked · 3 expired", "Budget blocked",
+		"needed $0.50; $0.10 remaining", "Revoked", "No active leases",
+		"Recent events", "lse_revoked",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard is missing %q", want)
+		}
+	}
+}
+
+func TestRevokeReturnsVisibleConfirmation(t *testing.T) {
+	t.Parallel()
+
+	summary := principal("prn_a", "agent", store.ModeEnforce, "0.00", 1, 0, 0, 0)
+	summary.ActiveLeases = 2
+	st := &fakeStore{summaries: []store.PrincipalSummary{summary}}
+	h := newTestDashboardWithRevoker(t, st, fakeRevoker{count: 2})
+	req := httptest.NewRequest(http.MethodPost, "/admin/principals/prn_a/revoke", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "Revoked 2 active leases") || !strings.Contains(body, `role="status"`) {
+		t.Errorf("revoke response has no visible confirmation: %s", body)
 	}
 }
 
