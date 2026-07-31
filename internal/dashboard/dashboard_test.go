@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,12 +27,21 @@ type fakeStore struct {
 	setMode store.Mode
 	setErr  error
 
-	eventFilter store.OperationalEventFilter
+	eventFilterMu sync.Mutex
+	eventFilter   store.OperationalEventFilter
 }
 
 func (f *fakeStore) RecentOperationalEvents(_ context.Context, filter store.OperationalEventFilter, _ time.Time) ([]store.OperationalEvent, error) {
+	f.eventFilterMu.Lock()
+	defer f.eventFilterMu.Unlock()
 	f.eventFilter = filter
 	return f.events, f.err
+}
+
+func (f *fakeStore) lastEventFilter() store.OperationalEventFilter {
+	f.eventFilterMu.Lock()
+	defer f.eventFilterMu.Unlock()
+	return f.eventFilter
 }
 
 func (f *fakeStore) PrincipalSummaries(context.Context) ([]store.PrincipalSummary, error) {
@@ -302,7 +312,7 @@ func TestEventFiltersAreServerSideAndPreserved(t *testing.T) {
 	body := get(t, newTestDashboard(t, st),
 		"/table?event_agent=prn_b&event_kind=allowed&event_since=7d&event_q=lse_target&event_limit=40").Body.String()
 
-	filter := st.eventFilter
+	filter := st.lastEventFilter()
 	if filter.PrincipalID != "prn_b" || filter.Query != "lse_target" || filter.Limit != 41 {
 		t.Errorf("store filter = %+v", filter)
 	}
@@ -333,10 +343,11 @@ func TestDefaultEventFilterPrioritisesAttention(t *testing.T) {
 		principal("prn_a", "agent", store.ModeEnforce, "0.00", 1, 0, 0, 0),
 	}}
 	body := get(t, newTestDashboard(t, st), "/table").Body.String()
-	if len(st.eventFilter.Kinds) != len(attentionEventKinds) || st.eventFilter.Limit != eventPageSize+1 {
-		t.Errorf("default store filter = %+v", st.eventFilter)
+	filter := st.lastEventFilter()
+	if len(filter.Kinds) != len(attentionEventKinds) || filter.Limit != eventPageSize+1 {
+		t.Errorf("default store filter = %+v", filter)
 	}
-	if st.eventFilter.Since.IsZero() {
+	if filter.Since.IsZero() {
 		t.Error("default event filter has no time window")
 	}
 	if !strings.Contains(body, `value="attention" selected`) || !strings.Contains(body, `value="24h" selected`) {
