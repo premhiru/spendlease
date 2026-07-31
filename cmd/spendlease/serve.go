@@ -158,6 +158,7 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		Logger:  logger,
 		Version: version,
 		Models:  countModels(book),
+		PricingBreakdown: modelBreakdown(book),
 		Warning: dashboardWarning(*addr, adminToken),
 		Guard:   dashboard.Guard{Token: adminToken},
 		Revoker: killSwitch,

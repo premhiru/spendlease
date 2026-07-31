@@ -12,6 +12,8 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +32,7 @@ type SummaryStore interface {
 	SetPrincipalMode(ctx context.Context, id string, m store.Mode) error
 	// RecentOperationalEvents supplies the allowed, blocked and lease-lifecycle
 	// timeline below the summary table.
-	RecentOperationalEvents(ctx context.Context, limit int, now time.Time) ([]store.OperationalEvent, error)
+	RecentOperationalEvents(ctx context.Context, filter store.OperationalEventFilter, now time.Time) ([]store.OperationalEvent, error)
 }
 
 // PrincipalRevoker is the kill-switch surface used by the dashboard.
@@ -48,6 +50,8 @@ type Options struct {
 	Version string
 	// Models is how many models the price book knows, shown in the header.
 	Models int
+	// PricingBreakdown explains the model count by provider.
+	PricingBreakdown string
 	// Warning, if set, is displayed above the table. It carries the reason a
 	// deployment is not production-ready rather than leaving it implicit.
 	Warning string
@@ -59,15 +63,16 @@ type Options struct {
 
 // Dashboard serves the spend table.
 type Dashboard struct {
-	store   SummaryStore
-	logger  *slog.Logger
-	tmpl    *template.Template
-	static  http.Handler
-	guard   Guard
-	version string
-	models  int
-	warning string
-	revoker PrincipalRevoker
+	store            SummaryStore
+	logger           *slog.Logger
+	tmpl             *template.Template
+	static           http.Handler
+	guard            Guard
+	version          string
+	models           int
+	pricingBreakdown string
+	warning          string
+	revoker          PrincipalRevoker
 }
 
 // New parses the templates and returns a dashboard.
@@ -80,15 +85,16 @@ func New(opts Options) (*Dashboard, error) {
 		return nil, err
 	}
 	return &Dashboard{
-		store:   opts.Store,
-		logger:  opts.Logger,
-		tmpl:    tmpl,
-		static:  http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
-		guard:   opts.Guard,
-		version: opts.Version,
-		models:  opts.Models,
-		warning: opts.Warning,
-		revoker: opts.Revoker,
+		store:            opts.Store,
+		logger:           opts.Logger,
+		tmpl:             tmpl,
+		static:           http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
+		guard:            opts.Guard,
+		version:          opts.Version,
+		models:           opts.Models,
+		pricingBreakdown: opts.PricingBreakdown,
+		warning:          opts.Warning,
+		revoker:          opts.Revoker,
 	}, nil
 }
 
@@ -121,7 +127,7 @@ func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.logger.Warn("principal kill switch activated", "principal", id, "leases", n)
-	v, err := d.build(r.Context())
+	v, err := d.build(r)
 	if err != nil {
 		d.fail(w, "building the table after revocation", err)
 		return
@@ -132,13 +138,33 @@ func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 // view is what the templates render.
 type view struct {
-	Version    string
-	Models     int
-	Warning    string
-	Principals []row
-	Total      money.Nanos
-	Notice     string
-	Events     []eventRow
+	BuildLabel       string
+	Models           int
+	PricingBreakdown string
+	Warning          string
+	Principals       []row
+	Total            money.Nanos
+	Notice           string
+	Events           []eventRow
+	EventFilter      eventFilterView
+}
+
+type eventFilterView struct {
+	PrincipalID      string
+	Kind             string
+	Since            string
+	Query            string
+	Limit            int
+	PrincipalOptions []filterOption
+	RefreshURL       string
+	NextURL          string
+	HasMore          bool
+}
+
+type filterOption struct {
+	Value    string
+	Label    string
+	Selected bool
 }
 
 // row is one principal in the table.
@@ -176,7 +202,7 @@ type eventRow struct {
 
 // handlePage renders the whole page.
 func (d *Dashboard) handlePage(w http.ResponseWriter, r *http.Request) {
-	v, err := d.build(r.Context())
+	v, err := d.build(r)
 	if err != nil {
 		d.fail(w, "building the dashboard", err)
 		return
@@ -186,7 +212,7 @@ func (d *Dashboard) handlePage(w http.ResponseWriter, r *http.Request) {
 
 // handleTable renders just the table, which is what htmx polls for.
 func (d *Dashboard) handleTable(w http.ResponseWriter, r *http.Request) {
-	v, err := d.build(r.Context())
+	v, err := d.build(r)
 	if err != nil {
 		d.fail(w, "building the table", err)
 		return
@@ -220,15 +246,23 @@ func (d *Dashboard) handleSetMode(w http.ResponseWriter, r *http.Request) {
 	d.handleTable(w, r)
 }
 
-// build assembles the view.
-func (d *Dashboard) build(ctx context.Context) (view, error) {
+// build assembles the view and applies the event filters from the request.
+func (d *Dashboard) build(r *http.Request) (view, error) {
+	ctx := r.Context()
 	summaries, err := d.store.PrincipalSummaries(ctx)
 	if err != nil {
 		return view{}, err
 	}
 
-	v := view{Version: d.version, Models: d.models, Warning: d.warning}
 	now := time.Now()
+	eventFilter, eventFilterView := parseEventFilter(r, now)
+	v := view{
+		BuildLabel:       dashboardBuildLabel(d.version),
+		Models:           d.models,
+		PricingBreakdown: d.pricingBreakdown,
+		Warning:          d.warning,
+		EventFilter:      eventFilterView,
+	}
 
 	for _, s := range summaries {
 		v.Total += s.Spend
@@ -252,16 +286,145 @@ func (d *Dashboard) build(ctx context.Context) (view, error) {
 			LeaseSummary:     leaseSummary(s),
 			LastEvent:        relative(s.LastEvent, now),
 		})
+		v.EventFilter.PrincipalOptions = append(v.EventFilter.PrincipalOptions, filterOption{
+			Value: s.ID, Label: s.Name, Selected: s.ID == v.EventFilter.PrincipalID,
+		})
 	}
+	sort.Slice(v.EventFilter.PrincipalOptions, func(i, j int) bool {
+		return strings.ToLower(v.EventFilter.PrincipalOptions[i].Label) <
+			strings.ToLower(v.EventFilter.PrincipalOptions[j].Label)
+	})
 
-	events, err := d.store.RecentOperationalEvents(ctx, 20, now)
+	queryFilter := eventFilter
+	if queryFilter.Limit < maxEventLimit {
+		queryFilter.Limit++
+	}
+	events, err := d.store.RecentOperationalEvents(ctx, queryFilter, now)
 	if err != nil {
 		return view{}, err
+	}
+	if len(events) > eventFilter.Limit {
+		v.EventFilter.HasMore = true
+		events = events[:eventFilter.Limit]
 	}
 	for _, event := range events {
 		v.Events = append(v.Events, operationalEventRow(event, now))
 	}
+	v.EventFilter.RefreshURL = eventFilterURL("/table", v.EventFilter, eventFilter.Limit)
+	if v.EventFilter.HasMore {
+		nextLimit := min(eventFilter.Limit+eventPageSize, maxEventLimit)
+		v.EventFilter.NextURL = eventFilterURL("/table", v.EventFilter, nextLimit)
+	}
 	return v, nil
+}
+
+const (
+	eventPageSize = 20
+	maxEventLimit = 200
+)
+
+var attentionEventKinds = []store.OperationalEventKind{
+	store.EventBudgetBlocked,
+	store.EventBudgetWouldBlock,
+	store.EventLeaseRevoked,
+	store.EventLeaseExpired,
+}
+
+func parseEventFilter(r *http.Request, now time.Time) (store.OperationalEventFilter, eventFilterView) {
+	principalID := strings.TrimSpace(r.FormValue("event_agent"))
+	query := strings.TrimSpace(r.FormValue("event_q"))
+
+	kind := strings.TrimSpace(r.FormValue("event_kind"))
+	if kind == "" {
+		kind = "attention"
+	}
+	kinds := eventKinds(kind)
+	if kinds == nil && kind != "all" {
+		kind, kinds = "attention", attentionEventKinds
+	}
+
+	sinceName := strings.TrimSpace(r.FormValue("event_since"))
+	if sinceName == "" {
+		sinceName = "24h"
+	}
+	var since time.Time
+	switch sinceName {
+	case "1h":
+		since = now.Add(-time.Hour)
+	case "24h":
+		since = now.Add(-24 * time.Hour)
+	case "7d":
+		since = now.Add(-7 * 24 * time.Hour)
+	case "all":
+	default:
+		sinceName = "24h"
+		since = now.Add(-24 * time.Hour)
+	}
+
+	limit, err := strconv.Atoi(r.FormValue("event_limit"))
+	if err != nil || limit < eventPageSize {
+		limit = eventPageSize
+	}
+	limit = min(limit, maxEventLimit)
+
+	return store.OperationalEventFilter{
+			PrincipalID: principalID,
+			Kinds:       kinds,
+			Query:       query,
+			Since:       since,
+			Limit:       limit,
+		}, eventFilterView{
+			PrincipalID: principalID,
+			Kind:        kind,
+			Since:       sinceName,
+			Query:       query,
+			Limit:       limit,
+		}
+}
+
+func eventKinds(name string) []store.OperationalEventKind {
+	switch name {
+	case "attention":
+		return attentionEventKinds
+	case "blocked":
+		return []store.OperationalEventKind{store.EventBudgetBlocked}
+	case "would_block":
+		return []store.OperationalEventKind{store.EventBudgetWouldBlock}
+	case "revoked":
+		return []store.OperationalEventKind{store.EventLeaseRevoked}
+	case "expired":
+		return []store.OperationalEventKind{store.EventLeaseExpired}
+	case "allowed":
+		return []store.OperationalEventKind{store.EventAllowed}
+	case "all":
+		return nil
+	default:
+		return nil
+	}
+}
+
+func eventFilterURL(path string, filter eventFilterView, limit int) string {
+	values := url.Values{
+		"event_kind":  {filter.Kind},
+		"event_since": {filter.Since},
+	}
+	if filter.PrincipalID != "" {
+		values.Set("event_agent", filter.PrincipalID)
+	}
+	if filter.Query != "" {
+		values.Set("event_q", filter.Query)
+	}
+	if limit > eventPageSize {
+		values.Set("event_limit", strconv.Itoa(limit))
+	}
+	return path + "?" + values.Encode()
+}
+
+func dashboardBuildLabel(version string) string {
+	if version == "" || version == "dev" {
+		return "Local development build"
+	}
+	return "Build " + version
 }
 
 func principalStatus(s store.PrincipalSummary) (string, string) {

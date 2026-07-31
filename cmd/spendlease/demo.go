@@ -113,7 +113,8 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 	revocations := gateway.NewRevocationSet()
 	killSwitch := gateway.NewKillSwitch(st, revocations)
 	dash, err := dashboard.New(dashboard.Options{
-		Store: st, Logger: logger, Version: version, Models: countModels(book), Revoker: killSwitch,
+		Store: st, Logger: logger, Version: version, Models: countModels(book),
+		PricingBreakdown: modelBreakdown(book), Revoker: killSwitch,
 	})
 	if err != nil {
 		return err

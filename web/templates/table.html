@@ -5,8 +5,8 @@
   click lands on an element that no longer exists.
 */}}
 <div id="table"
-     hx-get="/table"
-     hx-trigger="every 3s [!document.activeElement || document.activeElement.tagName !== 'BUTTON']"
+     hx-get="{{ .EventFilter.RefreshURL }}"
+     hx-trigger="every 3s [!document.activeElement || !document.activeElement.matches('button, input, select')]"
      hx-swap="outerHTML">
 
   {{ if .Notice }}
@@ -64,6 +64,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
             hx-vals='{"mode": "{{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }}"}'
             hx-target="#table"
             hx-swap="outerHTML"
+            hx-include="#event-filters"
             title="Switch to {{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }} mode">
             {{ .Mode }}
           </button>
@@ -103,7 +104,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
         <td class="seen">{{ .LastEvent }}</td>
         <td>
           {{ if .ActiveLeases }}
-          <button class="kill" hx-post="/admin/principals/{{ .ID }}/revoke" hx-target="#table" hx-swap="outerHTML" title="Revoke every active lease now">Revoke</button>
+          <button class="kill" hx-post="/admin/principals/{{ .ID }}/revoke" hx-target="#table" hx-swap="outerHTML" hx-include="#event-filters" title="Revoke every active lease now">Revoke</button>
           {{ else }}
           <span class="muted-control">No active leases</span>
           {{ end }}
@@ -121,10 +122,60 @@ spendlease keys provider set openai --key sk-...</code></pre>
   </table>
   </div>
 
-  {{ if .Events }}
   <section class="events" aria-labelledby="recent-events-title">
     <h2 id="recent-events-title">Recent events</h2>
-    <p class="section-hint">Allowed calls, budget decisions, revocations, and expirations.</p>
+    <p class="section-hint">Budget decisions and lease changes are shown first. Filters do not change the spend summary above.</p>
+
+    <form id="event-filters"
+          class="event-filters"
+          hx-get="/table"
+          hx-target="#table"
+          hx-swap="outerHTML"
+          hx-trigger="change delay:150ms, submit">
+      <label>
+        <span>Agent</span>
+        <select name="event_agent">
+          <option value="">All agents</option>
+          {{ range .EventFilter.PrincipalOptions }}
+          <option value="{{ .Value }}"{{ if .Selected }} selected{{ end }}>{{ .Label }}</option>
+          {{ end }}
+        </select>
+      </label>
+
+      <label>
+        <span>Result</span>
+        <select name="event_kind">
+          <option value="attention"{{ if eq .EventFilter.Kind "attention" }} selected{{ end }}>Attention needed</option>
+          <option value="all"{{ if eq .EventFilter.Kind "all" }} selected{{ end }}>All results</option>
+          <option value="blocked"{{ if eq .EventFilter.Kind "blocked" }} selected{{ end }}>Budget blocked</option>
+          <option value="would_block"{{ if eq .EventFilter.Kind "would_block" }} selected{{ end }}>Would block</option>
+          <option value="revoked"{{ if eq .EventFilter.Kind "revoked" }} selected{{ end }}>Lease revoked</option>
+          <option value="expired"{{ if eq .EventFilter.Kind "expired" }} selected{{ end }}>Lease expired</option>
+          <option value="allowed"{{ if eq .EventFilter.Kind "allowed" }} selected{{ end }}>Allowed</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Time</span>
+        <select name="event_since">
+          <option value="1h"{{ if eq .EventFilter.Since "1h" }} selected{{ end }}>Last hour</option>
+          <option value="24h"{{ if eq .EventFilter.Since "24h" }} selected{{ end }}>Last 24 hours</option>
+          <option value="7d"{{ if eq .EventFilter.Since "7d" }} selected{{ end }}>Last 7 days</option>
+          <option value="all"{{ if eq .EventFilter.Since "all" }} selected{{ end }}>All time</option>
+        </select>
+      </label>
+
+      <div class="event-search">
+        <label class="event-filter-label" for="event-q">Run or lease ID</label>
+        <div class="search-row">
+          <input id="event-q" type="search" name="event_q" value="{{ .EventFilter.Query }}" placeholder="run_… or lse_…" autocomplete="off">
+          <button type="submit">Search</button>
+          <button type="button" hx-get="/table" hx-target="#table" hx-swap="outerHTML" hx-params="none">Reset</button>
+        </div>
+      </div>
+    </form>
+
+    {{ if .Events }}
     <div class="table-scroll" tabindex="0" aria-label="Recent operational events">
     <table class="events-table">
       <thead>
@@ -149,8 +200,14 @@ spendlease keys provider set openai --key sk-...</code></pre>
       </tbody>
     </table>
     </div>
+    {{ else }}
+    <div class="events-empty">No events match these filters.</div>
+    {{ end }}
+
+    {{ if .EventFilter.HasMore }}
+    <button class="load-more" hx-get="{{ .EventFilter.NextURL }}" hx-target="#table" hx-swap="outerHTML">Load 20 more</button>
+    {{ end }}
   </section>
-  {{ end }}
   {{ end }}
 </div>
 {{ end }}

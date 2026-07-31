@@ -62,7 +62,7 @@ func TestEnforceModeReturnsStructured402BeforeEgress(t *testing.T) {
 	if d.Requested == "" || d.Shortfall == "" || d.Resolution == "" {
 		t.Errorf("402 does not explain the amount and remedy: %+v", d)
 	}
-	events, err := h.store.RecentOperationalEvents(context.Background(), 10, time.Now())
+	events, err := h.store.RecentOperationalEvents(context.Background(), store.OperationalEventFilter{Limit: 10}, time.Now())
 	if err != nil {
 		t.Fatalf("RecentOperationalEvents: %v", err)
 	}

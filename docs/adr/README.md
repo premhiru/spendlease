@@ -23,7 +23,8 @@ and references for current behavior.
 | [0010](0010-accounting-observes-the-response.md) | Accounting observes the response, it does not buffer it | Accepted |
 | [0011](0011-implicit-runs.md) | Every principal has an implicit run | Accepted |
 | [0012](0012-stream-options-injection.md) | Injecting stream_options, and withholding the chunk it produces | Accepted |
-| [0013](0013-the-dashboard-is-one-table.md) | The dashboard is one table | Accepted |
+| [0013](0013-the-dashboard-is-one-table.md) | The dashboard is one table | Accepted; filter decision superseded by 0017 |
 | [0014](0014-budget-decisions-are-atomic-and-hierarchical.md) | Budget decisions are atomic and hierarchical | Accepted |
 | [0015](0015-reservations-may-precede-leases.md) | Reservations may precede leases | Accepted |
 | [0016](0016-revocation-is-memory-first-and-durable.md) | Revocation is memory-first and durable | Accepted |
+| [0017](0017-filter-the-operational-event-stream.md) | Filter the operational event stream | Accepted |
