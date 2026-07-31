@@ -239,11 +239,16 @@ type BudgetEvent struct {
 type OperationalEventKind string
 
 const (
-	EventAllowed          OperationalEventKind = "allowed"
-	EventBudgetBlocked    OperationalEventKind = "budget_blocked"
+	// EventAllowed is a settled request recorded in the spend ledger.
+	EventAllowed OperationalEventKind = "allowed"
+	// EventBudgetBlocked is an enforced reservation rejected before egress.
+	EventBudgetBlocked OperationalEventKind = "budget_blocked"
+	// EventBudgetWouldBlock is an observe-mode reservation over its budget.
 	EventBudgetWouldBlock OperationalEventKind = "budget_would_block"
-	EventLeaseRevoked     OperationalEventKind = "lease_revoked"
-	EventLeaseExpired     OperationalEventKind = "lease_expired"
+	// EventLeaseRevoked marks a lease invalidated by an operator.
+	EventLeaseRevoked OperationalEventKind = "lease_revoked"
+	// EventLeaseExpired marks a lease whose validity window has ended.
+	EventLeaseExpired OperationalEventKind = "lease_expired"
 )
 
 // OperationalEvent combines existing durable records into one dashboard
