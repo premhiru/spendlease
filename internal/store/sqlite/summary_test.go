@@ -202,7 +202,7 @@ func TestOperationalSummaryAndEvents(t *testing.T) {
 		t.Error("summary has no last operational event")
 	}
 
-	events, err := s.RecentOperationalEvents(ctx, 20, time.Now())
+	events, err := s.RecentOperationalEvents(ctx, store.OperationalEventFilter{Limit: 20}, time.Now())
 	if err != nil {
 		t.Fatalf("RecentOperationalEvents: %v", err)
 	}
@@ -222,6 +222,42 @@ func TestOperationalSummaryAndEvents(t *testing.T) {
 		if !found {
 			t.Errorf("recent events do not include %s: %+v", kind, events)
 		}
+	}
+
+	filtered, err := s.RecentOperationalEvents(ctx, store.OperationalEventFilter{
+		PrincipalID: p.ID,
+		Kinds:       []store.OperationalEventKind{store.EventBudgetBlocked},
+		Query:       r.ID,
+		Since:       time.Now().Add(-time.Hour),
+		Limit:       10,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("filtered RecentOperationalEvents: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].Kind != store.EventBudgetBlocked {
+		t.Errorf("filtered events = %+v, want one budget block", filtered)
+	}
+
+	filtered, err = s.RecentOperationalEvents(ctx, store.OperationalEventFilter{
+		Query: revoked.ID,
+		Limit: 10,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("lease search: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].LeaseID != revoked.ID {
+		t.Errorf("lease search = %+v, want %s", filtered, revoked.ID)
+	}
+
+	filtered, err = s.RecentOperationalEvents(ctx, store.OperationalEventFilter{
+		PrincipalID: "prn_missing",
+		Limit:       10,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("principal filter: %v", err)
+	}
+	if len(filtered) != 0 {
+		t.Errorf("missing principal returned events: %+v", filtered)
 	}
 }
 

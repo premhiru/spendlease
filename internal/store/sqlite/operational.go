@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/premhiru/spendlease/internal/money"
@@ -28,13 +29,16 @@ func (s *Store) RecordBudgetEvent(ctx context.Context, e store.BudgetEvent) erro
 // lease lifecycle into one newest-first operator timeline.
 func (s *Store) RecentOperationalEvents(
 	ctx context.Context,
-	limit int,
+	filter store.OperationalEventFilter,
 	now time.Time,
 ) ([]store.OperationalEvent, error) {
-	if limit <= 0 {
-		limit = 20
+	if filter.Limit <= 0 {
+		filter.Limit = 20
 	}
-	const q = `
+	if filter.Limit > 200 {
+		filter.Limit = 200
+	}
+	query := `
 		SELECT kind, principal_id, principal_name, run_id, lease_id,
 		       provider, model, amount_nanos, remaining_nanos, event_at
 		FROM (
@@ -81,10 +85,35 @@ func (s *Store) RecentOperationalEvents(
 			JOIN principals p ON p.id = r.principal_id
 			WHERE le.revoked_at IS NULL AND le.expires_at <= ?
 		)
-		ORDER BY event_at DESC, event_order DESC
-		LIMIT ?`
+		WHERE 1 = 1`
 
-	rows, err := s.db.QueryContext(ctx, q, formatTime(now), limit)
+	args := []any{formatTime(now)}
+	if filter.PrincipalID != "" {
+		query += " AND principal_id = ?"
+		args = append(args, filter.PrincipalID)
+	}
+	if len(filter.Kinds) > 0 {
+		query += " AND kind IN (" + strings.TrimSuffix(strings.Repeat("?,", len(filter.Kinds)), ",") + ")"
+		for _, kind := range filter.Kinds {
+			if !validEventKind(kind) {
+				return nil, fmt.Errorf("store: unknown operational event kind %q", kind)
+			}
+			args = append(args, string(kind))
+		}
+	}
+	if filter.Query != "" {
+		pattern := "%" + escapeLike(filter.Query) + "%"
+		query += ` AND (run_id LIKE ? ESCAPE '\' OR lease_id LIKE ? ESCAPE '\')`
+		args = append(args, pattern, pattern)
+	}
+	if !filter.Since.IsZero() {
+		query += " AND event_at >= ?"
+		args = append(args, formatTime(filter.Since))
+	}
+	query += " ORDER BY event_at DESC, event_order DESC LIMIT ?"
+	args = append(args, filter.Limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, wrap(err, "reading operational events")
 	}
@@ -113,6 +142,12 @@ func (s *Store) RecentOperationalEvents(
 		out = append(out, e)
 	}
 	return out, wrap(rows.Err(), "iterating operational events")
+}
+
+func escapeLike(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `%`, `\%`)
+	return strings.ReplaceAll(value, `_`, `\_`)
 }
 
 func validEventKind(kind store.OperationalEventKind) bool {

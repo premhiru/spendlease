@@ -80,3 +80,4 @@ nav:
       - 14. Atomic hierarchical budgets: adr/0014-budget-decisions-are-atomic-and-hierarchical.md
       - 15. Reservations may precede leases: adr/0015-reservations-may-precede-leases.md
       - 16. Memory-first durable revocation: adr/0016-revocation-is-memory-first-and-durable.md
+      - 17. Filter the operational event stream: adr/0017-filter-the-operational-event-stream.md

@@ -2,12 +2,14 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,10 +26,22 @@ type fakeStore struct {
 	setID   string
 	setMode store.Mode
 	setErr  error
+
+	eventFilterMu sync.Mutex
+	eventFilter   store.OperationalEventFilter
 }
 
-func (f *fakeStore) RecentOperationalEvents(context.Context, int, time.Time) ([]store.OperationalEvent, error) {
+func (f *fakeStore) RecentOperationalEvents(_ context.Context, filter store.OperationalEventFilter, _ time.Time) ([]store.OperationalEvent, error) {
+	f.eventFilterMu.Lock()
+	defer f.eventFilterMu.Unlock()
+	f.eventFilter = filter
 	return f.events, f.err
+}
+
+func (f *fakeStore) lastEventFilter() store.OperationalEventFilter {
+	f.eventFilterMu.Lock()
+	defer f.eventFilterMu.Unlock()
+	return f.eventFilter
 }
 
 func (f *fakeStore) PrincipalSummaries(context.Context) ([]store.PrincipalSummary, error) {
@@ -70,11 +84,12 @@ func newTestDashboardWithRevoker(t *testing.T, st *fakeStore, revoker PrincipalR
 	t.Helper()
 
 	d, err := New(Options{
-		Store:   st,
-		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Version: "v-test",
-		Models:  26,
-		Revoker: revoker,
+		Store:            st,
+		Logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Version:          "v-test",
+		Models:           26,
+		PricingBreakdown: "openai 10 · anthropic 16",
+		Revoker:          revoker,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -266,6 +281,103 @@ func TestOperationalStatusAndRecentEventsAreShown(t *testing.T) {
 	}
 }
 
+func TestDashboardExplainsBuildAndPricingCount(t *testing.T) {
+	t.Parallel()
+
+	st := &fakeStore{summaries: []store.PrincipalSummary{
+		principal("prn_a", "agent", store.ModeEnforce, "0.00", 1, 0, 0, 0),
+	}}
+	body := get(t, newTestDashboard(t, st), "/").Body.String()
+	for _, want := range []string{
+		"Build v-test",
+		"Pricing loaded for 26 model IDs",
+		"openai 10 · anthropic 16",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard header is missing %q", want)
+		}
+	}
+	if got := dashboardBuildLabel("dev"); got != "Local development build" {
+		t.Errorf("development build label = %q", got)
+	}
+}
+
+func TestEventFiltersAreServerSideAndPreserved(t *testing.T) {
+	t.Parallel()
+
+	st := &fakeStore{summaries: []store.PrincipalSummary{
+		principal("prn_a", "agent-a", store.ModeEnforce, "0.00", 1, 0, 0, 0),
+		principal("prn_b", "agent-b", store.ModeEnforce, "0.00", 1, 0, 0, 0),
+	}}
+	body := get(t, newTestDashboard(t, st),
+		"/table?event_agent=prn_b&event_kind=allowed&event_since=7d&event_q=lse_target&event_limit=40").Body.String()
+
+	filter := st.lastEventFilter()
+	if filter.PrincipalID != "prn_b" || filter.Query != "lse_target" || filter.Limit != 41 {
+		t.Errorf("store filter = %+v", filter)
+	}
+	if len(filter.Kinds) != 1 || filter.Kinds[0] != store.EventAllowed {
+		t.Errorf("event kinds = %v, want allowed", filter.Kinds)
+	}
+	if age := time.Since(filter.Since); age < 6*24*time.Hour || age > 8*24*time.Hour {
+		t.Errorf("since is not about seven days ago: %s", filter.Since)
+	}
+	for _, want := range []string{
+		`value="prn_b" selected`,
+		`value="allowed" selected`,
+		`value="7d" selected`,
+		`value="lse_target"`,
+		`hx-include="#event-filters"`,
+		"No events match these filters",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("filtered dashboard is missing %q", want)
+		}
+	}
+}
+
+func TestDefaultEventFilterPrioritisesAttention(t *testing.T) {
+	t.Parallel()
+
+	st := &fakeStore{summaries: []store.PrincipalSummary{
+		principal("prn_a", "agent", store.ModeEnforce, "0.00", 1, 0, 0, 0),
+	}}
+	body := get(t, newTestDashboard(t, st), "/table").Body.String()
+	filter := st.lastEventFilter()
+	if len(filter.Kinds) != len(attentionEventKinds) || filter.Limit != eventPageSize+1 {
+		t.Errorf("default store filter = %+v", filter)
+	}
+	if filter.Since.IsZero() {
+		t.Error("default event filter has no time window")
+	}
+	if !strings.Contains(body, `value="attention" selected`) || !strings.Contains(body, `value="24h" selected`) {
+		t.Error("default attention and 24-hour choices are not selected")
+	}
+}
+
+func TestEventLoadMoreRequestsTheNextPageSize(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	events := make([]store.OperationalEvent, eventPageSize+1)
+	for i := range events {
+		events[i] = store.OperationalEvent{
+			Kind: store.EventBudgetBlocked, PrincipalName: "agent", RunID: fmt.Sprintf("run_%02d", i), CreatedAt: now,
+		}
+	}
+	st := &fakeStore{
+		summaries: []store.PrincipalSummary{principal("prn_a", "agent", store.ModeEnforce, "0.00", 1, 0, 0, 0)},
+		events:    events,
+	}
+	body := get(t, newTestDashboard(t, st), "/table").Body.String()
+	if !strings.Contains(body, "Load 20 more") || !strings.Contains(body, "event_limit=40") {
+		t.Errorf("load-more control is missing or has the wrong limit")
+	}
+	if strings.Contains(body, "run_20") {
+		t.Error("lookahead event was rendered instead of being reserved for load-more detection")
+	}
+}
+
 func TestRevokeReturnsVisibleConfirmation(t *testing.T) {
 	t.Parallel()
 
@@ -429,10 +541,10 @@ func TestSingleTableElement(t *testing.T) {
 	}
 }
 
-// TestRefreshPausesWhileAButtonIsFocused documents the other half of that
-// browser finding: a table that replaces itself every few seconds pulls the
-// mode toggle out from under whoever is reaching for it.
-func TestRefreshPausesWhileAButtonIsFocused(t *testing.T) {
+// TestRefreshPausesWhileAControlIsFocused documents the other half of that
+// browser finding: a table that replaces itself every few seconds pulls a
+// mode toggle or filter input out from under the operator.
+func TestRefreshPausesWhileAControlIsFocused(t *testing.T) {
 	t.Parallel()
 
 	st := &fakeStore{summaries: []store.PrincipalSummary{
@@ -444,7 +556,12 @@ func TestRefreshPausesWhileAButtonIsFocused(t *testing.T) {
 		t.Fatal("the table does not refresh at all")
 	}
 	if !strings.Contains(body, "activeElement") {
-		t.Error("the refresh has no guard, so it will swap the table while a button is being clicked")
+		t.Error("the refresh has no guard, so it will swap the table while a control is in use")
+	}
+	for _, control := range []string{"button", "input", "select"} {
+		if !strings.Contains(body, control) {
+			t.Errorf("the refresh guard does not pause for %s", control)
+		}
 	}
 }
 

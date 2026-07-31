@@ -203,6 +203,59 @@ tfoot .spend { color: var(--text); }
 .section-hint { margin: 0.125rem 0 0.75rem; color: var(--muted); font-size: 0.75rem; }
 .events table { font-size: 0.8125rem; }
 
+.event-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(9rem, 1fr)) minmax(18rem, 2fr);
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+.event-filters label > span:first-child,
+.event-filter-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.event-filters select,
+.event-filters input,
+.event-filters button,
+.load-more {
+  min-height: 2.25rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.25rem;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+.event-filters select,
+.event-filters input { width: 100%; padding: 0.375rem 0.5rem; }
+.event-filters button,
+.load-more { cursor: pointer; padding: 0.375rem 0.75rem; font-weight: 500; }
+.event-filters button:hover,
+.load-more:hover { background: var(--head); }
+.event-filters select:focus-visible,
+.event-filters input:focus-visible,
+.event-filters button:focus-visible,
+.load-more:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
+.search-row { display: flex; gap: 0.5rem; }
+.events-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: 0.5rem;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--muted);
+  background: var(--panel);
+}
+.load-more { display: block; margin: 0.75rem auto 0; }
+
 .empty {
   border: 1px solid var(--line);
   background: var(--panel);
@@ -229,8 +282,13 @@ footer { margin-top: 2.5rem; border-top: 1px solid var(--line); padding-top: 1.5
 footer p { margin: 0 0 0.25rem; }
 footer a { color: inherit; }
 
+@media (max-width: 60rem) {
+  .event-filters { grid-template-columns: repeat(2, minmax(10rem, 1fr)); }
+}
+
 @media (max-width: 40rem) {
   .wrap { padding: 1.5rem 1rem; }
   header { flex-direction: column; align-items: flex-start; }
   .meta { text-align: left; }
+  .event-filters { grid-template-columns: 1fr; }
 }

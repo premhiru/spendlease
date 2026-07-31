@@ -266,6 +266,21 @@ type OperationalEvent struct {
 	CreatedAt     time.Time
 }
 
+// OperationalEventFilter narrows the dashboard's operational timeline.
+// Zero values mean no constraint, except Limit which defaults in the store.
+type OperationalEventFilter struct {
+	// PrincipalID limits events to one agent.
+	PrincipalID string
+	// Kinds limits events to the selected result types.
+	Kinds []OperationalEventKind
+	// Query matches a run or lease ID.
+	Query string
+	// Since limits events to those at or after this instant.
+	Since time.Time
+	// Limit caps the number of newest rows returned.
+	Limit int
+}
+
 // PrincipalSummary is one principal with its totals, as the dashboard shows
 // it.
 //
@@ -429,7 +444,7 @@ type Store interface {
 	SpendByPrincipal(ctx context.Context, principalID string) (money.Nanos, error)
 	// RecentOperationalEvents returns allowed, blocked, revoked and expired
 	// activity newest first.
-	RecentOperationalEvents(ctx context.Context, limit int, now time.Time) ([]OperationalEvent, error)
+	RecentOperationalEvents(ctx context.Context, filter OperationalEventFilter, now time.Time) ([]OperationalEvent, error)
 
 	// Close releases the underlying resources.
 	Close() error

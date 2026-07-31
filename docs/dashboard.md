@@ -4,6 +4,12 @@ The dashboard is served at the gateway root, usually
 <http://localhost:4000>. It is a current operational summary, not an invoice
 or historical reporting interface.
 
+The header identifies the running build and the active price book. A locally
+compiled binary says `Local development build`; release builds show their
+version. `Pricing loaded for N model IDs` counts active price entries, not the
+number of models currently sold by every vendor. Hovering the count shows the
+provider breakdown.
+
 ## Table fields
 
 Rows are sorted by recorded spend, highest first.
@@ -64,6 +70,22 @@ expired events come from the durable lease records.
 This makes an enforced `402 budget_exceeded` visible without charging the
 vendor or requiring access to server logs.
 
+The default view shows events that need attention from the last 24 hours:
+budget blocks, observe-mode would-block decisions, revocations, and
+expirations. Successful calls remain available under **All results** or
+**Allowed**.
+
+Filters run in SQLite before rows are limited, so they can find an older match
+rather than searching only what is already visible. Events can be narrowed by:
+
+- agent;
+- result;
+- the last hour, 24 hours, seven days, or all time; and
+- a full or partial run or lease ID.
+
+**Load 20 more** expands the current filtered result, up to 200 rows. The
+summary table above is never changed by event filters.
+
 ## Remote access
 
 Loopback access does not require a credential. Non-loopback access is refused
@@ -76,6 +98,7 @@ dashboard. See [Self-hosting](self-hosting.md#dashboard-and-admin-access).
 ## Current limitations
 
 The dashboard does not provide charts, per-run drill-down, ledger export, or
-user accounts. The recent-events table is an operational view, not an invoice
-or full audit export. There is also no operator CLI for verifying or exporting
-the hash chain in v0.1; `ledger.VerifyChain` is currently a Go library function.
+user accounts. The recent-events table is an operational view capped at 200
+matching rows, not an invoice or full audit export. There is also no operator
+CLI for verifying or exporting the hash chain in v0.1; `ledger.VerifyChain` is
+currently a Go library function.
