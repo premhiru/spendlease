@@ -210,6 +210,7 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 		// ReverseProxy owns the response body: it copies it to the client and
 		// closes it afterwards. The hook wraps it without taking ownership.
+		//nolint:bodyclose // the body is closed by ReverseProxy after copying
 		ModifyResponse: g.modifyResponse(principal, provider, requestInfo, injectedUsage, reservationID, r, metered, unmeteredReason),
 
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
