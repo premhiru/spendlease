@@ -9,6 +9,10 @@
      hx-trigger="every 3s [!document.activeElement || document.activeElement.tagName !== 'BUTTON']"
      hx-swap="outerHTML">
 
+  {{ if .Notice }}
+  <div class="notice" role="status">{{ .Notice }}</div>
+  {{ end }}
+
   {{ if not .Principals }}
   <div class="empty">
     <p class="lead">No agents yet.</p>
@@ -18,15 +22,19 @@ spendlease keys provider set openai --key sk-...</code></pre>
   </div>
   {{ else }}
 
-  <table>
+  <div class="table-scroll" tabindex="0" aria-label="Agent usage summary">
+  <table class="summary-table">
     <thead>
       <tr>
         <th>Agent</th>
         <th>Mode</th>
+        <th>Status</th>
+        <th>Leases</th>
         <th class="num">Runs</th>
         <th class="num">Calls</th>
+        <th class="num">Blocked</th>
         <th class="num">Spend</th>
-        <th class="num">Last seen</th>
+        <th class="num">Last event</th>
         <th>Kill</th>
       </tr>
     </thead>
@@ -61,6 +69,14 @@ spendlease keys provider set openai --key sk-...</code></pre>
           </button>
         </td>
 
+        <td>
+          <span class="status {{ .StatusClass }}">{{ .Status }}</span>
+        </td>
+
+        <td class="lease-counts" title="Active, revoked, and expired lease totals">
+          {{ .LeaseSummary }}
+        </td>
+
         <td class="num">{{ .Runs }}</td>
 
         <td class="num">
@@ -73,21 +89,68 @@ spendlease keys provider set openai --key sk-...</code></pre>
           {{ end }}
         </td>
 
+        <td class="num">
+          {{ .BudgetBlocks }}
+          {{ if .WouldBlockEvents }}
+          <span class="estimated" title="Observe-mode requests that enforcement would have rejected">
+            +{{ .WouldBlockEvents }} observed
+          </span>
+          {{ end }}
+        </td>
+
         <td class="spend">${{ .Spend }}</td>
 
-        <td class="seen">{{ .LastSeen }}</td>
-        <td><button class="badge" hx-post="/admin/principals/{{ .ID }}/revoke" hx-target="#table" hx-swap="outerHTML" title="Revoke every lease now">Revoke</button></td>
+        <td class="seen">{{ .LastEvent }}</td>
+        <td>
+          {{ if .ActiveLeases }}
+          <button class="kill" hx-post="/admin/principals/{{ .ID }}/revoke" hx-target="#table" hx-swap="outerHTML" title="Revoke every active lease now">Revoke</button>
+          {{ else }}
+          <span class="muted-control">No active leases</span>
+          {{ end }}
+        </td>
       </tr>
       {{ end }}
     </tbody>
     <tfoot>
       <tr>
-        <td class="label" colspan="4">Total</td>
+        <td class="label" colspan="7">Total</td>
         <td class="spend">${{ .Total }}</td>
         <td colspan="2"></td>
       </tr>
     </tfoot>
   </table>
+  </div>
+
+  {{ if .Events }}
+  <section class="events" aria-labelledby="recent-events-title">
+    <h2 id="recent-events-title">Recent events</h2>
+    <p class="section-hint">Allowed calls, budget decisions, revocations, and expirations.</p>
+    <div class="table-scroll" tabindex="0" aria-label="Recent operational events">
+    <table class="events-table">
+      <thead>
+        <tr>
+          <th>Result</th>
+          <th>Agent</th>
+          <th>Run</th>
+          <th>Detail</th>
+          <th class="num">When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .Events }}
+        <tr>
+          <td><span class="status {{ .KindClass }}">{{ .Kind }}</span></td>
+          <td>{{ .PrincipalName }}</td>
+          <td class="event-id">{{ .RunID }}</td>
+          <td>{{ .Detail }}</td>
+          <td class="seen">{{ .When }}</td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {{ end }}
   {{ end }}
 </div>
 {{ end }}

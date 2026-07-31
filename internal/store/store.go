@@ -219,6 +219,53 @@ type BudgetDecision struct {
 	Shortfall money.Nanos
 }
 
+// BudgetEvent is a durable record of a reservation that did not fit. Enforced
+// events were rejected before egress; observe-mode events were forwarded but
+// retain the decision an operator would otherwise only see in logs.
+type BudgetEvent struct {
+	PrincipalID string
+	RunID       string
+	LeaseID     string
+	Provider    string
+	Model       string
+	Enforced    bool
+	Requested   money.Nanos
+	Remaining   money.Nanos
+	Shortfall   money.Nanos
+	CreatedAt   time.Time
+}
+
+// OperationalEventKind identifies one row in the dashboard's recent activity.
+type OperationalEventKind string
+
+const (
+	// EventAllowed is a settled request recorded in the spend ledger.
+	EventAllowed OperationalEventKind = "allowed"
+	// EventBudgetBlocked is an enforced reservation rejected before egress.
+	EventBudgetBlocked OperationalEventKind = "budget_blocked"
+	// EventBudgetWouldBlock is an observe-mode reservation over its budget.
+	EventBudgetWouldBlock OperationalEventKind = "budget_would_block"
+	// EventLeaseRevoked marks a lease invalidated by an operator.
+	EventLeaseRevoked OperationalEventKind = "lease_revoked"
+	// EventLeaseExpired marks a lease whose validity window has ended.
+	EventLeaseExpired OperationalEventKind = "lease_expired"
+)
+
+// OperationalEvent combines existing durable records into one dashboard
+// timeline. It does not replace the ledger or lease tables.
+type OperationalEvent struct {
+	Kind          OperationalEventKind
+	PrincipalID   string
+	PrincipalName string
+	RunID         string
+	LeaseID       string
+	Provider      string
+	Model         string
+	Amount        money.Nanos
+	Remaining     money.Nanos
+	CreatedAt     time.Time
+}
+
 // PrincipalSummary is one principal with its totals, as the dashboard shows
 // it.
 //
@@ -237,10 +284,20 @@ type PrincipalSummary struct {
 	Runs int
 	// OverBudgetRuns is how many of those have spent more than their budget.
 	//
-	// Nothing enforces budgets yet, so this is the "what would have been
-	// blocked" signal that makes observe mode worth running: every one of
-	// these requests was served, and would not have been under enforcement.
+	// This is the historical "would have been blocked" signal for observe-mode
+	// runs that actually settled above their budget.
 	OverBudgetRuns int
+	// Lease counts describe what credentials are usable now and why none are.
+	ActiveLeases  int
+	RevokedLeases int
+	ExpiredLeases int
+	// BudgetBlocks are enforce-mode denials. WouldBlockEvents are the same
+	// decision observed without enforcement.
+	BudgetBlocks     int
+	WouldBlockEvents int
+	// LastEvent includes successful calls, budget decisions, revocations and
+	// expirations. LastActivity remains the most recent settled spend.
+	LastEvent *time.Time
 	// LastActivity is when it last spent anything, nil if never.
 	LastActivity *time.Time
 }
@@ -269,9 +326,7 @@ type RunSummary struct {
 
 // OverBudget reports whether the run has spent more than its budget allows.
 //
-// Nothing enforces this yet, so it is what the dashboard uses to show what
-// *would* have been blocked had the principal been in enforce mode. A budget
-// of zero means unset rather than "no allowance", and is never over.
+// A budget of zero means unset rather than "no allowance", and is never over.
 func (r RunSummary) OverBudget() bool {
 	return r.Budget > 0 && r.Spend > r.Budget
 }
@@ -341,6 +396,8 @@ type Store interface {
 	// and inserts the hold when allowed. Observe mode passes enforce=false and
 	// records a hold even when the result says WouldBlock.
 	TryReserve(ctx context.Context, r Reservation, enforce bool) (BudgetDecision, error)
+	// RecordBudgetEvent persists a reservation decision that did not fit.
+	RecordBudgetEvent(ctx context.Context, e BudgetEvent) error
 	// GetReservation returns a reservation by ID, or ErrNotFound.
 	GetReservation(ctx context.Context, id string) (Reservation, error)
 	// ResolveReservation moves a pending reservation to a terminal status.
@@ -370,6 +427,9 @@ type Store interface {
 	// SpendByPrincipal totals what one principal has been charged across all
 	// of its runs.
 	SpendByPrincipal(ctx context.Context, principalID string) (money.Nanos, error)
+	// RecentOperationalEvents returns allowed, blocked, revoked and expired
+	// activity newest first.
+	RecentOperationalEvents(ctx context.Context, limit int, now time.Time) ([]OperationalEvent, error)
 
 	// Close releases the underlying resources.
 	Close() error

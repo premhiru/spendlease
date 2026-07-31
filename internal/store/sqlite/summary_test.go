@@ -151,6 +151,80 @@ func TestZeroBudgetIsNeverOverBudget(t *testing.T) {
 	}
 }
 
+func TestOperationalSummaryAndEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "operational-agent")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("2.00"))
+
+	seedLease(t, s, r.ID, time.Hour)
+	seedLease(t, s, r.ID, -time.Hour)
+	revoked := seedLease(t, s, r.ID, time.Hour)
+	if err := s.RevokeLease(ctx, revoked.ID, time.Now()); err != nil {
+		t.Fatalf("RevokeLease: %v", err)
+	}
+	charge(t, s, p, r, "0.25", false)
+
+	for _, enforced := range []bool{true, false} {
+		if err := s.RecordBudgetEvent(ctx, store.BudgetEvent{
+			PrincipalID: p.ID,
+			RunID:       r.ID,
+			Provider:    "openai",
+			Model:       "gpt-5.4-mini",
+			Enforced:    enforced,
+			Requested:   money.MustParseUSD("0.50"),
+			Remaining:   money.MustParseUSD("0.10"),
+			Shortfall:   money.MustParseUSD("0.40"),
+			CreatedAt:   time.Now(),
+		}); err != nil {
+			t.Fatalf("RecordBudgetEvent: %v", err)
+		}
+	}
+
+	summaries, err := s.PrincipalSummaries(ctx)
+	if err != nil {
+		t.Fatalf("PrincipalSummaries: %v", err)
+	}
+	if len(summaries) != 1 {
+		t.Fatalf("summaries = %d, want 1", len(summaries))
+	}
+	sum := summaries[0]
+	if sum.ActiveLeases != 1 || sum.RevokedLeases != 1 || sum.ExpiredLeases != 1 {
+		t.Errorf("lease counts = active %d, revoked %d, expired %d",
+			sum.ActiveLeases, sum.RevokedLeases, sum.ExpiredLeases)
+	}
+	if sum.BudgetBlocks != 1 || sum.WouldBlockEvents != 1 {
+		t.Errorf("budget counts = blocked %d, observed %d", sum.BudgetBlocks, sum.WouldBlockEvents)
+	}
+	if sum.LastEvent == nil {
+		t.Error("summary has no last operational event")
+	}
+
+	events, err := s.RecentOperationalEvents(ctx, 20, time.Now())
+	if err != nil {
+		t.Fatalf("RecentOperationalEvents: %v", err)
+	}
+	wantKinds := map[store.OperationalEventKind]bool{
+		store.EventAllowed:          false,
+		store.EventBudgetBlocked:    false,
+		store.EventBudgetWouldBlock: false,
+		store.EventLeaseRevoked:     false,
+		store.EventLeaseExpired:     false,
+	}
+	for _, event := range events {
+		if _, ok := wantKinds[event.Kind]; ok {
+			wantKinds[event.Kind] = true
+		}
+	}
+	for kind, found := range wantKinds {
+		if !found {
+			t.Errorf("recent events do not include %s: %+v", kind, events)
+		}
+	}
+}
+
 func TestRunSummaries(t *testing.T) {
 	t.Parallel()
 

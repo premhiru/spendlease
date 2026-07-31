@@ -451,8 +451,9 @@ func (s *Store) RevokeLeasesForPrincipal(ctx context.Context, principalID string
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE leases SET revoked_at = ?
 		 WHERE revoked_at IS NULL
+		   AND expires_at > ?
 		   AND run_id IN (SELECT id FROM runs WHERE principal_id = ?)`,
-		formatTime(at), principalID)
+		formatTime(at), formatTime(at), principalID)
 	if err != nil {
 		return 0, wrap(err, "revoking leases for principal")
 	}

@@ -60,7 +60,7 @@ body {
   font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-.wrap { max-width: 68rem; margin: 0 auto; padding: 2.5rem 1.5rem; }
+.wrap { max-width: 84rem; margin: 0 auto; padding: 2.5rem 1.5rem; }
 
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
 h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
@@ -77,6 +77,16 @@ h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
   font-size: 0.875rem;
 }
 
+.notice {
+  margin-bottom: 1rem;
+  border: 1px solid #6ee7b7;
+  background: var(--ok-bg);
+  color: var(--ok-text);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -86,6 +96,15 @@ table {
   overflow: hidden;
   font-size: 0.875rem;
 }
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+}
+.table-scroll:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
+.summary-table { min-width: 64rem; }
+.events-table { min-width: 46rem; }
 
 thead th {
   background: var(--head);
@@ -108,6 +127,8 @@ tbody tr:hover { background: var(--head); }
 .agent-name { font-weight: 500; }
 .agent-id { font-size: 0.75rem; color: var(--faint); font-variant-ligatures: none; }
 .seen { text-align: right; font-size: 0.75rem; color: var(--muted); }
+.lease-counts { min-width: 8rem; font-size: 0.75rem; color: var(--muted); }
+.event-id { color: var(--faint); font-size: 0.75rem; font-variant-ligatures: none; }
 
 .badge {
   display: inline-block;
@@ -119,6 +140,21 @@ tbody tr:hover { background: var(--head); }
   background: var(--danger-bg);
   color: var(--danger-text);
 }
+
+.status {
+  display: inline-block;
+  white-space: nowrap;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+}
+.status.ok { background: var(--ok-bg); color: var(--ok-text); }
+.status.danger { background: var(--danger-bg); color: var(--danger-text); }
+.status.warning { background: var(--warn-bg); color: var(--warn-text); }
+.status.muted { color: var(--muted); }
 
 .estimated { margin-left: 0.25rem; font-size: 0.75rem; color: #b45309; }
 @media (prefers-color-scheme: dark) { .estimated { color: #fbbf24; } }
@@ -138,6 +174,21 @@ tbody tr:hover { background: var(--head); }
 .mode:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
 .mode.enforce { background: var(--ok-bg); color: var(--ok-text); }
 
+.kill {
+  border: 0;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+.kill:hover { filter: brightness(0.95); }
+.kill:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
+.muted-control { color: var(--faint); font-size: 0.75rem; white-space: nowrap; }
+
 tfoot td {
   border-top: 2px solid var(--line-strong);
   background: var(--head);
@@ -146,6 +197,11 @@ tfoot td {
 }
 tfoot .label { font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; }
 tfoot .spend { color: var(--text); }
+
+.events { margin-top: 1.5rem; }
+.events h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+.section-hint { margin: 0.125rem 0 0.75rem; color: var(--muted); font-size: 0.75rem; }
+.events table { font-size: 0.8125rem; }
 
 .empty {
   border: 1px solid var(--line);
@@ -177,5 +233,4 @@ footer a { color: inherit; }
   .wrap { padding: 1.5rem 1rem; }
   header { flex-direction: column; align-items: flex-start; }
   .meta { text-align: left; }
-  table { display: block; overflow-x: auto; }
 }
