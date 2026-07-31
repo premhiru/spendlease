@@ -3,6 +3,7 @@ package openai
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -19,27 +20,50 @@ const DefaultBaseURL = "https://api.openai.com"
 // Provider is the OpenAI adapter.
 type Provider struct {
 	baseURL *url.URL
+	name    string
+	paths   []string
+}
+
+var defaultPaths = []string{
+	"/v1/chat/completions",
+	"/v1/completions",
+	"/v1/responses",
+	"/v1/embeddings",
+	"/v1/moderations",
+	"/v1/images",
+	"/v1/audio",
+	"/v1/models",
 }
 
 // New returns an adapter pointed at the default OpenAI API.
 func New() *Provider {
 	u, _ := url.Parse(DefaultBaseURL)
-	return &Provider{baseURL: u}
+	return &Provider{baseURL: u, name: Name, paths: defaultPaths}
 }
 
 // NewWithBaseURL returns an adapter pointed somewhere else, which is how the
 // tests aim it at a fake upstream and how an operator points it at an
 // OpenAI-compatible gateway.
 func NewWithBaseURL(raw string) (*Provider, error) {
+	return NewCompatible(Name, raw)
+}
+
+// NewCompatible creates a named adapter for an OpenAI-compatible vendor.
+// The explicit /<provider>/ prefix is how callers select it when several
+// vendors expose the same paths.
+func NewCompatible(name, raw string) (*Provider, error) {
+	if name == "" {
+		return nil, fmt.Errorf("provider name must not be empty")
+	}
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
-	return &Provider{baseURL: u}, nil
+	return &Provider{baseURL: u, name: name, paths: defaultPaths}, nil
 }
 
-// Name returns "openai".
-func (p *Provider) Name() string { return Name }
+// Name returns the provider identifier used to construct the adapter.
+func (p *Provider) Name() string { return p.name }
 
 // BaseURL returns the upstream root.
 func (p *Provider) BaseURL() *url.URL { return p.baseURL }
@@ -49,16 +73,7 @@ func (p *Provider) BaseURL() *url.URL { return p.baseURL }
 // /v1/models is also claimed by Anthropic; the registry disambiguates. Every
 // other path here is OpenAI-only.
 func (p *Provider) Paths() []string {
-	return []string{
-		"/v1/chat/completions",
-		"/v1/completions",
-		"/v1/responses",
-		"/v1/embeddings",
-		"/v1/moderations",
-		"/v1/images",
-		"/v1/audio",
-		"/v1/models",
-	}
+	return p.paths
 }
 
 // Authorize sets the OpenAI bearer credential.
@@ -99,9 +114,7 @@ func (p *Provider) UsageFromResponse(body []byte) (providers.Usage, bool) {
 	if m == nil {
 		return providers.Usage{}, false
 	}
-	return providers.UsageFrom(m,
-		[]string{"prompt_tokens", "input_tokens"},
-		[]string{"completion_tokens", "output_tokens"})
+	return providers.OpenAIUsageFrom(m)
 }
 
 // UsageFromStreamEvent reads usage from one streamed chunk.

@@ -1,0 +1,22 @@
+# Kimi standard pay-as-you-go text-token prices checked 2026-07-31.
+version: 2
+effective: 2026-07-31
+providers:
+  kimi:
+    source: https://platform.kimi.ai/
+    models:
+      kimi-k3:
+        input_per_1m: 3.00
+        cached_input_per_1m: 0.30
+        output_per_1m: 15.00
+        default_max_tokens: 8192
+      kimi-k2.7-code:
+        input_per_1m: 0.95
+        cached_input_per_1m: 0.19
+        output_per_1m: 4.00
+        default_max_tokens: 8192
+      kimi-k2.6:
+        input_per_1m: 0.95
+        cached_input_per_1m: 0.16
+        output_per_1m: 4.00
+        default_max_tokens: 8192

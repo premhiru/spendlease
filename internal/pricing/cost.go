@@ -13,7 +13,10 @@ const tokensPerUnit = 1_000_000
 // Usage is a token count to be priced.
 type Usage struct {
 	// InputTokens is the prompt size.
-	InputTokens int64
+	InputTokens        int64
+	CachedInputTokens  int64
+	CacheWrite5mTokens int64
+	CacheWrite1hTokens int64
 	// OutputTokens is the completion size, or the reserved ceiling when the
 	// request has not completed yet.
 	OutputTokens int64
@@ -23,7 +26,19 @@ type Usage struct {
 //
 // The result is exact: no floating point is involved at any step.
 func (p Price) Cost(u Usage) money.Nanos {
-	return rate(u.InputTokens, p.InputPer1M) + rate(u.OutputTokens, p.OutputPer1M)
+	inputRate, cachedRate := p.InputPer1M, p.CachedInputPer1M
+	write5mRate, write1hRate, outputRate := p.CacheWrite5mPer1M, p.CacheWrite1hPer1M, p.OutputPer1M
+	totalInput := u.InputTokens + u.CachedInputTokens + u.CacheWrite5mTokens + u.CacheWrite1hTokens
+	if p.LongContextThreshold > 0 && totalInput >= p.LongContextThreshold {
+		inputRate, cachedRate = p.LongInputPer1M, p.LongCachedInputPer1M
+		write5mRate, write1hRate = p.LongCacheWritePer1M, p.LongCacheWritePer1M
+		outputRate = p.LongOutputPer1M
+	}
+	return rate(u.InputTokens, inputRate) +
+		rate(u.CachedInputTokens, cachedRate) +
+		rate(u.CacheWrite5mTokens, write5mRate) +
+		rate(u.CacheWrite1hTokens, write1hRate) +
+		rate(u.OutputTokens, outputRate)
 }
 
 // InputCost prices only the prompt.

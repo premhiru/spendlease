@@ -213,6 +213,29 @@ func TestBaseURLOverride(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleProviderUsesExplicitPrefix(t *testing.T) {
+	t.Parallel()
+
+	oa := openai.New()
+	deepseek, err := openai.NewCompatible("deepseek", "https://api.deepseek.com")
+	if err != nil {
+		t.Fatalf("NewCompatible: %v", err)
+	}
+	r, err := providers.NewRegistry(oa, deepseek)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/deepseek/v1/chat/completions", nil)
+	p, path, err := r.Resolve(req)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if p.Name() != "deepseek" || path != "/v1/chat/completions" {
+		t.Errorf("resolved to %s %s, want deepseek /v1/chat/completions", p.Name(), path)
+	}
+}
+
 func TestDefaultBaseURLs(t *testing.T) {
 	t.Parallel()
 

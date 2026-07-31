@@ -1,0 +1,21 @@
+# Z.AI standard text-token prices checked 2026-07-31.
+version: 2
+effective: 2026-07-31
+providers:
+  zai:
+    source: https://docs.z.ai/guides/overview/pricing
+    models:
+      glm-5.2: {input_per_1m: 1.40, cached_input_per_1m: 0.26, output_per_1m: 4.40, default_max_tokens: 8192}
+      glm-5.1: {input_per_1m: 1.40, cached_input_per_1m: 0.26, output_per_1m: 4.40, default_max_tokens: 8192}
+      glm-5: {input_per_1m: 1.00, cached_input_per_1m: 0.20, output_per_1m: 3.20, default_max_tokens: 8192}
+      glm-5-turbo: {input_per_1m: 1.20, cached_input_per_1m: 0.24, output_per_1m: 4.00, default_max_tokens: 8192}
+      glm-4.7: {input_per_1m: 0.60, cached_input_per_1m: 0.11, output_per_1m: 2.20, default_max_tokens: 8192}
+      glm-4.7-flashx: {input_per_1m: 0.07, cached_input_per_1m: 0.01, output_per_1m: 0.40, default_max_tokens: 8192}
+      glm-4.6: {input_per_1m: 0.60, cached_input_per_1m: 0.11, output_per_1m: 2.20, default_max_tokens: 8192}
+      glm-4.5: {input_per_1m: 0.60, cached_input_per_1m: 0.11, output_per_1m: 2.20, default_max_tokens: 8192}
+      glm-4.5-x: {input_per_1m: 2.20, cached_input_per_1m: 0.45, output_per_1m: 8.90, default_max_tokens: 8192}
+      glm-4.5-air: {input_per_1m: 0.20, cached_input_per_1m: 0.03, output_per_1m: 1.10, default_max_tokens: 8192}
+      glm-4.5-airx: {input_per_1m: 1.10, cached_input_per_1m: 0.22, output_per_1m: 4.50, default_max_tokens: 8192}
+      glm-4-32b-0414-128k: {input_per_1m: 0.10, output_per_1m: 0.10, default_max_tokens: 4096}
+      glm-4.7-flash: {input_per_1m: 0, cached_input_per_1m: 0, output_per_1m: 0, default_max_tokens: 8192, free: true}
+      glm-4.5-flash: {input_per_1m: 0, cached_input_per_1m: 0, output_per_1m: 0, default_max_tokens: 8192, free: true}

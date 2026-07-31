@@ -1,6 +1,7 @@
 # spendlease
 
-`spendlease` is a self-hosted reverse proxy for OpenAI and Anthropic. It keeps
+`spendlease` is a self-hosted reverse proxy for OpenAI, Anthropic, Kimi,
+DeepSeek, xAI, Gemini, and Z.AI. It keeps
 vendor keys out of agent environments, gives each agent a short-lived lease,
 checks a budget before forwarding a request, and records calculated token cost
 in an append-only ledger.
@@ -52,6 +53,11 @@ leases, and the environment variables used by an application.
 
 An application only needs a different base URL and a spendlease lease in place
 of its vendor API key. The rest of the vendor SDK remains unchanged.
+
+OpenAI and Anthropic keep their familiar root paths. The other providers use
+an explicit prefix such as `/deepseek` or `/gemini` to avoid ambiguous
+OpenAI-compatible routes. [Providers](docs/providers.md) lists every base URL
+and includes a complete example.
 
 The optional thin SDK packages validate the lease and produce the vendor
 client options without wrapping the vendor API:
@@ -134,7 +140,7 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **No anomaly detection or least-cost routing.** It enforces the budget you set; it will not second-guess your model choice.
 - **No payment rails.** It authorizes spend against vendor accounts you already have. It does not move money.
 - **Not a proxy for correctness.** It counts dollars, not tokens-well-spent.
-- **Not a complete vendor-invoice ceiling.** Cache and long-context multipliers, regional tiers, tool fees, and other non-token charges are not modeled yet. Validate a workload in observe mode before relying on enforcement.
+- **Not a complete vendor-invoice ceiling.** Standard text-token rates, reported cache usage, and documented long-context tiers are modeled. Batch, flex, fast, priority, regional, cache-storage, tool, media, and other non-token charges are not. Validate a workload in observe mode before relying on enforcement.
 
 ## How it works
 
@@ -183,14 +189,15 @@ TestStreamingGatewayOverheadP99 -v` to measure the same path locally.
 Costs come from a versioned price book in [`/pricing`](pricing/): plain YAML with effective dates, hot-reloadable, data rather than code.
 
 ```yaml
-version: 1
-effective: 2026-07-01
+version: 2
+effective: 2026-07-31
 providers:
-  openai:
+  deepseek:
     models:
-      gpt-4o:
-        input_per_1m: 2.50
-        output_per_1m: 10.00
+      deepseek-v4-flash:
+        input_per_1m: 0.14
+        cached_input_per_1m: 0.0028
+        output_per_1m: 0.28
         default_max_tokens: 4096
 ```
 
@@ -204,6 +211,7 @@ first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
 | | |
 |---|---|
 | [Getting started](docs/getting-started.md) | Install, first principal, first lease |
+| [Providers](docs/providers.md) | Credentials, base URLs, routing, and pricing scope |
 | [CLI reference](docs/cli-reference.md) | Commands, flags, environment variables |
 | [Dashboard](docs/dashboard.md) | Fields, controls, access, and limitations |
 | [Concepts](docs/concepts.md) | Principal, run, lease, reservation |

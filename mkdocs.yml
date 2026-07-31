@@ -51,6 +51,7 @@ plugins:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Providers: providers.md
   - CLI reference: cli-reference.md
   - SDKs and examples: sdks.md
   - Dashboard: dashboard.md

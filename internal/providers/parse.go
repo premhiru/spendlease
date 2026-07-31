@@ -28,14 +28,33 @@ type RequestInfo struct {
 
 // Usage is a token count reported by a vendor.
 type Usage struct {
-	// InputTokens is the prompt size the vendor charged for.
+	// InputTokens is the uncached prompt size the vendor charged at the base
+	// input rate.
 	InputTokens int64
+	// CachedInputTokens is the part of the prompt served from a provider cache.
+	CachedInputTokens int64
+	// CacheWrite5mTokens and CacheWrite1hTokens are Anthropic/OpenAI cache
+	// creation tokens. Providers that report a cache write without a TTL use
+	// the 5-minute bucket, which is the common/default cache lifetime.
+	CacheWrite5mTokens int64
+	CacheWrite1hTokens int64
 	// OutputTokens is the completion size the vendor charged for.
 	OutputTokens int64
 }
 
 // IsZero reports whether no usage has been recorded.
-func (u Usage) IsZero() bool { return u.InputTokens == 0 && u.OutputTokens == 0 }
+func (u Usage) IsZero() bool {
+	return u.InputTokens == 0 && u.CachedInputTokens == 0 &&
+		u.CacheWrite5mTokens == 0 && u.CacheWrite1hTokens == 0 &&
+		u.OutputTokens == 0
+}
+
+// TotalInputTokens returns every input token category. The ledger keeps this
+// aggregate for a stable public schema while settlement prices each category
+// at its own rate.
+func (u Usage) TotalInputTokens() int64 {
+	return u.InputTokens + u.CachedInputTokens + u.CacheWrite5mTokens + u.CacheWrite1hTokens
+}
 
 // Merge folds another usage report into this one.
 //
@@ -47,9 +66,63 @@ func (u *Usage) Merge(other Usage) {
 	if other.InputTokens > 0 {
 		u.InputTokens = other.InputTokens
 	}
+	if other.CachedInputTokens > 0 {
+		u.CachedInputTokens = other.CachedInputTokens
+	}
+	if other.CacheWrite5mTokens > 0 {
+		u.CacheWrite5mTokens = other.CacheWrite5mTokens
+	}
+	if other.CacheWrite1hTokens > 0 {
+		u.CacheWrite1hTokens = other.CacheWrite1hTokens
+	}
 	if other.OutputTokens > 0 {
 		u.OutputTokens = other.OutputTokens
 	}
+}
+
+// OpenAIUsageFrom reads the common OpenAI-compatible usage shape, including
+// the cache fields used by OpenAI, xAI, Gemini, Kimi, DeepSeek and Z.AI.
+func OpenAIUsageFrom(m map[string]any) (Usage, bool) {
+	raw, ok := m["usage"].(map[string]any)
+	if !ok {
+		return Usage{}, false
+	}
+
+	prompt := IntField(raw, "prompt_tokens", "input_tokens")
+	cached := IntField(raw, "prompt_cache_hit_tokens", "cached_tokens")
+	cacheWrite := IntField(raw, "cache_write_tokens", "cache_creation_tokens")
+	if details, ok := raw["prompt_tokens_details"].(map[string]any); ok {
+		if n := IntField(details, "cached_tokens"); n > 0 {
+			cached = n
+		}
+		if n := IntField(details, "cache_write_tokens", "cache_creation_tokens"); n > 0 {
+			cacheWrite = n
+		}
+	}
+	if details, ok := raw["input_tokens_details"].(map[string]any); ok {
+		if n := IntField(details, "cached_tokens"); n > 0 {
+			cached = n
+		}
+		if n := IntField(details, "cache_write_tokens", "cache_creation_tokens"); n > 0 {
+			cacheWrite = n
+		}
+	}
+
+	uncached := IntField(raw, "prompt_cache_miss_tokens")
+	if uncached == 0 {
+		uncached = prompt - cached - cacheWrite
+	}
+	if uncached < 0 {
+		uncached = 0
+	}
+
+	u := Usage{
+		InputTokens:        uncached,
+		CachedInputTokens:  cached,
+		CacheWrite5mTokens: cacheWrite,
+		OutputTokens:       IntField(raw, "completion_tokens", "output_tokens"),
+	}
+	return u, !u.IsZero()
 }
 
 // promptTextKeys are the request fields whose text contributes to the prompt.

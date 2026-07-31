@@ -1,0 +1,17 @@
+# DeepSeek standard text-token prices checked 2026-07-31.
+version: 2
+effective: 2026-07-31
+providers:
+  deepseek:
+    source: https://api-docs.deepseek.com/quick_start/pricing
+    models:
+      deepseek-v4-flash:
+        input_per_1m: 0.14
+        cached_input_per_1m: 0.0028
+        output_per_1m: 0.28
+        default_max_tokens: 8192
+      deepseek-v4-pro:
+        input_per_1m: 0.435
+        cached_input_per_1m: 0.003625
+        output_per_1m: 0.87
+        default_max_tokens: 8192

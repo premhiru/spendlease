@@ -1,0 +1,76 @@
+# Anthropic standard first-party token prices checked 2026-07-31. The input
+# categories match the usage object: uncached input, 5m/1h cache creation,
+# cache reads, and output. Non-token tool fees and regional/speed multipliers
+# are not part of token accounting.
+version: 2
+effective: 2026-07-31
+providers:
+  anthropic:
+    source: https://platform.claude.com/docs/en/about-claude/pricing
+    models:
+      claude-fable-5: &fable
+        input_per_1m: 10.00
+        cached_input_per_1m: 1.00
+        cache_write_5m_per_1m: 12.50
+        cache_write_1h_per_1m: 20.00
+        output_per_1m: 50.00
+        default_max_tokens: 8192
+      claude-mythos-5:
+        <<: *fable
+        note: Limited availability under Project Glasswing.
+      claude-opus-5: &opus5
+        input_per_1m: 5.00
+        cached_input_per_1m: 0.50
+        cache_write_5m_per_1m: 6.25
+        cache_write_1h_per_1m: 10.00
+        output_per_1m: 25.00
+        default_max_tokens: 8192
+      claude-opus-4-8: *opus5
+      claude-opus-4-7: *opus5
+      claude-opus-4-6: *opus5
+      claude-opus-4-5-20251101:
+        <<: *opus5
+        aliases: [claude-opus-4-5]
+      claude-opus-4-1-20250805:
+        aliases: [claude-opus-4-1]
+        input_per_1m: 15.00
+        cached_input_per_1m: 1.50
+        cache_write_5m_per_1m: 18.75
+        cache_write_1h_per_1m: 30.00
+        output_per_1m: 75.00
+        default_max_tokens: 4096
+        note: Deprecated; retires 2026-08-05.
+      claude-sonnet-5:
+        input_per_1m: 2.00
+        cached_input_per_1m: 0.20
+        cache_write_5m_per_1m: 2.50
+        cache_write_1h_per_1m: 4.00
+        output_per_1m: 10.00
+        default_max_tokens: 8192
+        note: Introductory rate through 2026-08-31.
+      claude-sonnet-4-6: &sonnet
+        input_per_1m: 3.00
+        cached_input_per_1m: 0.30
+        cache_write_5m_per_1m: 3.75
+        cache_write_1h_per_1m: 6.00
+        output_per_1m: 15.00
+        default_max_tokens: 8192
+      claude-sonnet-4-5-20250929:
+        <<: *sonnet
+        aliases: [claude-sonnet-4-5]
+      claude-haiku-4-5-20251001:
+        aliases: [claude-haiku-4-5]
+        input_per_1m: 1.00
+        cached_input_per_1m: 0.10
+        cache_write_5m_per_1m: 1.25
+        cache_write_1h_per_1m: 2.00
+        output_per_1m: 5.00
+        default_max_tokens: 4096
+      claude-haiku-3-5:
+        input_per_1m: 0.80
+        cached_input_per_1m: 0.08
+        cache_write_5m_per_1m: 1.00
+        cache_write_1h_per_1m: 1.60
+        output_per_1m: 4.00
+        default_max_tokens: 4096
+        note: Retired on the first-party API; retained for historical and partner-platform accounting.

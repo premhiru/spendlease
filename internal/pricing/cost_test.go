@@ -163,6 +163,37 @@ func TestPriceCost(t *testing.T) {
 	})
 }
 
+func TestPriceCostUsesCacheAndLongContextRates(t *testing.T) {
+	t.Parallel()
+
+	p := Price{
+		InputPer1M:           money.MustParseUSD("2.00"),
+		CachedInputPer1M:     money.MustParseUSD("0.20"),
+		CacheWrite5mPer1M:    money.MustParseUSD("2.50"),
+		CacheWrite1hPer1M:    money.MustParseUSD("4.00"),
+		OutputPer1M:          money.MustParseUSD("12.00"),
+		LongContextThreshold: 200_000,
+		LongInputPer1M:       money.MustParseUSD("4.00"),
+		LongCachedInputPer1M: money.MustParseUSD("0.40"),
+		LongCacheWritePer1M:  money.MustParseUSD("5.00"),
+		LongOutputPer1M:      money.MustParseUSD("18.00"),
+	}
+
+	short := Usage{
+		InputTokens: 50_000, CachedInputTokens: 25_000,
+		CacheWrite5mTokens: 10_000, CacheWrite1hTokens: 5_000,
+		OutputTokens: 10_000,
+	}
+	if got := p.Cost(short); got != money.MustParseUSD("0.27") {
+		t.Errorf("short cost = %s, want 0.27", got)
+	}
+
+	long := Usage{InputTokens: 100_000, CachedInputTokens: 100_000, OutputTokens: 10_000}
+	if got := p.Cost(long); got != money.MustParseUSD("0.62") {
+		t.Errorf("long cost = %s, want 0.62", got)
+	}
+}
+
 // TestCostIsAdditive is the property the ledger depends on: charging a
 // conversation in pieces must total the same as charging it in one go, or
 // per-run spend would drift from the invoice.

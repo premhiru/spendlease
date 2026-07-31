@@ -179,6 +179,10 @@ For Anthropic, store the key with `keys provider set anthropic`, include
 `anthropic` in the lease's provider scope, and use
 `base_url="http://localhost:4000"`.
 
+Kimi, DeepSeek, xAI, Gemini, and Z.AI use their OpenAI-compatible APIs through
+an explicit provider prefix. [Providers](providers.md) lists the exact base
+URL and credential name for each one.
+
 ### curl
 
 ```bash
@@ -216,8 +220,8 @@ expired or been revoked; issue a fresh lease and retry.
 ### `403 lease_scope_denied`
 
 The lease does not include the provider selected by the request path. Issue a
-new lease with `--providers openai`, `--providers anthropic`, or both as a
-comma-separated list.
+new lease with that provider in `--providers`; multiple names are a
+comma-separated list such as `--providers openai,anthropic,gemini`.
 
 ### `402 budget_exceeded`
 
@@ -236,8 +240,9 @@ was stored.
 ### `404 unknown_route`
 
 The request path is not claimed by a provider adapter. Prefix the path with
-`/openai` or `/anthropic` to choose a provider explicitly; the prefix is
-removed before forwarding. See [API reference](api-reference.md#ambiguous-and-unknown-paths).
+its provider name, such as `/openai`, `/anthropic`, or `/deepseek`; the prefix
+is removed before forwarding. See
+[API reference](api-reference.md#ambiguous-and-unknown-paths).
 
 ## Next steps
 
