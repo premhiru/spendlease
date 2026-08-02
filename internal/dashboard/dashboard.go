@@ -1,9 +1,5 @@
-// Package dashboard renders the spend table.
-//
-// It is deliberately one table, sorted by spend descending, with no charts.
-// The question an operator has during an incident is "which agent is costing
-// me money right now", and that is answered by sorting rather than by
-// plotting. A chart of spend over time answers a question nobody asks at 3am.
+// Package dashboard renders the spend summary and filtered operational event
+// stream, with state-changing controls protected by Guard.
 package dashboard
 
 import (

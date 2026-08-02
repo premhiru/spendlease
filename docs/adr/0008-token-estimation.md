@@ -1,34 +1,57 @@
-# 8. Estimating tokens without a tokenizer
+# 8. Bound reservations independently from usage estimates
 
 - **Status:** Accepted
 - **Date:** 2026-07-29
+- **Updated:** 2026-07-31
 
 ## Context
 
-A reservation has to be made before a request runs, which means estimating input tokens locally. The vendor reports exact counts on completion, so the estimate only has to be good enough to size a hold that is settled minutes later.
+A reservation has to be made before a request runs, which means bounding input
+tokens locally. The vendor reports exact counts on completion, but an
+enforcement decision cannot rely on a heuristic that may under-count.
 
-The accurate option is a real BPE tokenizer. That means vendoring a vocabulary per model family, keeping those in step with model releases, and paying the binary size and load cost for every one. It also does not fully solve the problem: vendors change tokenizers between generations. Anthropic's own documentation notes that Claude 4.7 and later "use a newer tokenizer... approximately 30% more tokens for the same text", so even a correct tokenizer for one model is wrong for its successor.
+A real BPE tokenizer would require a vocabulary per model family and would
+still lag tokenizer changes. A prose heuristic such as one token per four
+characters is useful for estimating actual usage, but code, JSON, punctuation,
+and new model families can exceed it.
 
 ## Decision
 
-Estimate with a documented `chars/4` heuristic, and flag every estimate as approximate.
+Use two deliberately different estimates:
 
-Both major vendors publish essentially this rule of thumb: one token is roughly four characters of English. The estimate is deliberately biased upward — it rounds up, and never returns zero for non-empty input.
+1. **Authorization:** reserve one input token per inspected request byte, plus
+   a fixed allowance for provider-added framing and special tokens. Byte-level
+   tokenizers cannot encode request content into more content tokens than
+   bytes. This ceiling is intentionally conservative and is replaced at
+   settlement.
+2. **Fallback settlement:** when the provider reports no usage, retain the
+   documented `chars/4` estimate, weighted upward for dense scripts, and mark
+   the ledger entry estimated. This is a best estimate of actual usage, not an
+   authorization boundary.
 
-**Dense scripts are weighted separately.** The chars/4 rule is derived from English; Chinese, Japanese, Korean and Thai run closer to one token per character. Applying chars/4 to them would under-count by roughly four times, and under-counting is the dangerous direction: it lets through a request that should have been refused. Characters in those scripts are counted towards a near 1:1 ratio instead.
-
-`Estimate` carries `Approximate` and `Method` fields rather than returning a bare integer, so a caller cannot use the number without seeing that it is a guess. Ledger entries built from an approximate estimate are marked estimated.
+Requests that cannot be inspected, or contain known non-token billing
+dimensions, are rejected in enforce mode rather than assigned a guess.
 
 ## Consequences
 
-- No vocabulary files, no per-model tokenizer maintenance, no binary bloat. The whole estimator is a few dozen lines.
-- Estimates are wrong, and the system is built to expect that: the reservation is an upper bound, and settle corrects it against reported usage. Only requests that never complete keep an estimated figure, and those are marked.
-- English prose estimates within roughly ±20%. Code, JSON and heavily punctuated text tokenize less efficiently and will be under-estimated; that error is bounded by the max-tokens ceiling on the output side, which dominates most reservations.
-- A tokenizer can be added later behind the same `Estimator` interface without changing any caller. If it is, `Method` should change and `Approximate` should become false for the model families it covers.
+- Reservations intentionally over-hold input spend. A request can be rejected
+  even though exact tokenization would have fit; the safe direction for an
+  authorization system is to require a larger budget or a smaller request.
+- Reported provider usage remains the settlement source of truth and releases
+  the unused hold.
+- Fallback ledger estimates remain approximate. English prose is usually near
+  chars/4; code, JSON and punctuation can differ, and the entry says so.
+- No vocabulary files, per-model tokenizer maintenance, or tokenizer-driven
+  binary growth are required.
 
 ## Options rejected
 
-- **Vendor a BPE tokenizer (tiktoken or equivalent).** More accurate for the models it covers, wrong for the ones it does not, and a permanent maintenance burden that grows with every model release. Not worth it for a number that is corrected on settle.
-- **Ask the vendor to count tokens first.** Some offer a counting endpoint. It doubles the request count, adds latency to the authorization path, and costs money to find out what something will cost.
-- **Estimate from byte length rather than characters.** Simpler, and badly wrong for any non-ASCII text — a UTF-8 Chinese character is three bytes, so byte/4 would under-count by roughly twelve times.
-- **Skip input estimation and reserve only the output ceiling.** Tempting, since output usually dominates. Rejected because long-context requests invert that: a 500k-token prompt with a 1k completion is almost entirely input cost, and that is exactly the shape a runaway document-processing loop takes.
+- **Use chars/4 for authorization.** It can under-reserve code, JSON and model
+  families with different tokenizers.
+- **Vendor a BPE tokenizer.** More accurate for covered models, wrong for
+  uncovered or changed models, and a permanent maintenance burden.
+- **Ask the vendor to count tokens first.** It adds latency and an extra
+  dependency to every authorization decision and is not uniformly available.
+- **Reserve byte/4.** It under-counts non-ASCII input. The adopted reservation
+  uses the full byte count rather than dividing it.
+- **Reserve output only.** Long-context requests can spend primarily on input.

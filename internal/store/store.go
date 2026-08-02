@@ -5,9 +5,9 @@
 // append-only ledger they produce. The model is deliberately small; see
 // docs/concepts.md for what each one means and why the set is not larger.
 //
-// Backends live in subpackages. SQLite is the default and needs no
-// configuration; PostgreSQL implements the same interface against the same
-// schema.
+// Backends live in subpackages. SQLite is the implemented default and needs no
+// configuration. A future PostgreSQL backend must preserve this interface's
+// authorization and ledger guarantees.
 package store
 
 import (

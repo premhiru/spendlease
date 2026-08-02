@@ -38,19 +38,24 @@ Naming a run that does not exist, or one belonging to a different principal, ret
 
 ## Budget authorization
 
-Every proxy request creates a bounded reservation before it reaches the
-vendor. The gateway estimates input tokens, uses the request's output ceiling
-or the price book's `default_max_tokens`, and atomically checks settled spend
-plus pending holds against the run and every budgeted ancestor.
+Every supported token-billed request creates a bounded reservation before it
+reaches the vendor. The gateway uses inspected request bytes plus a framing
+allowance for the input ceiling, then uses the request's output ceiling or the
+price book's `default_max_tokens`. It atomically checks settled spend plus
+pending holds against the run and every budgeted ancestor.
 
 Observe-mode principals always pass; a would-block decision is logged. An
 enforce-mode request that does not fit returns `402 budget_exceeded` and the
 vendor is not contacted. See [reserve and settle](reserve-and-settle.md) for
 the formula, concurrency guarantee and lifecycle.
 
+Routes or request features with unsupported billing dimensions return `422
+spend_not_enforceable` in enforce mode. Observe mode forwards them without a
+reservation or ledger entry and sets `X-Spendlease-Accounting: unmetered`.
+
 ## Accounting
 
-Every successful request produces a ledger entry containing the provider,
+Every successful supported token-billed request produces a ledger entry containing the provider,
 model, reported or estimated token counts, calculated token cost, run,
 and principal. Entries are append-only and hash-chained.
 
@@ -75,6 +80,21 @@ Token counts come from the vendor where it reports them. An entry is marked
 | Vendor reports no usage even when asked | Estimated |
 | Model not in the price book | Estimated, at the fallback rate |
 | Client disconnected mid-response | Estimated, from partial usage |
+
+Unsupported endpoints or billing features in observe mode are unmetered and
+do not produce a misleading token ledger entry.
+
+## Enforcement capability
+
+| Route | Enforcement |
+|---|---|
+| Chat completions, legacy completions, Responses, Anthropic Messages | Input and output token reservation |
+| Embeddings | Input token reservation only |
+| Model listing and Anthropic token counting | No-spend route; no reservation |
+| Images, audio, media inputs, message batches, provider-hosted tools, unknown explicit-prefix routes | Rejected in enforce mode; explicitly unmetered in observe mode |
+
+The inspected request-body limit is 8 MiB. Larger bodies remain pass-through
+compatible in observe mode but are rejected before egress in enforce mode.
 
 ## Proxy endpoints
 
@@ -145,11 +165,12 @@ Vendor responses are passed through unchanged, including error status codes and 
 | `POST` | `/admin/principals/{id}/mode` | local or admin token | Switch between `observe` and `enforce`. |
 | `POST` | `/admin/principals/{id}/revoke` | local or admin token | Immediately revoke every current lease. |
 
-“Local” means the TCP peer is a loopback address. Remote dashboard and admin
-requests require `SPENDLEASE_ADMIN_TOKEN` (or `--admin-token`) and either HTTP
+“Local” means both the TCP peer and HTTP host are loopback. Other dashboard and
+admin requests require `SPENDLEASE_ADMIN_TOKEN` (or `--admin-token`) and either HTTP
 Basic authentication with the token as password or
-`Authorization: Bearer <token>`. Without a configured token, remote access is
-refused with `403`.
+`Authorization: Bearer <token>`. State-changing requests also require
+`X-Spendlease-Admin: 1` and browser requests must be same-origin. Without a
+configured token, remote access is refused with `403`.
 
 ## Errors
 
@@ -177,6 +198,7 @@ Every spendlease-generated error is JSON with the same shape, and carries `X-Spe
 | `unknown_run` | 400 | The requested run is missing or belongs to another principal |
 | `budget_exceeded` | 402 | The reservation exceeds the run or an ancestor's remaining budget |
 | `lease_scope_denied` | 403 | The lease does not allow the resolved provider |
+| `spend_not_enforceable` | 422 | The request may incur spend that cannot be conservatively reserved |
 | `provider_credential_missing` | 503 | No vendor key stored, or it could not be decrypted |
 | `upstream_unavailable` | 502 | The vendor could not be reached |
 | `internal` | 500 | The gateway itself failed |

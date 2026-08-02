@@ -51,11 +51,13 @@ If you find any of these three statements to be untrue in practice, that is a vu
 
 ## Deployment notes
 
-`spendlease` ships with no authentication on the admin API when reached over
-loopback, because the 60-second quickstart depends on it. Non-loopback access
-fails closed unless `SPENDLEASE_ADMIN_TOKEN` or `--admin-token` is set. The
-dashboard accepts the token through HTTP Basic authentication; scripts may use
-a Bearer token. See [self-hosting](docs/self-hosting.md) for the production
+`spendlease` ships with no authentication on the admin API only when both the
+TCP peer and HTTP host are loopback, because the 60-second quickstart depends
+on it. Non-loopback or non-local-host access fails closed unless
+`SPENDLEASE_ADMIN_TOKEN` or `--admin-token` is set. State-changing requests
+also require `X-Spendlease-Admin: 1` and browser mutations must be same-origin.
+The dashboard accepts the token through HTTP Basic authentication; scripts may
+use a Bearer token. See [self-hosting](docs/self-hosting.md) for the production
 checklist and put TLS in front of the port before exposing it to an untrusted
 network.
 

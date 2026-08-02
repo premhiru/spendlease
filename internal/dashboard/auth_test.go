@@ -40,8 +40,14 @@ func request(t *testing.T, h http.Handler, method, path, from string, auth func(
 		body = strings.NewReader("mode=enforce")
 	}
 	req := httptest.NewRequest(method, path, body)
+	if isLoopback(from) {
+		req.Host = "localhost:4000"
+	} else {
+		req.Host = "gateway.example"
+	}
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set(AdminRequestHeader, "1")
 	}
 	req.RemoteAddr = from
 	if auth != nil {
@@ -192,6 +198,66 @@ func TestModeChangeIsGuarded(t *testing.T) {
 		func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+token) }); rec.Code != http.StatusOK {
 		t.Errorf("an authenticated remote mode change returned %d, want 200", rec.Code)
 	}
+}
+
+func TestLoopbackPeerWithNonLocalHostIsNotTrusted(t *testing.T) {
+	t.Parallel()
+
+	h := guarded(t, "")
+	req := httptest.NewRequest(http.MethodGet, "http://attacker.example/", nil)
+	req.Host = "attacker.example"
+	req.RemoteAddr = "127.0.0.1:5000"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("DNS-rebound request returned %d, want 403", rec.Code)
+	}
+}
+
+func TestStateChangesRequireAdminHeaderAndSameOrigin(t *testing.T) {
+	t.Parallel()
+
+	h := guarded(t, "secret")
+	newRequest := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "http://localhost:4000/admin/principals/prn_a/mode",
+			strings.NewReader("mode=enforce"))
+		req.Host = "localhost:4000"
+		req.RemoteAddr = "127.0.0.1:5000"
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req
+	}
+
+	t.Run("plain cross-origin form is refused", func(t *testing.T) {
+		req := newRequest()
+		req.Header.Set("Origin", "https://attacker.example")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("custom header with cross-site fetch metadata is refused", func(t *testing.T) {
+		req := newRequest()
+		req.Header.Set(AdminRequestHeader, "1")
+		req.Header.Set("Sec-Fetch-Site", "cross-site")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("same-origin htmx request is allowed", func(t *testing.T) {
+		req := newRequest()
+		req.Header.Set(AdminRequestHeader, "1")
+		req.Header.Set("Origin", "http://localhost:4000")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+	})
 }
 
 // TestStaticAssetsAreUnguarded: requiring credentials for the stylesheet would

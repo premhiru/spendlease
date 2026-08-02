@@ -4,8 +4,13 @@ import (
 	"crypto/subtle"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
+
+// AdminRequestHeader is required on state-changing dashboard requests. A
+// cross-origin HTML form cannot set it, which closes the localhost CSRF path.
+const AdminRequestHeader = "X-Spendlease-Admin"
 
 // Guard decides who may see the dashboard and change enforcement.
 //
@@ -33,7 +38,12 @@ type Guard struct {
 // Protect wraps a handler with the guard.
 func (g Guard) Protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isLoopback(r.RemoteAddr) {
+		local := isLoopback(r.RemoteAddr) && isLoopbackHost(r.Host)
+		if local {
+			if !safeMethod(r.Method) && !trustedMutation(r) {
+				http.Error(w, "state-changing admin requests require the spendlease admin header and a same-origin browser request\n", http.StatusForbidden)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -56,9 +66,47 @@ func (g Guard) Protect(next http.Handler) http.Handler {
 			http.Error(w, "an admin token is required\n", http.StatusUnauthorized)
 			return
 		}
+		if !safeMethod(r.Method) && !trustedMutation(r) {
+			http.Error(w, "state-changing admin requests require the spendlease admin header and a same-origin browser request\n", http.StatusForbidden)
+			return
+		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func safeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+}
+
+func trustedMutation(r *http.Request) bool {
+	if r.Header.Get(AdminRequestHeader) != "1" {
+		return false
+	}
+	if strings.EqualFold(r.Header.Get("Sec-Fetch-Site"), "cross-site") {
+		return false
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	return err == nil && u.Host != "" && strings.EqualFold(u.Host, r.Host)
+}
+
+// isLoopbackHost ensures that a reverse proxy or DNS-rebound hostname whose
+// TCP peer happens to be local does not inherit credential-free admin access.
+func isLoopbackHost(hostport string) bool {
+	host := hostport
+	if parsed, _, err := net.SplitHostPort(hostport); err == nil {
+		host = parsed
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // authorized reports whether the request carries the admin token.

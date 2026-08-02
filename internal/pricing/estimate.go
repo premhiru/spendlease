@@ -12,6 +12,11 @@ import (
 // says so everywhere it is used.
 const DefaultCharsPerToken = 4
 
+// ReservationInputOverhead covers provider-added message framing and special
+// tokens that are not present in the JSON request body. The body byte count is
+// otherwise a conservative ceiling for byte-level tokenizers.
+const ReservationInputOverhead int64 = 1024
+
 // Estimator turns text into an approximate token count.
 //
 // No tokenizer is bundled. A real BPE tokenizer means vendoring a vocabulary
@@ -122,6 +127,16 @@ func EstimateFromChars(chars int64) Estimate {
 		tokens = 1
 	}
 	return Estimate{Tokens: tokens, Approximate: true, Method: "chars/4"}
+}
+
+// ReservationInputTokens returns a conservative pre-egress input ceiling.
+// Settlement still prefers provider-reported usage; this deliberately
+// over-reserves so an estimate cannot weaken an enforced budget.
+func ReservationInputTokens(requestBytes int64) int64 {
+	if requestBytes < 0 {
+		requestBytes = 0
+	}
+	return requestBytes + ReservationInputOverhead
 }
 
 // ReservationTokens decides how many output tokens to reserve for a request.

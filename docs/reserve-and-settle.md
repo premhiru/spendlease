@@ -5,23 +5,29 @@ usage is only known after it. `spendlease` treats the gap like a fuel-pump
 pre-authorization: hold a safe upper bound, then replace the hold with the
 calculated token charge.
 
-Reservations use the active price book. Charges outside that model, including
-cache and long-context multipliers or per-tool fees, are not part of the hold;
-see [Price book](pricing-book.md#what-is-not-modeled).
+Reservations use the active price book. Enforce mode refuses request shapes
+with charges outside that model, including media, batches and provider-hosted
+tool fees. Observe mode may forward them as explicitly unmetered traffic; see
+[Price book](pricing-book.md#what-is-not-modeled).
 
 ## The reservation
 
-For every request the gateway resolves its provider, model, principal and run,
-then calculates:
+For every supported token-billed request the gateway resolves its provider,
+model, principal and run, then calculates:
 
 ```text
-input_tokens  = local estimate of the submitted prompt
-output_tokens = request max_tokens, or the model's configured default
+input_tokens  = inspected request bytes + provider-framing safety allowance
+output_tokens = request output ceiling, or the model's configured default
 reserved      = input cost + maximum output cost
 ```
 
+The byte-based input ceiling is deliberately conservative. Settlement uses
+vendor-reported token counts, so over-reserving does not increase the recorded
+charge. Embeddings reserve input only. The gateway understands
+`max_tokens`, `max_completion_tokens`, and `max_output_tokens`.
+
 A missing `max_tokens` never means infinity. The active price-book entry
-supplies `default_max_tokens`; an unknown model uses the configured fallback
+supplies `default_max_tokens`; an unknown model uses the built-in fallback
 rates and fallback output ceiling. Unknown models are marked estimated in the
 ledger and produce a warning, but they never cost zero.
 
@@ -49,7 +55,8 @@ named in the rejection.
 
 ## Observe and enforce
 
-Both modes calculate and persist reservations.
+Both modes calculate and persist reservations for supported token-billed
+requests.
 
 - `observe` always forwards the request. A decision that would exceed a
   budget is logged as `would_block`, which lets an operator validate prices
@@ -57,6 +64,11 @@ Both modes calculate and persist reservations.
 - `enforce` inserts the reservation only when every applicable budget can
   cover it. Otherwise the vendor is never contacted and the client receives
   `402 Payment Required`.
+
+If a request cannot be inspected or has an unsupported billing dimension,
+enforce mode returns `422 spend_not_enforceable` before egress. Observe mode
+forwards it without a reservation or ledger charge, logs the reason, and sets
+`X-Spendlease-Accounting: unmetered` on the response.
 
 Example:
 

@@ -46,6 +46,7 @@ class AdminClientTests(unittest.TestCase):
         self.assertEqual(req.full_url, "https://gateway.example/admin/principals/prn_test/mode")
         self.assertEqual(req.data, b"mode=enforce")
         self.assertEqual(req.get_header("Authorization"), "Bearer admin-secret")
+        self.assertEqual(req.get_header("X-spendlease-admin"), "1")
 
     def test_rejects_unknown_mode_without_request(self):
         with self.assertRaisesRegex(ValueError, "observe or enforce"):

@@ -213,6 +213,43 @@ func TestBaseURLOverride(t *testing.T) {
 	}
 }
 
+func TestBillingCapabilities(t *testing.T) {
+	t.Parallel()
+
+	oa := openai.New()
+	if got := oa.Billing(http.MethodPost, "/v1/chat/completions"); got.Class != providers.BillingToken || got.NoOutput {
+		t.Fatalf("chat billing = %+v", got)
+	}
+	if got := oa.Billing(http.MethodPost, "/v1/embeddings"); got.Class != providers.BillingToken || !got.NoOutput {
+		t.Fatalf("embedding billing = %+v", got)
+	}
+	if got := oa.Billing(http.MethodPost, "/v1/images/generations"); got.Class != providers.BillingUnsupported {
+		t.Fatalf("image billing = %+v", got)
+	}
+	if got := anthropic.New().Billing(http.MethodPost, "/v1/messages/batches"); got.Class != providers.BillingUnsupported {
+		t.Fatalf("batch billing = %+v", got)
+	}
+}
+
+func TestRequestBillingGuards(t *testing.T) {
+	t.Parallel()
+
+	info := openai.New().ParseRequest([]byte(`{"model":"gpt-4o","max_output_tokens":37,"input":"hello"}`))
+	if info.MaxTokens != 37 || info.RequestBytes == 0 {
+		t.Fatalf("responses request = %+v", info)
+	}
+	for _, body := range []string{
+		`{"model":"gpt-4o","input_image":{"url":"x"}}`,
+		`{"model":"gpt-4o","input":[{"type":"input_file","file_id":"file-1"}]}`,
+		`{"model":"claude-sonnet-4-5","messages":[{"content":[{"type":"image","source":{"type":"base64","data":"x"}}]}]}`,
+		`{"model":"gpt-4o","tools":[{"type":"web_search_preview"}]}`,
+	} {
+		if got := openai.New().ParseRequest([]byte(body)).UnsupportedBilling; got == "" {
+			t.Fatalf("request %s was not marked unsupported", body)
+		}
+	}
+}
+
 func TestOpenAICompatibleProviderUsesExplicitPrefix(t *testing.T) {
 	t.Parallel()
 

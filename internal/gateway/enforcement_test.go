@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -14,6 +15,114 @@ import (
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/store"
 )
+
+func TestEnforceModeRejectsUninspectableAndUnsupportedSpend(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	calls := 0
+	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		_, _ = io.WriteString(w, `{}`)
+	}, store.ModeEnforce, money.MustParseUSD("100.00"))
+
+	large := `{"model":"gpt-4o","messages":[{"role":"user","content":"` +
+		string(bytes.Repeat([]byte("x"), maxRequestBody)) + `"}]}`
+	tests := []struct {
+		name, path, body string
+	}{
+		{name: "oversized JSON", path: "/v1/chat/completions", body: large},
+		{name: "malformed JSON", path: "/v1/chat/completions", body: `{"model":`},
+		{name: "image endpoint", path: "/v1/images/generations", body: `{"model":"gpt-image-1","prompt":"cat"}`},
+		{name: "media input", path: "/v1/chat/completions", body: `{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.test/cat.png"}}]}]}`},
+		{name: "provider tool fee", path: "/v1/responses", body: `{"model":"gpt-4o","tools":[{"type":"web_search_preview"}],"input":"news"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := h.call(t, tt.path, tt.body, nil)
+			if resp.StatusCode != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, want 422", resp.StatusCode)
+			}
+			if got := resp.Header.Get("X-Spendlease-Error"); got != ErrTypeSpendNotEnforceable {
+				t.Errorf("X-Spendlease-Error = %q", got)
+			}
+		})
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("vendor was contacted %d times for unenforceable spend", calls)
+	}
+}
+
+func TestObserveModeMarksUnsupportedSpendAsUnmetered(t *testing.T) {
+	t.Parallel()
+
+	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"data":[{"url":"example"}]}`)
+	}, store.ModeObserve, money.MustParseUSD("1.00"))
+	resp := h.call(t, "/v1/images/generations", `{"model":"gpt-image-1","prompt":"cat"}`, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get(AccountingHeader); got != "unmetered" {
+		t.Fatalf("%s = %q, want unmetered", AccountingHeader, got)
+	}
+	entries, err := h.store.LedgerEntries(context.Background(), store.LedgerFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unsupported request wrote %d misleading ledger entries", len(entries))
+	}
+	if !strings.Contains(h.logs.String(), "cannot be enforced") {
+		t.Errorf("logs do not expose unmetered spend: %s", h.logs.String())
+	}
+}
+
+func TestNoSpendRouteNeedsNoReservation(t *testing.T) {
+	t.Parallel()
+
+	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"data":[]}`)
+	}, store.ModeEnforce, money.Nano)
+	req, err := http.NewRequest(http.MethodGet, h.gateway.URL+"/v1/models", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var reservations int
+	if err := h.store.DB().QueryRow(`SELECT COUNT(*) FROM reservations`).Scan(&reservations); err != nil {
+		t.Fatal(err)
+	}
+	if reservations != 0 {
+		t.Fatalf("model listing created %d reservations", reservations)
+	}
+}
+
+func TestEmbeddingReservationDoesNotAssumeGeneratedOutput(t *testing.T) {
+	t.Parallel()
+
+	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"usage":{"prompt_tokens":5,"total_tokens":5}}`)
+	}, store.ModeEnforce, money.MustParseUSD("0.01"))
+	resp := h.call(t, "/v1/embeddings", `{"model":"gpt-4o","input":"hello"}`, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
 
 func TestEnforceModeReturnsStructured402BeforeEgress(t *testing.T) {
 	t.Parallel()

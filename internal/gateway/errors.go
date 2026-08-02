@@ -23,6 +23,9 @@ const (
 	ErrTypeBudgetExceeded = "budget_exceeded"
 	// ErrTypeLeaseScopeDenied means a lease excludes the resolved provider.
 	ErrTypeLeaseScopeDenied = "lease_scope_denied"
+	// ErrTypeSpendNotEnforceable means the request may incur a charge that
+	// this build cannot conservatively inspect and reserve.
+	ErrTypeSpendNotEnforceable = "spend_not_enforceable"
 	// ErrTypeNoCredential means the gateway has no vendor key for the
 	// provider the request was routed to.
 	ErrTypeNoCredential = "provider_credential_missing"

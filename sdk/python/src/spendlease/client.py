@@ -75,6 +75,7 @@ class AdminClient:
         body = parse.urlencode(fields).encode()
         req = request.Request(self.base_url + path, data=body, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        req.add_header("X-Spendlease-Admin", "1")
         if self.token:
             req.add_header("Authorization", "Bearer " + self.token)
         try:

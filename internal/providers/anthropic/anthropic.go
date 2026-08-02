@@ -60,6 +60,25 @@ func (p *Provider) Paths() []string {
 	}
 }
 
+// Billing identifies the Anthropic routes whose token costs can be bounded.
+func (p *Provider) Billing(method, path string) providers.BillingCapability {
+	if method == http.MethodGet && (path == "/v1/models" || path == "/v1/models/") {
+		return providers.BillingCapability{Class: providers.BillingNoSpend}
+	}
+	if method == http.MethodPost {
+		switch path {
+		case "/v1/messages", "/v1/complete":
+			return providers.BillingCapability{Class: providers.BillingToken}
+		case "/v1/messages/count_tokens":
+			return providers.BillingCapability{Class: providers.BillingNoSpend}
+		}
+	}
+	return providers.BillingCapability{
+		Class:  providers.BillingUnsupported,
+		Reason: "message batches, media, server tools, and unreviewed endpoints are outside token-budget enforcement",
+	}
+}
+
 // Authorize sets the Anthropic credential and ensures an API version is
 // present.
 //
@@ -85,13 +104,16 @@ func (p *Provider) ParseRequest(body []byte) providers.RequestInfo {
 	if m == nil {
 		return providers.RequestInfo{}
 	}
-	return providers.RequestInfo{
-		Model:       providers.StringField(m, "model"),
-		MaxTokens:   providers.IntField(m, "max_tokens"),
-		Stream:      providers.BoolField(m, "stream"),
-		PromptChars: providers.CountPromptChars(m),
-		WantsUsage:  true,
+	info := providers.RequestInfo{
+		Model:        providers.StringField(m, "model"),
+		MaxTokens:    providers.IntField(m, "max_tokens"),
+		Stream:       providers.BoolField(m, "stream"),
+		PromptChars:  providers.CountPromptChars(m),
+		RequestBytes: int64(len(body)),
+		WantsUsage:   true,
 	}
+	info.UnsupportedBilling = providers.UnsupportedBillingFeature(m)
+	return info
 }
 
 // UsageFromResponse reads Anthropic's usage object from a complete response.

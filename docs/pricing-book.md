@@ -15,11 +15,11 @@ pages for [OpenAI](https://developers.openai.com/api/docs/pricing),
 change without a spendlease release, so the date matters.
 
 > [!WARNING]
-> A spendlease budget covers only the charges represented by the price book.
-> It is not a guaranteed ceiling on the complete vendor invoice. Batch, flex,
-> fast, priority, regional, cache-storage, tool, media, grounding, and other
-> non-token charges are not modeled. Use observe mode and compare the ledger
-> with the vendor console before enabling enforcement.
+> A spendlease budget covers only charges represented by the price book.
+> Enforce mode blocks known unsupported billing surfaces before egress, but
+> vendor pricing can still change and negotiated or regional rates can differ.
+> Use observe mode and compare the ledger with the vendor console before
+> enabling enforcement.
 
 ## Format
 
@@ -112,13 +112,12 @@ never through floating point, and token multiplication rounds half-up. See
 
 ## Token estimation
 
-Settlement uses the token counts reported by the provider. A reservation must
-be made before the request runs, so input tokens are first estimated locally.
-
-There is no bundled tokenizer. The estimate uses a documented `chars/4`
-heuristic, weighted upward for dense scripts such as Chinese, Japanese,
-Korean, and Thai. The estimate only sizes a temporary hold; reported usage
-replaces it when the request finishes. See
+Settlement uses token counts reported by the provider. A reservation must be
+made before the request runs, so enforce mode uses the inspected JSON byte
+count plus a provider-framing allowance as a tokenizer-independent ceiling.
+This intentionally holds more than a typical tokenizer count and is replaced
+by reported usage when the request finishes. When settlement has no usage,
+the marked estimate still uses the documented `chars/4` heuristic. See
 [ADR-0008](adr/0008-token-estimation.md).
 
 ## What is not modeled
@@ -128,6 +127,11 @@ replaces it when the request finishes. See
 - Tool, search, container, and grounding charges billed per call.
 - Image, audio, video, and other media-specific rates.
 - Non-token services such as search APIs, scrapers, and data APIs.
+
+Known unsupported endpoints and request features are rejected in enforce mode
+with `422 spend_not_enforceable`. Observe mode forwards them, marks the
+response `X-Spendlease-Accounting: unmetered`, and does not create a misleading
+token ledger entry.
 
 ## Contributing an update
 

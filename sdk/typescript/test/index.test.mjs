@@ -40,6 +40,7 @@ test("AdminClient uses the guarded form endpoint", async () => {
   assert.equal(body, "table");
   assert.equal(captured.url, "https://gateway.example/admin/principals/prn_test/mode");
   assert.equal(captured.options.headers.authorization, "Bearer admin-secret");
+  assert.equal(captured.options.headers["x-spendlease-admin"], "1");
   assert.equal(captured.options.body.toString(), "mode=enforce");
 });
 

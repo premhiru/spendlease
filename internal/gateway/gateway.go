@@ -1,11 +1,9 @@
 // Package gateway is the reverse proxy that sits between agents and vendor
 // APIs.
 //
-// In this phase it authenticates the caller, resolves the vendor, swaps the
-// caller's spendlease credential for the real vendor key, and proxies the
-// request — including streaming responses, untouched and unbuffered. There is
-// no cost logic yet: nothing is priced, reserved or recorded. That arrives in
-// later phases and slots in around this proxying rather than replacing it.
+// It authenticates the caller, resolves the vendor, reserves supported spend,
+// swaps the caller's spendlease credential for the real vendor key, proxies
+// streaming responses, and settles reported usage into the ledger.
 package gateway
 
 import (

@@ -76,6 +76,32 @@ func (p *Provider) Paths() []string {
 	return p.paths
 }
 
+// Billing identifies the OpenAI-compatible routes whose cost model is known.
+// Explicit provider prefixes can reach future endpoints, so unknown paths are
+// intentionally unsupported until their billing shape is reviewed.
+func (p *Provider) Billing(method, path string) providers.BillingCapability {
+	if method == http.MethodGet && (path == "/v1/models" || path == "/v1/models/") {
+		return providers.BillingCapability{Class: providers.BillingNoSpend}
+	}
+	if method != http.MethodPost {
+		return providers.BillingCapability{
+			Class:  providers.BillingUnsupported,
+			Reason: "this method and endpoint do not have a reviewed billing model",
+		}
+	}
+	switch path {
+	case "/v1/chat/completions", "/v1/completions", "/v1/responses":
+		return providers.BillingCapability{Class: providers.BillingToken}
+	case "/v1/embeddings":
+		return providers.BillingCapability{Class: providers.BillingToken, NoOutput: true}
+	default:
+		return providers.BillingCapability{
+			Class:  providers.BillingUnsupported,
+			Reason: "media, moderation, batch, audio, image, and unreviewed endpoints are outside token-budget enforcement",
+		}
+	}
+}
+
 // Authorize sets the OpenAI bearer credential.
 func (p *Provider) Authorize(req *http.Request, apiKey string) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -94,11 +120,13 @@ func (p *Provider) ParseRequest(body []byte) providers.RequestInfo {
 	}
 
 	info := providers.RequestInfo{
-		Model:       providers.StringField(m, "model"),
-		MaxTokens:   providers.IntField(m, "max_tokens", "max_completion_tokens"),
-		Stream:      providers.BoolField(m, "stream"),
-		PromptChars: providers.CountPromptChars(m),
+		Model:        providers.StringField(m, "model"),
+		MaxTokens:    providers.IntField(m, "max_tokens", "max_completion_tokens", "max_output_tokens"),
+		Stream:       providers.BoolField(m, "stream"),
+		PromptChars:  providers.CountPromptChars(m),
+		RequestBytes: int64(len(body)),
 	}
+	info.UnsupportedBilling = providers.UnsupportedBillingFeature(m)
 
 	// Usage on a streamed OpenAI response is opt-in. Whether the caller asked
 	// decides whether spendlease can record exact usage or has to estimate.
