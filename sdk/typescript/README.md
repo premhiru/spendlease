@@ -3,9 +3,11 @@
 Thin, dependency-free configuration helpers for vendor SDKs and the
 spendlease admin surface. The package does not wrap model APIs.
 
-Install from the repository while the package is pre-release:
+Install the beta from npm after its release, or from a checkout:
 
 ```bash
+npm install @spendlease/sdk@0.2.0-beta.1
+# From a checkout instead:
 npm install ./sdk/typescript openai
 ```
 
@@ -19,6 +21,9 @@ import { Lease } from "@spendlease/sdk";
 const lease = Lease.fromEnv();
 const client = new OpenAI(lease.openAIOptions());
 ```
+
+`AdminClient` manages runs and leases, reports effective remaining budget,
+and verifies or exports the ledger through the guarded `/api/v1` operator API.
 
 See the [examples](../../examples/) and
 [getting-started guide](https://premhiru.github.io/spendlease/getting-started/)

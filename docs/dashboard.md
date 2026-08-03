@@ -4,11 +4,13 @@ The dashboard is served at the gateway root, usually
 <http://localhost:4000>. It is a current operational summary, not an invoice
 or historical reporting interface.
 
-The header identifies the running build and the active price book. A locally
-compiled binary says `Local development build`; release builds show their
-version. `Pricing loaded for N model IDs` counts active price entries, not the
-number of models currently sold by every vendor. Hovering the count shows the
-provider breakdown.
+The header identifies the running build and the exact active price-book
+revision. A locally compiled binary says `Local development build`; release
+builds show their version. The price-book label includes the first eight
+characters of a SHA-256 revision and the newest active effective date. Its
+detail text gives the load time, provider count, and canonical price-entry
+count. The count describes the loaded snapshot, not every model currently sold
+by every vendor and not aliases that resolve to an entry.
 
 ## Table fields
 
@@ -99,8 +101,8 @@ dashboard. See [Self-hosting](self-hosting.md#dashboard-and-admin-access).
 
 ## Current limitations
 
-The dashboard does not provide charts, per-run drill-down, ledger export, or
-user accounts. The recent-events table is an operational view capped at 200
-matching rows, not an invoice or full audit export. There is also no operator
-CLI for verifying or exporting the hash chain in v0.1; `ledger.VerifyChain` is
-currently a Go library function.
+The dashboard does not provide charts, per-run drill-down, or user accounts.
+The recent-events table is an operational view capped at 200 matching rows,
+not an invoice or full audit export. Use `spendlease ledger export` or the
+guarded `/api/v1/ledger/export` endpoint for the complete filtered data, and
+use the matching verify command or endpoint to check the hash chain.

@@ -84,7 +84,9 @@ spendlease keys run create \
 The budget is an exact non-negative USD decimal. `0` means no run ceiling. A
 child run cannot escape a budget on its parent or another ancestor.
 
-There are no run list, close, or budget-edit commands in v0.1.
+Run listing, closing, and live remaining-budget checks are available through
+the [JSON operator API](api-reference.md#json-operator-api) and both SDK admin
+clients. The CLI keeps run creation available for local bootstrap work.
 
 ## Leases
 
@@ -101,8 +103,9 @@ The command prints an `sll_` token once. An empty provider list does not add a
 provider restriction. A zero ceiling inherits the run budget. Lease TTL must
 be positive.
 
-There is no lease-list command because plaintext tokens are never stored. Use
-the dashboard or revoke operation at the principal level.
+Lease metadata can be listed, and one lease can be revoked, through the
+[JSON operator API](api-reference.md#json-operator-api) and both SDK admin
+clients. Plaintext tokens are never stored or returned by list operations.
 
 ## Revocation
 
@@ -122,6 +125,33 @@ spendlease keys master generate
 
 The 64-character hexadecimal key is written to standard output. Store it in a
 secret manager and provide it as `SPENDLEASE_MASTER_KEY`.
+
+## Ledger
+
+Verify the complete append-only hash chain:
+
+```bash
+spendlease ledger verify [--store PATH]
+```
+
+Export stable JSON or CSV to standard output:
+
+```bash
+spendlease ledger export \
+  [--store PATH] \
+  [--format json|csv] \
+  [--run RUN_ID] \
+  [--principal PRINCIPAL_ID] \
+  [--since RFC3339]
+```
+
+Money is emitted as exact decimal USD strings. JSON includes schema `version`
+and wraps the records in an `entries` object; CSV includes a header. Both formats include `prev_hash` and
+`hash`. Redirect standard output to a file when retaining an audit export:
+
+```bash
+spendlease ledger export --format csv --run run_... > ledger.csv
+```
 
 ## Environment variables
 

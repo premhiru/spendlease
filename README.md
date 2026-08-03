@@ -20,10 +20,9 @@ notices the vendor bill.
 ## Quickstart
 
 > [!NOTE]
-> The current `main` branch contains the planned v0.1 feature set, but there is
-> no stable release yet. The existing `v0.1.0-alpha.1` tag predates several
-> features described here. Use `:edge` to evaluate the current container, or
-> pin a `sha-...` container tag when you need a repeatable build.
+> `spendlease` is pre-v1. The first usable beta is versioned
+> `v0.2.0-beta.1`. Until that tag appears on the releases page, use `:edge` to
+> evaluate the current container and pin a `sha-...` tag for repeatable work.
 
 The demo starts a temporary gateway, a mock provider, and three simulated
 agents. It does not need a vendor key and deletes its in-memory state when it
@@ -76,8 +75,10 @@ import { Lease } from "@spendlease/sdk";
 const client = new OpenAI(Lease.fromEnv().openAIOptions());
 ```
 
-The SDK packages are currently installed from this repository. You can also
-configure the vendor SDK directly:
+Beta SDK packages are built from this repository and attached to the matching
+GitHub release. Once the registry publishers are active, install
+`spendlease==0.2.0b1` from PyPI or `@spendlease/sdk@0.2.0-beta.1` from npm.
+You can also configure the vendor SDK directly:
 
 ```python
 import os
@@ -129,6 +130,8 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **Attributes recorded token cost.** Every ledger entry names its principal, run, provider, and model. Child runs draw from their own budget and every budgeted ancestor.
 - **Rejects revoked leases on the next request.** `POST /admin/principals/{id}/revoke` invalidates every lease for that principal against an in-memory revocation set. `spendlease keys revoke --all` provides the same control from the CLI.
 - **Keeps a tamper-evident ledger.** Append-only, enforced by a database trigger, with each entry carrying the previous entry's hash.
+- **Gives orchestrators a versioned control plane.** The guarded JSON API creates and closes runs, issues and revokes individual leases, and reports the tightest remaining budget across a run hierarchy.
+- **Verifies and exports audit data.** The CLI and JSON API verify the complete hash chain and export filtered JSON or CSV without losing money precision.
 - **Forwards SSE without response buffering.** Chunks are flushed as they arrive while usage events are observed for settlement.
 
 ## What it does not do
@@ -193,7 +196,9 @@ TestStreamingGatewayOverheadP99 -v` to measure the same path locally.
 
 Costs come from a versioned price book in [`/pricing`](pricing/): plain YAML
 with effective dates, loaded at gateway startup and atomically reloadable by
-the pricing library.
+the pricing library. The dashboard reports a content-derived revision and the
+newest active effective date, so operators can identify the rates a process
+actually loaded rather than relying on a model count.
 
 ```yaml
 version: 2
@@ -227,6 +232,7 @@ first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
 | [Policy reference](docs/policy-reference.md) | Every policy field |
 | [Price book](docs/pricing-book.md) | Format, and how to contribute updates |
 | [Self-hosting](docs/self-hosting.md) | Persistent deployment, backups, and key management |
+| [Releasing](docs/releasing.md) | Maintainer release and trusted-publisher setup |
 | [API reference](docs/api-reference.md) | Admin and gateway HTTP surface |
 | [FAQ](docs/faq.md) | |
 | [ADRs](docs/adr/) | Why things are the way they are |
@@ -235,15 +241,16 @@ Full site: **<https://premhiru.github.io/spendlease>**
 
 ## Release status
 
-`main` contains the gateway, encrypted credential vault, SQLite store, price
-book, reserve-and-settle enforcement, dashboard, leases, revocation, SDK
-helpers, and demo. PostgreSQL, multi-tenancy, and the other items listed above
-are not implemented.
+The `v0.2.0-beta.1` source includes the gateway, encrypted credential vault,
+SQLite store, dated price book, reserve-and-settle enforcement, dashboard,
+versioned operator API, ledger verification/export, SDK helpers, and demo.
+PostgreSQL, multi-tenancy, and the other items listed above are not
+implemented.
 
 The project is still pre-v1. The mutable `edge` container tracks `main`, while
-every build also publishes an immutable `sha-...` tag. The tagged
-`v0.1.0-alpha.1` release is older than the current feature set; do not use that
-tag as a substitute for the current documentation.
+every build also publishes an immutable `sha-...` tag. A tagged beta also
+publishes platform binaries, a digest-pinned container reference, and Python
+and npm package artifacts on the GitHub release.
 
 ## Contributing
 

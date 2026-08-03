@@ -6,7 +6,7 @@ const lease = Lease.fromEnv();
 const client = new OpenAI(lease.openAIOptions());
 
 const response = await client.chat.completions.create({
-  model: "gpt-4o-mini",
+  model: "gpt-5.4-mini",
   messages: [{ role: "user", content: "Explain spend authorization in one sentence." }],
 });
 console.log(response.choices[0]?.message.content);

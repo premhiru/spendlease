@@ -10,15 +10,22 @@ text generation and embeddings, permits reviewed no-spend routes, and blocks
 media, batches, provider-hosted tools, and unknown billing shapes. Observe
 mode forwards unsupported traffic with `X-Spendlease-Accounting: unmetered`.
 
-| Provider | Credential name | Application base URL | Default upstream |
-|---|---|---|---|
-| OpenAI | `openai` | `http://localhost:4000/v1` | `https://api.openai.com` |
-| Anthropic | `anthropic` | `http://localhost:4000` | `https://api.anthropic.com` |
-| Kimi | `kimi` | `http://localhost:4000/kimi/v1` | `https://api.moonshot.ai` |
-| DeepSeek | `deepseek` | `http://localhost:4000/deepseek/v1` | `https://api.deepseek.com` |
-| xAI | `xai` | `http://localhost:4000/xai/v1` | `https://api.x.ai` |
-| Gemini | `gemini` | `http://localhost:4000/gemini/v1beta/openai` | `https://generativelanguage.googleapis.com` |
-| Z.AI | `zai` | `http://localhost:4000/zai/api/paas/v4` | `https://api.z.ai` |
+| Provider | Status | Credential name | Application base URL | Default upstream |
+|---|---|---|---|---|
+| OpenAI | Certified | `openai` | `http://localhost:4000/v1` | `https://api.openai.com` |
+| Anthropic | Certified | `anthropic` | `http://localhost:4000` | `https://api.anthropic.com` |
+| Kimi | Beta | `kimi` | `http://localhost:4000/kimi/v1` | `https://api.moonshot.ai` |
+| DeepSeek | Beta | `deepseek` | `http://localhost:4000/deepseek/v1` | `https://api.deepseek.com` |
+| xAI | Beta | `xai` | `http://localhost:4000/xai/v1` | `https://api.x.ai` |
+| Gemini | Beta | `gemini` | `http://localhost:4000/gemini/v1beta/openai` | `https://generativelanguage.googleapis.com` |
+| Z.AI | Beta | `zai` | `http://localhost:4000/zai/api/paas/v4` | `https://api.z.ai` |
+
+**Certified** means the native vendor request and usage-response shapes have
+dedicated gateway tests and copy-paste examples in Python and TypeScript.
+**Beta** means routing, credential replacement, price-book entries, and the
+shared OpenAI-compatible accounting path are implemented, but provider-side
+behavior may change independently. Start every beta-provider workload in
+observe mode and compare it with the vendor console before enforcing a budget.
 
 OpenAI and Anthropic can be inferred from their normal API paths. The five
 OpenAI-compatible providers use an explicit `/<provider>` prefix because their
@@ -56,6 +63,10 @@ print(response.choices[0].message.content)
 
 The lease must include every provider the application may call. A multi-vendor
 lease can use `--providers openai,anthropic,gemini`.
+
+Runnable native-client examples for both certified providers are in the
+[`examples`](https://github.com/premhiru/spendlease/tree/main/examples)
+directory.
 
 ## Pricing scope
 

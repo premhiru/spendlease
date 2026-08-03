@@ -225,25 +225,39 @@ func (s *Store) CreateRun(ctx context.Context, r store.Run) error {
 	if !r.Status.Valid() {
 		return fmt.Errorf("%w: status %q is not active or closed", store.ErrConflict, r.Status)
 	}
-	if r.ParentRunID != "" {
-		parent, err := s.GetRun(ctx, r.ParentRunID)
-		if err != nil {
-			return err
-		}
-		if parent.PrincipalID != r.PrincipalID {
-			return fmt.Errorf("%w: parent run belongs to a different principal", store.ErrConflict)
-		}
-		if parent.Status != store.RunActive {
-			return fmt.Errorf("%w: parent run %s is closed", store.ErrConflict, parent.ID)
-		}
+	if r.ParentRunID == "" {
+		_, err := s.db.ExecContext(ctx,
+			`INSERT INTO runs (id, principal_id, parent_run_id, budget_nanos, status, created_at, closed_at)
+			 VALUES (?, ?, NULL, ?, ?, ?, ?)`,
+			r.ID, r.PrincipalID, int64(r.Budget), string(r.Status), formatTime(r.CreatedAt), nullTime(r.ClosedAt),
+		)
+		return wrap(err, "creating run")
 	}
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO runs (id, principal_id, parent_run_id, budget_nanos, status, created_at, closed_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		r.ID, r.PrincipalID, nullString(r.ParentRunID), int64(r.Budget),
-		string(r.Status), formatTime(r.CreatedAt), nullTime(r.ClosedAt),
+		 SELECT ?, ?, id, ?, ?, ?, ? FROM runs
+		 WHERE id = ? AND principal_id = ? AND status = 'active'`,
+		r.ID, r.PrincipalID, int64(r.Budget), string(r.Status), formatTime(r.CreatedAt), nullTime(r.ClosedAt),
+		r.ParentRunID, r.PrincipalID,
 	)
-	return wrap(err, "creating run")
+	if err != nil {
+		return wrap(err, "creating run")
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return wrap(err, "creating run")
+	}
+	if n > 0 {
+		return nil
+	}
+	parent, err := s.GetRun(ctx, r.ParentRunID)
+	if err != nil {
+		return err
+	}
+	if parent.PrincipalID != r.PrincipalID {
+		return fmt.Errorf("%w: parent run belongs to a different principal", store.ErrConflict)
+	}
+	return fmt.Errorf("%w: parent run %s is %s", store.ErrConflict, parent.ID, parent.Status)
 }
 
 // GetRun returns a run by ID.
@@ -344,15 +358,54 @@ func (s *Store) CloseRun(ctx context.Context, id string) error {
 // Leases
 // ---------------------------------------------------------------------------
 
-// CreateLease inserts a lease against an existing run.
+// CreateLease inserts a lease against an active run. The status test and
+// insert are one statement, so a concurrent close cannot issue a usable lease
+// after the operator has closed the run.
 func (s *Store) CreateLease(ctx context.Context, l store.Lease) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO leases (id, run_id, token_hash, providers, ceiling_nanos, expires_at, revoked_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		l.ID, l.RunID, l.TokenHash, encodeProviders(l.Providers), int64(l.Ceiling),
+	res, err := s.db.ExecContext(ctx,
+		`WITH RECURSIVE ancestors(id, parent_run_id, status) AS (
+			SELECT id, parent_run_id, status FROM runs WHERE id = ?
+			UNION ALL
+			SELECT r.id, r.parent_run_id, r.status
+			FROM runs r JOIN ancestors a ON r.id = a.parent_run_id
+		)
+		 INSERT INTO leases (id, run_id, token_hash, providers, ceiling_nanos, expires_at, revoked_at, created_at)
+		 SELECT ?, ?, ?, ?, ?, ?, ?, ?
+		 WHERE EXISTS (SELECT 1 FROM ancestors)
+		   AND NOT EXISTS (SELECT 1 FROM ancestors WHERE status != 'active')`,
+		l.RunID, l.ID, l.RunID, l.TokenHash, encodeProviders(l.Providers), int64(l.Ceiling),
 		formatTime(l.ExpiresAt), nullTime(l.RevokedAt), formatTime(l.CreatedAt),
 	)
-	return wrap(err, "creating lease")
+	if err != nil {
+		return wrap(err, "creating lease")
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return wrap(err, "creating lease")
+	}
+	if n > 0 {
+		return nil
+	}
+	var blockingID, status string
+	err = s.db.QueryRowContext(ctx, `
+		WITH RECURSIVE ancestors(id, parent_run_id, status, depth) AS (
+			SELECT id, parent_run_id, status, 0 FROM runs WHERE id = ?
+			UNION ALL
+			SELECT r.id, r.parent_run_id, r.status, a.depth + 1
+			FROM runs r JOIN ancestors a ON r.id = a.parent_run_id
+		)
+		SELECT id, status FROM ancestors WHERE status != 'active' ORDER BY depth LIMIT 1`, l.RunID).
+		Scan(&blockingID, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, getErr := s.GetRun(ctx, l.RunID); getErr != nil {
+			return getErr
+		}
+		return fmt.Errorf("%w: run ancestry changed while creating lease", store.ErrConflict)
+	}
+	if err != nil {
+		return wrap(err, "reading lease run status")
+	}
+	return fmt.Errorf("%w: run %s is %s", store.ErrConflict, blockingID, status)
 }
 
 // GetLease returns a lease by ID.
@@ -652,6 +705,97 @@ func subtreeUsage(ctx context.Context, tx *sql.Tx, runID string) (money.Nanos, m
 		return 0, 0, wrap(err, "calculating subtree budget usage")
 	}
 	return money.Nanos(spent), money.Nanos(held), nil
+}
+
+// BudgetStatus returns a consistent snapshot of a run's effective remaining
+// budget across its full ancestry.
+func (s *Store) BudgetStatus(ctx context.Context, runID string) (store.RunBudgetStatus, error) {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return store.RunBudgetStatus{}, wrap(err, "beginning budget status read")
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx, `
+		WITH RECURSIVE ancestors(id, parent_run_id, budget_nanos, status, depth) AS (
+			SELECT id, parent_run_id, budget_nanos, status, 0 FROM runs WHERE id = ?
+			UNION ALL
+			SELECT r.id, r.parent_run_id, r.budget_nanos, r.status, a.depth + 1
+			FROM runs r JOIN ancestors a ON r.id = a.parent_run_id
+		)
+		SELECT id, budget_nanos, status FROM ancestors ORDER BY depth`, runID)
+	if err != nil {
+		return store.RunBudgetStatus{}, wrap(err, "reading budget status chain")
+	}
+
+	type node struct {
+		id     string
+		budget money.Nanos
+		status store.RunStatus
+	}
+	var chain []node
+	for rows.Next() {
+		var n node
+		var budget int64
+		var status string
+		if err := rows.Scan(&n.id, &budget, &status); err != nil {
+			_ = rows.Close()
+			return store.RunBudgetStatus{}, wrap(err, "scanning budget status chain")
+		}
+		n.budget = money.Nanos(budget)
+		n.status = store.RunStatus(status)
+		chain = append(chain, n)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return store.RunBudgetStatus{}, wrap(err, "iterating budget status chain")
+	}
+	if err := rows.Close(); err != nil {
+		return store.RunBudgetStatus{}, wrap(err, "closing budget status chain")
+	}
+	if len(chain) == 0 {
+		return store.RunBudgetStatus{}, fmt.Errorf("%w: run %s", store.ErrNotFound, runID)
+	}
+
+	result := store.RunBudgetStatus{
+		RunID: runID, Status: chain[0].status, SpendAllowed: true, Unlimited: true,
+	}
+	for _, n := range chain {
+		spent, held, err := subtreeUsage(ctx, tx, n.id)
+		if err != nil {
+			return store.RunBudgetStatus{}, err
+		}
+		level := store.BudgetLevel{
+			RunID: n.id, Status: n.status, Budget: n.budget, Spent: spent, Held: held, Unlimited: n.budget == 0,
+		}
+		if n.status != store.RunActive && result.SpendAllowed {
+			result.SpendAllowed = false
+			result.BlockingRunID = n.id
+		}
+		if n.budget > 0 {
+			level.Remaining = n.budget
+			if spent >= level.Remaining {
+				level.Remaining = 0
+			} else {
+				level.Remaining -= spent
+			}
+			if held >= level.Remaining {
+				level.Remaining = 0
+			} else {
+				level.Remaining -= held
+			}
+			if result.Unlimited || level.Remaining < result.EffectiveRemaining {
+				result.Unlimited = false
+				result.EffectiveRemaining = level.Remaining
+				result.LimitingRunID = n.id
+			}
+		}
+		result.Levels = append(result.Levels, level)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.RunBudgetStatus{}, wrap(err, "committing budget status read")
+	}
+	return result, nil
 }
 
 // GetReservation returns a reservation by ID.

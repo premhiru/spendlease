@@ -82,6 +82,18 @@ type RouteRegistrar interface {
 	Routes(mux *http.ServeMux)
 }
 
+// RouteGroup combines independent operational surfaces on one gateway mux.
+type RouteGroup []RouteRegistrar
+
+// Routes registers every non-nil member in order.
+func (group RouteGroup) Routes(mux *http.ServeMux) {
+	for _, registrar := range group {
+		if registrar != nil {
+			registrar.Routes(mux)
+		}
+	}
+}
+
 // Gateway proxies agent requests to vendor APIs.
 type Gateway struct {
 	principals  PrincipalLookup

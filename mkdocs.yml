@@ -60,6 +60,7 @@ nav:
   - Policy reference: policy-reference.md
   - Price book: pricing-book.md
   - Self-hosting: self-hosting.md
+  - Releasing: releasing.md
   - API reference: api-reference.md
   - FAQ: faq.md
   - Decision records:
@@ -81,3 +82,4 @@ nav:
       - 15. Reservations may precede leases: adr/0015-reservations-may-precede-leases.md
       - 16. Memory-first durable revocation: adr/0016-revocation-is-memory-first-and-durable.md
       - 17. Filter the operational event stream: adr/0017-filter-the-operational-event-stream.md
+      - 18. Version the operator control plane: adr/0018-version-the-operator-control-plane.md

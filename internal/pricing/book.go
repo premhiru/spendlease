@@ -14,6 +14,8 @@
 package pricing
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -130,6 +132,18 @@ type File struct {
 
 	// name is the file it was read from, for error messages.
 	name string
+	// digest is the SHA-256 of the source document, used to identify the exact
+	// active price-book revision without exposing file contents.
+	digest string
+}
+
+// Metadata identifies the active price-book snapshot for operators.
+type Metadata struct {
+	Revision        string
+	LoadedAt        time.Time
+	LatestEffective time.Time
+	Providers       int
+	Models          int
 }
 
 // Price is a resolved price for one model at one moment.
@@ -291,6 +305,8 @@ func readDir(fsys fs.FS, dir string) ([]File, error) {
 			return nil, fmt.Errorf("pricing: parsing %s: %w", name, err)
 		}
 		f.name = name
+		digest := sha256.Sum256(raw)
+		f.digest = hex.EncodeToString(digest[:])
 
 		if err := f.validate(); err != nil {
 			return nil, err
@@ -548,6 +564,47 @@ func (b *Book) LoadedAt() time.Time {
 		return snap.loadedAt
 	}
 	return time.Time{}
+}
+
+// Metadata returns a stable digest and freshness summary for prices active at
+// the supplied instant. Future-dated files do not change today's revision.
+func (b *Book) Metadata(at time.Time) Metadata {
+	snap := b.snapshot.Load()
+	if snap == nil {
+		return Metadata{}
+	}
+	h := sha256.New()
+	active := map[string]map[string]bool{}
+	for _, file := range snap.files {
+		if file.Effective.After(at) {
+			continue
+		}
+		_, _ = h.Write([]byte(file.name))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(file.digest))
+		_, _ = h.Write([]byte{0})
+		for provider, prices := range file.Providers {
+			if active[provider] == nil {
+				active[provider] = map[string]bool{}
+			}
+			for model := range prices.Models {
+				active[provider][model] = true
+			}
+		}
+	}
+	metadata := Metadata{
+		Revision: hex.EncodeToString(h.Sum(nil)), LoadedAt: snap.loadedAt,
+		Providers: len(active),
+	}
+	for _, file := range snap.files {
+		if !file.Effective.After(at) && file.Effective.After(metadata.LatestEffective) {
+			metadata.LatestEffective = file.Effective
+		}
+	}
+	for _, models := range active {
+		metadata.Models += len(models)
+	}
+	return metadata
 }
 
 // kindName renders a YAML node kind for an error message.

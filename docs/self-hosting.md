@@ -10,12 +10,17 @@ The container registry publishes three useful kinds of tag:
 
 - `edge` follows `main` and may change at any time.
 - `sha-<commit>` identifies one immutable build.
-- Version tags are created for GitHub releases. The current
-  `v0.1.0-alpha.1` release predates the complete gateway and should not be used
-  with the current documentation.
+- Version tags are created for GitHub releases. `v0.2.0-beta.1` is the first
+  version intended for an end-to-end evaluation.
 
 Evaluate `edge`, then deploy the corresponding `sha-...` tag rather than a
 mutable tag. Source builds should likewise pin a commit.
+
+Tagged releases attach platform binaries and checksums, Python wheel/source
+archives, an npm tarball, and `container-image.txt`. The last file contains
+the immutable `ghcr.io/...@sha256:...` reference for that build. Registry
+packages are published through PyPI and npm trusted publishing; GitHub release
+artifacts remain available even when a registry is temporarily unavailable.
 
 ## Run the container
 
@@ -152,6 +157,14 @@ VACUUM INTO 'spendlease-backup.db';
 
 The hash chain detects changes to ledger rows; it does not replace backups.
 Test both database restoration and access to the matching master key.
+
+Verify the live database after a backup or before an upgrade:
+
+```bash
+spendlease ledger verify --store /var/lib/spendlease/spendlease.db
+spendlease ledger export --store /var/lib/spendlease/spendlease.db \
+  --format csv > spendlease-ledger.csv
+```
 
 ## Upgrades
 

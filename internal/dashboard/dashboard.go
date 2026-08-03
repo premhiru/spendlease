@@ -44,10 +44,15 @@ type Options struct {
 	Logger *slog.Logger
 	// Version is shown in the header.
 	Version string
-	// Models is how many models the price book knows, shown in the header.
-	Models int
-	// PricingBreakdown explains the model count by provider.
-	PricingBreakdown string
+	// PricingRevision identifies the exact active price-book contents.
+	PricingRevision string
+	// PricingEffective is the newest active rate date.
+	PricingEffective time.Time
+	// PricingLoadedAt is when the running process loaded those rates.
+	PricingLoadedAt time.Time
+	// PricingProviders and PricingModels add coverage context to the tooltip.
+	PricingProviders int
+	PricingModels    int
 	// Warning, if set, is displayed above the table. It carries the reason a
 	// deployment is not production-ready rather than leaving it implicit.
 	Warning string
@@ -59,16 +64,16 @@ type Options struct {
 
 // Dashboard serves the spend table.
 type Dashboard struct {
-	store            SummaryStore
-	logger           *slog.Logger
-	tmpl             *template.Template
-	static           http.Handler
-	guard            Guard
-	version          string
-	models           int
-	pricingBreakdown string
-	warning          string
-	revoker          PrincipalRevoker
+	store         SummaryStore
+	logger        *slog.Logger
+	tmpl          *template.Template
+	static        http.Handler
+	guard         Guard
+	version       string
+	pricingLabel  string
+	pricingDetail string
+	warning       string
+	revoker       PrincipalRevoker
 }
 
 // New parses the templates and returns a dashboard.
@@ -81,16 +86,16 @@ func New(opts Options) (*Dashboard, error) {
 		return nil, err
 	}
 	return &Dashboard{
-		store:            opts.Store,
-		logger:           opts.Logger,
-		tmpl:             tmpl,
-		static:           http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
-		guard:            opts.Guard,
-		version:          opts.Version,
-		models:           opts.Models,
-		pricingBreakdown: opts.PricingBreakdown,
-		warning:          opts.Warning,
-		revoker:          opts.Revoker,
+		store:         opts.Store,
+		logger:        opts.Logger,
+		tmpl:          tmpl,
+		static:        http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
+		guard:         opts.Guard,
+		version:       opts.Version,
+		pricingLabel:  priceBookLabel(opts.PricingRevision, opts.PricingEffective),
+		pricingDetail: priceBookDetail(opts.PricingLoadedAt, opts.PricingProviders, opts.PricingModels),
+		warning:       opts.Warning,
+		revoker:       opts.Revoker,
 	}, nil
 }
 
@@ -134,15 +139,15 @@ func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 // view is what the templates render.
 type view struct {
-	BuildLabel       string
-	Models           int
-	PricingBreakdown string
-	Warning          string
-	Principals       []row
-	Total            money.Nanos
-	Notice           string
-	Events           []eventRow
-	EventFilter      eventFilterView
+	BuildLabel    string
+	PricingLabel  string
+	PricingDetail string
+	Warning       string
+	Principals    []row
+	Total         money.Nanos
+	Notice        string
+	Events        []eventRow
+	EventFilter   eventFilterView
 }
 
 type eventFilterView struct {
@@ -253,11 +258,11 @@ func (d *Dashboard) build(r *http.Request) (view, error) {
 	now := time.Now()
 	eventFilter, eventFilterView := parseEventFilter(r, now)
 	v := view{
-		BuildLabel:       dashboardBuildLabel(d.version),
-		Models:           d.models,
-		PricingBreakdown: d.pricingBreakdown,
-		Warning:          d.warning,
-		EventFilter:      eventFilterView,
+		BuildLabel:    dashboardBuildLabel(d.version),
+		PricingLabel:  d.pricingLabel,
+		PricingDetail: d.pricingDetail,
+		Warning:       d.warning,
+		EventFilter:   eventFilterView,
 	}
 
 	for _, s := range summaries {
@@ -421,6 +426,28 @@ func dashboardBuildLabel(version string) string {
 		return "Local development build"
 	}
 	return "Build " + version
+}
+
+func priceBookLabel(revision string, effective time.Time) string {
+	revision = strings.TrimSpace(revision)
+	if len(revision) > 8 {
+		revision = revision[:8]
+	}
+	if revision == "" {
+		revision = "unknown"
+	}
+	if effective.IsZero() {
+		return "Price book " + revision
+	}
+	return fmt.Sprintf("Price book %s · rates through %s", revision, effective.UTC().Format("2 Jan 2006"))
+}
+
+func priceBookDetail(loadedAt time.Time, providers, models int) string {
+	detail := fmt.Sprintf("%d providers · %d price entries", providers, models)
+	if loadedAt.IsZero() {
+		return detail
+	}
+	return fmt.Sprintf("Loaded %s · %s", loadedAt.UTC().Format("2 Jan 2006 15:04 UTC"), detail)
 }
 
 func principalStatus(s store.PrincipalSummary) (string, string) {

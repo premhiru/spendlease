@@ -28,3 +28,4 @@ and references for current behavior.
 | [0015](0015-reservations-may-precede-leases.md) | Reservations may precede leases | Accepted |
 | [0016](0016-revocation-is-memory-first-and-durable.md) | Revocation is memory-first and durable | Accepted |
 | [0017](0017-filter-the-operational-event-stream.md) | Filter the operational event stream | Accepted |
+| [0018](0018-version-the-operator-control-plane.md) | Version the operator control plane | Accepted |

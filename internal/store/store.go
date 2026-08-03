@@ -219,6 +219,31 @@ type BudgetDecision struct {
 	Shortfall money.Nanos
 }
 
+// BudgetLevel is one run in a target run's budget ancestry, with the settled
+// and in-flight spend that currently consumes its ceiling.
+type BudgetLevel struct {
+	RunID     string
+	Status    RunStatus
+	Budget    money.Nanos
+	Spent     money.Nanos
+	Held      money.Nanos
+	Remaining money.Nanos
+	Unlimited bool
+}
+
+// RunBudgetStatus reports the effective budget available to a run after its
+// own ceiling and every budgeted ancestor are considered.
+type RunBudgetStatus struct {
+	RunID              string
+	Status             RunStatus
+	SpendAllowed       bool
+	BlockingRunID      string
+	Unlimited          bool
+	EffectiveRemaining money.Nanos
+	LimitingRunID      string
+	Levels             []BudgetLevel
+}
+
 // BudgetEvent is a durable record of a reservation that did not fit. Enforced
 // events were rejected before egress; observe-mode events were forwarded but
 // retain the decision an operator would otherwise only see in logs.
@@ -424,6 +449,9 @@ type Store interface {
 	ExpirePendingReservations(ctx context.Context, now time.Time) (int, error)
 	// PendingReservationTotal sums the still-held amounts for one run.
 	PendingReservationTotal(ctx context.Context, runID string) (money.Nanos, error)
+	// BudgetStatus reports current settled spend, holds and remaining budget
+	// for a run and every ancestor that limits it.
+	BudgetStatus(ctx context.Context, runID string) (RunBudgetStatus, error)
 	// SettleReservation atomically appends one ledger entry and resolves its
 	// reservation. Repeating the same settlement returns the original entry.
 	SettleReservation(ctx context.Context, reservationID string, e ledger.Entry) (ledger.Entry, error)

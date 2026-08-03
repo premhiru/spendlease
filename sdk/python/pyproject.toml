@@ -4,16 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spendlease"
-version = "0.1.0"
+version = "0.2.0b1"
 description = "Thin Python helpers for the spendlease spend authorization gateway"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 authors = [{ name = "spendlease contributors" }]
 keywords = ["ai", "agents", "spend", "budget", "gateway"]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: Apache Software License",
 ]
 
 [project.urls]
