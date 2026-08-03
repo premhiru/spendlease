@@ -8,7 +8,7 @@ lease = Lease.from_env()
 client = OpenAI(**lease.openai_kwargs())
 
 response = client.chat.completions.create(
-    model="gpt-4o-mini",
+    model="gpt-5.4-mini",
     messages=[{"role": "user", "content": "Explain spend authorization in one sentence."}],
 )
 print(response.choices[0].message.content)

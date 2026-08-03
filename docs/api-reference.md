@@ -3,7 +3,8 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v1. This page documents the implemented v0.1 surface.
+> Pre-v1. This page documents the first usable beta surface. The operator API
+> is versioned under `/api/v1`; breaking changes will use a new path.
 
 ## Authentication
 
@@ -164,6 +165,102 @@ Vendor responses are passed through unchanged, including error status codes and 
 | `GET` | `/table` | local or admin token | Dashboard table fragment used by htmx. |
 | `POST` | `/admin/principals/{id}/mode` | local or admin token | Switch between `observe` and `enforce`. |
 | `POST` | `/admin/principals/{id}/revoke` | local or admin token | Immediately revoke every current lease. |
+
+## JSON operator API
+
+The `/api/v1` API is intended for orchestrators and operator scripts. It uses
+the same local-or-admin-token guard as the dashboard. Remote requests send
+`Authorization: Bearer <admin-token>`. Every `POST` must also send
+`X-Spendlease-Admin: 1`; JSON bodies require `Content-Type: application/json`.
+Unknown request fields and bodies larger than 1 MiB are rejected.
+
+Amounts are decimal USD strings. This avoids floating-point rounding in
+clients. Timestamps are RFC 3339. A lease token appears only in the successful
+issue response and cannot be recovered later.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/principals/{principal-id}/runs` | List runs, newest first. |
+| `POST` | `/api/v1/principals/{principal-id}/runs` | Create a run. |
+| `GET` | `/api/v1/runs/{run-id}` | Read one run. |
+| `POST` | `/api/v1/runs/{run-id}/close` | Close a run. |
+| `GET` | `/api/v1/runs/{run-id}/budget` | Read settled spend, pending holds, and effective remaining budget. |
+| `GET` | `/api/v1/runs/{run-id}/leases` | List lease metadata without tokens. |
+| `POST` | `/api/v1/runs/{run-id}/leases` | Issue a lease. |
+| `POST` | `/api/v1/leases/{lease-id}/revoke` | Revoke one lease immediately. |
+| `GET` | `/api/v1/ledger/verify` | Verify the complete hash chain. |
+| `GET` | `/api/v1/ledger/export` | Export filtered JSON or CSV. |
+
+### Create a run and issue a lease
+
+Replace the principal ID and save the returned run ID:
+
+```bash
+curl -sS -X POST http://localhost:4000/api/v1/principals/prn_.../runs \
+  -H 'Content-Type: application/json' \
+  -H 'X-Spendlease-Admin: 1' \
+  -d '{"budget_usd":"5.00"}'
+```
+
+```json
+{
+  "id": "run_...",
+  "principal_id": "prn_...",
+  "budget_usd": "5.00",
+  "status": "active",
+  "created_at": "2026-08-03T02:00:00Z"
+}
+```
+
+Then issue a 15-minute, provider-scoped lease:
+
+```bash
+curl -sS -X POST http://localhost:4000/api/v1/runs/run_.../leases \
+  -H 'Content-Type: application/json' \
+  -H 'X-Spendlease-Admin: 1' \
+  -d '{"ttl_seconds":900,"providers":["openai"],"ceiling_usd":"1.00"}'
+```
+
+The response contains `token: "sll_..."` once. `ttl_seconds` defaults to 900
+and must be between 1 and 2,592,000. An empty provider list allows every
+configured provider; `ceiling_usd: "0"` adds no lease-specific ceiling.
+
+### Check the remaining budget
+
+```bash
+curl -sS http://localhost:4000/api/v1/runs/run_.../budget
+```
+
+`effective_remaining_usd` is the tightest remaining ceiling across the run
+and all budgeted ancestors. `levels` explains status, settled spend, pending
+holds, and remaining budget at each level. `limiting_run_id` identifies the
+tightest monetary ceiling. `spend_allowed` is false when the run or an
+ancestor is closed, and `blocking_run_id` identifies that closed run.
+
+### Close or revoke
+
+Closing prevents new spend on a run. Revoking a lease invalidates it in memory
+before the durable record is updated, so its next request is rejected.
+
+```bash
+curl -sS -X POST http://localhost:4000/api/v1/runs/run_.../close \
+  -H 'X-Spendlease-Admin: 1'
+
+curl -sS -X POST http://localhost:4000/api/v1/leases/lease_.../revoke \
+  -H 'X-Spendlease-Admin: 1'
+```
+
+### Verify and export the ledger
+
+```bash
+curl -sS http://localhost:4000/api/v1/ledger/verify
+curl -sS 'http://localhost:4000/api/v1/ledger/export?format=json&run_id=run_...'
+curl -sS 'http://localhost:4000/api/v1/ledger/export?format=csv&since=2026-08-01T00:00:00Z'
+```
+
+Export filters are `run_id`, `principal_id`, and an RFC 3339 `since`
+timestamp. JSON preserves money as strings; CSV includes the chain hashes so
+an export can be retained with its audit evidence.
 
 “Local” means both the TCP peer and HTTP host are loopback. Other dashboard and
 admin requests require `SPENDLEASE_ADMIN_TOKEN` (or `--admin-token`) and either HTTP

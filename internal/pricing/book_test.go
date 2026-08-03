@@ -450,3 +450,31 @@ func TestLoadedAt(t *testing.T) {
 		t.Error("LoadedAt is zero after a successful load")
 	}
 }
+
+func TestMetadataIdentifiesOnlyActivePrices(t *testing.T) {
+	t.Parallel()
+
+	future := `
+version: 1
+effective: 2027-01-01
+providers:
+  openai:
+    source: https://example.invalid/openai
+    models:
+      future-model:
+        input_per_1m: 1.00
+        output_per_1m: 2.00
+        default_max_tokens: 100
+`
+	b := loadTestBook(t, map[string]string{"base.yaml": basicBook, "future.yaml": future}, Options{})
+	current := b.Metadata(date(2026, time.July, 1))
+	if len(current.Revision) != 64 || current.LoadedAt.IsZero() ||
+		!current.LatestEffective.Equal(date(2026, time.January, 1)) || current.Providers != 2 || current.Models != 4 {
+		t.Fatalf("current metadata = %+v", current)
+	}
+	later := b.Metadata(date(2027, time.January, 2))
+	if later.Revision == current.Revision || later.Models != 5 ||
+		!later.LatestEffective.Equal(date(2027, time.January, 1)) {
+		t.Fatalf("future metadata = %+v", later)
+	}
+}

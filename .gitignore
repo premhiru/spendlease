@@ -9,7 +9,8 @@ coverage.html
 *.db-shm
 *.db-wal
 /data/
-spendlease.key
+spendlease*.key
+spendlease*.log
 
 # Environment
 .env

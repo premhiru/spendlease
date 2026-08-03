@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	spendlease "github.com/premhiru/spendlease"
@@ -62,17 +61,6 @@ func countModels(b *pricing.Book) int {
 		total += len(b.Models(p, now))
 	}
 	return total
-}
-
-// modelBreakdown explains the dashboard's model-ID count without turning the
-// compact header into another table.
-func modelBreakdown(b *pricing.Book) string {
-	now := time.Now()
-	parts := make([]string, 0, len(b.Providers()))
-	for _, provider := range b.Providers() {
-		parts = append(parts, fmt.Sprintf("%s %d", provider, len(b.Models(provider, now))))
-	}
-	return strings.Join(parts, " · ")
 }
 
 // summarisePriceBook prints what the gateway knows how to price, so an

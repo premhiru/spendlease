@@ -8,10 +8,9 @@ append-only ledger.
 
 !!! note "Pre-v1"
 
-    The current `main` branch contains the planned v0.1 feature set, but there
-    is no stable release. The `v0.1.0-alpha.1` tag predates the current
-    implementation. Use an immutable `sha-...` container tag or pinned commit
-    for repeatable evaluation.
+    `v0.2.0-beta.1` is the first release intended for an end-to-end
+    evaluation. It is not a stable v1 API. Use an immutable container digest
+    or pinned commit for repeatable evaluation.
 
 ## The problem
 
@@ -31,6 +30,7 @@ a ceiling below the run budget.
 | [Providers](providers.md) | Credentials, base URLs, routing, and pricing scope |
 | [CLI reference](cli-reference.md) | Commands, flags, and environment variables |
 | [SDKs and examples](sdks.md) | Python and TypeScript helpers |
+| [API reference](api-reference.md) | Versioned run, lease, budget, and ledger operations |
 | [Dashboard](dashboard.md) | Spend table, controls, and access |
 | [Concepts](concepts.md) | Principal, run, lease, reservation |
 | [Reserve and settle](reserve-and-settle.md) | How spend is authorized before a call completes |

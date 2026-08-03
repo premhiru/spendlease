@@ -1,6 +1,6 @@
 # Policy reference
 
-The v0.1 policy surface is small: principals choose whether budgets block,
+The first-beta policy surface is small: principals choose whether budgets block,
 runs carry those budgets, leases restrict provider access and optional spend,
 and the price book supplies reservation defaults.
 
@@ -96,6 +96,6 @@ rates and fallback ceiling; they are never treated as free.
 ## Not implemented
 
 There is no per-endpoint policy, time-of-day policy, approval workflow,
-multi-currency rule, RBAC, anomaly detector or general expression language in
-v0.1. Provider scope and per-lease ceilings are enforced on every lease; they
+multi-currency rule, RBAC, anomaly detector or general expression language.
+Provider scope and per-lease ceilings are enforced on every lease; they
 do not expand the principal policy into a generic capability system.

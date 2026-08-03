@@ -14,6 +14,12 @@ pages for [OpenAI](https://developers.openai.com/api/docs/pricing),
 [Z.AI](https://docs.z.ai/guides/overview/pricing). Prices and model names can
 change without a spendlease release, so the date matters.
 
+At startup the gateway computes a SHA-256 revision from every active price
+file and shows its short form plus the newest effective date in the dashboard.
+Future-dated files do not change the active revision until their date arrives.
+Use that revision when comparing two deployments; a raw model count cannot
+identify which rates either one loaded.
+
 > [!WARNING]
 > A spendlease budget covers only charges represented by the price book.
 > Enforce mode blocks known unsupported billing surfaces before egress, but

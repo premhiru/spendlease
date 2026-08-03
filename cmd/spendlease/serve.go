@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/premhiru/spendlease/internal/controlplane"
 	"github.com/premhiru/spendlease/internal/dashboard"
 	"github.com/premhiru/spendlease/internal/gateway"
 	"github.com/premhiru/spendlease/internal/money"
@@ -153,16 +154,19 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	adminToken := resolveAdminToken(*adminTokenFlag)
 	revocations := gateway.NewRevocationSet()
 	killSwitch := gateway.NewKillSwitch(st, revocations)
+	pricingMetadata := book.Metadata(time.Now())
+	guard := dashboard.Guard{Token: adminToken}
 	dash, err := dashboard.New(dashboard.Options{
-		Store:            st,
-		Logger:           logger,
-		Version:          version,
-		Models:           countModels(book),
-		PricingBreakdown: modelBreakdown(book),
-		Warning:          dashboardWarning(*addr, adminToken),
-		Guard:            dashboard.Guard{Token: adminToken},
-		Revoker:          killSwitch,
+		Store: st, Logger: logger, Version: version,
+		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
+		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
+		PricingModels: pricingMetadata.Models, Warning: dashboardWarning(*addr, adminToken),
+		Guard: guard, Revoker: killSwitch,
 	})
+	if err != nil {
+		return err
+	}
+	api, err := controlplane.New(controlplane.Options{Store: st, Revoker: killSwitch, Guard: guard, Logger: logger})
 	if err != nil {
 		return err
 	}
@@ -175,7 +179,7 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		Credentials: v,
 		Registry:    registry,
 		Recorder:    gateway.NewRecorder(st, book, budget, logger, *reservationTTL),
-		Dashboard:   dash,
+		Dashboard:   gateway.RouteGroup{dash, api},
 		Logger:      logger,
 	})
 	if err != nil {

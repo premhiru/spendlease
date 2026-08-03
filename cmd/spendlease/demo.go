@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/premhiru/spendlease/internal/controlplane"
 	"github.com/premhiru/spendlease/internal/dashboard"
 	"github.com/premhiru/spendlease/internal/gateway"
 	"github.com/premhiru/spendlease/internal/money"
@@ -112,17 +113,25 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 
 	revocations := gateway.NewRevocationSet()
 	killSwitch := gateway.NewKillSwitch(st, revocations)
+	pricingMetadata := book.Metadata(time.Now())
+	guard := dashboard.Guard{}
 	dash, err := dashboard.New(dashboard.Options{
-		Store: st, Logger: logger, Version: version, Models: countModels(book),
-		PricingBreakdown: modelBreakdown(book), Revoker: killSwitch,
+		Store: st, Logger: logger, Version: version,
+		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
+		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
+		PricingModels: pricingMetadata.Models, Guard: guard, Revoker: killSwitch,
 	})
+	if err != nil {
+		return err
+	}
+	api, err := controlplane.New(controlplane.Options{Store: st, Revoker: killSwitch, Guard: guard, Logger: logger})
 	if err != nil {
 		return err
 	}
 	gw, err := gateway.New(gateway.Options{
 		Principals: st, Leases: st, Revocations: revocations, Credentials: v,
 		Registry: registry, Recorder: gateway.NewRecorder(st, book, money.MustParseUSD("1.00"), logger),
-		Dashboard: dash, Logger: logger,
+		Dashboard: gateway.RouteGroup{dash, api}, Logger: logger,
 	})
 	if err != nil {
 		return err

@@ -2,12 +2,11 @@
 
 ## Is spendlease ready for production?
 
-It is pre-v1. The complete v0.1 surface is implemented and tested, including
-the encrypted vault, SQLite ledger, reserve/settle enforcement, short-lived
-leases and sub-second kill switch. There is no stable release, and the
-`v0.1.0-alpha.1` tag predates the current implementation. Pin a commit or
-`sha-...` container build and evaluate it in observe mode before making it a
-production dependency.
+It is pre-v1. `v0.2.0-beta.1` is the first release intended for an end-to-end
+evaluation, including the encrypted vault, SQLite ledger, reserve/settle
+enforcement, short-lived leases, versioned operator API, and immediate kill
+switch. Pin a release digest or commit and evaluate it in observe mode before
+making it a production dependency.
 
 ## Is the configured budget a ceiling on my vendor invoice?
 
@@ -62,11 +61,11 @@ behind TLS.
 
 ## Can I export or verify the ledger from the CLI?
 
-Not in v0.1. Ledger rows are append-only and hash-chained, and the Go package
-provides `ledger.VerifyChain`, but there is no supported operator command for
-export or verification yet. Back up the SQLite database as described under
-[Self-hosting](self-hosting.md#backups); the hash chain is not a substitute for
-a backup.
+Yes. Run `spendlease ledger verify` to check the complete chain and
+`spendlease ledger export --format json|csv` to export it. The guarded JSON API
+and both SDK admin clients expose the same operations. Back up the SQLite
+database as described under [Self-hosting](self-hosting.md#backups); the hash
+chain is not a substitute for a backup.
 
 ## Is PostgreSQL supported?
 
@@ -78,4 +77,4 @@ a hidden requirement for the zero-configuration path.
 
 Base-URL override works with vendor SDKs in every language and does not depend
 on a framework's release cycle. Framework-specific adapters are deliberately
-out of scope for v0.1.
+out of scope for the first beta.

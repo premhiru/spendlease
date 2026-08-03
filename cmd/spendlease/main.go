@@ -1,11 +1,12 @@
 // Command spendlease is the single binary entrypoint for the spendlease spend
 // authorization gateway.
 //
-// It exposes four subcommands:
+// It exposes five subcommands:
 //
 //	serve     run the gateway and dashboard
 //	demo      run a simulated agent fleet against a mock provider
 //	keys      manage principals, runs and leases
+//	ledger    verify or export the append-only spend ledger
 //	version   print version information
 //
 // Run "spendlease <command> -h" for the flags of an individual command.
@@ -59,6 +60,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = runDemo(rest, stdout, stderr)
 	case "keys":
 		err = runKeys(rest, stdout, stderr)
+	case "ledger":
+		err = runLedger(rest, stdout, stderr)
 	case "version":
 		err = runVersion(rest, stdout)
 	case "help", "-h", "--help":
@@ -95,6 +98,7 @@ Commands:
   serve     Run the gateway
   demo      Run a simulated agent fleet against a mock provider
   keys      Manage principals, vendor credentials, runs, leases, and revocation
+  ledger    Verify or export the append-only spend ledger
   version   Print version information
 
 Getting started:

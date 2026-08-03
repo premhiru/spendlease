@@ -47,6 +47,61 @@ export class SpendleaseError extends Error {
   }
 }
 
+/** A run returned by the spendlease control plane. */
+export interface RunRecord {
+  id: string;
+  principal_id: string;
+  parent_run_id?: string;
+  budget_usd: string;
+  status: "active" | "closed";
+  created_at: string;
+  closed_at?: string;
+}
+
+/** A lease record. The token appears only on the issue response. */
+export interface LeaseRecord {
+  id: string;
+  run_id: string;
+  providers: string[];
+  ceiling_usd: string;
+  expires_at: string;
+  revoked_at?: string;
+  created_at: string;
+  status: "active" | "revoked" | "expired";
+  token?: string;
+}
+
+/** One budget ceiling in a run's ancestry. */
+export interface BudgetLevel {
+  run_id: string;
+  status: "active" | "closed";
+  budget_usd: string;
+  spent_usd: string;
+  held_usd: string;
+  remaining_usd: string;
+  unlimited: boolean;
+}
+
+/** Effective remaining budget after all ancestors are considered. */
+export interface BudgetStatus {
+  run_id: string;
+  status: "active" | "closed";
+  spend_allowed: boolean;
+  blocking_run_id?: string;
+  unlimited: boolean;
+  effective_remaining_usd: string;
+  limiting_run_id?: string;
+  levels: BudgetLevel[];
+}
+
+/** Successful ledger verification result. */
+export interface LedgerVerification {
+  ok: true;
+  entries: number;
+  head_hash: string;
+  head_sequence?: number;
+}
+
 /** Minimal client for the guarded spendlease admin endpoints. */
 export class AdminClient {
   /** Root URL of the spendlease gateway. */
@@ -70,6 +125,85 @@ export class AdminClient {
     return this.post(`/admin/principals/${encodeURIComponent(principalID)}/revoke`, {});
   }
 
+  /** Create a budgeted run for a principal. */
+  createRun(principalID: string, budgetUSD: string, parentRunID = ""): Promise<RunRecord> {
+    return this.json("POST", `/api/v1/principals/${encodeURIComponent(principalID)}/runs`, {
+      budget_usd: budgetUSD,
+      parent_run_id: parentRunID,
+    });
+  }
+
+  /** List a principal's runs, newest first. */
+  async listRuns(principalID: string): Promise<RunRecord[]> {
+    const result = await this.json<{ runs: RunRecord[] }>(
+      "GET",
+      `/api/v1/principals/${encodeURIComponent(principalID)}/runs`,
+    );
+    return result.runs;
+  }
+
+  /** Read one run by ID. */
+  getRun(runID: string): Promise<RunRecord> {
+    return this.json("GET", `/api/v1/runs/${encodeURIComponent(runID)}`);
+  }
+
+  /** Close a run so it can no longer issue leases or spend. */
+  closeRun(runID: string): Promise<RunRecord> {
+    return this.json("POST", `/api/v1/runs/${encodeURIComponent(runID)}/close`, {});
+  }
+
+  /** Read effective remaining budget and the limiting ancestor. */
+  remainingBudget(runID: string): Promise<BudgetStatus> {
+    return this.json("GET", `/api/v1/runs/${encodeURIComponent(runID)}/budget`);
+  }
+
+  /** Issue a lease; its token is returned once in this response. */
+  issueLease(
+    runID: string,
+    options: { ttlSeconds?: number; providers?: string[]; ceilingUSD?: string } = {},
+  ): Promise<LeaseRecord> {
+    return this.json("POST", `/api/v1/runs/${encodeURIComponent(runID)}/leases`, {
+      ttl_seconds: options.ttlSeconds ?? 900,
+      providers: options.providers ?? [],
+      ceiling_usd: options.ceilingUSD ?? "0",
+    });
+  }
+
+  /** List a run's leases without returning token material. */
+  async listLeases(runID: string): Promise<LeaseRecord[]> {
+    const result = await this.json<{ leases: LeaseRecord[] }>(
+      "GET",
+      `/api/v1/runs/${encodeURIComponent(runID)}/leases`,
+    );
+    return result.leases;
+  }
+
+  /** Revoke one lease immediately. */
+  revokeLease(leaseID: string): Promise<LeaseRecord> {
+    return this.json("POST", `/api/v1/leases/${encodeURIComponent(leaseID)}/revoke`, {});
+  }
+
+  /** Verify the complete ledger hash chain. */
+  verifyLedger(): Promise<LedgerVerification> {
+    return this.json("GET", "/api/v1/ledger/verify");
+  }
+
+  /** Export ledger rows as JSON or CSV text. */
+  async exportLedger(options: {
+    format?: "json" | "csv";
+    runID?: string;
+    principalID?: string;
+    since?: string;
+  } = {}): Promise<string> {
+    const query = new URLSearchParams();
+    query.set("format", options.format ?? "json");
+    if (options.runID) query.set("run_id", options.runID);
+    if (options.principalID) query.set("principal_id", options.principalID);
+    if (options.since) query.set("since", options.since);
+    const response = await this.request("GET", `/api/v1/ledger/export?${query.toString()}`);
+    return response.text();
+  }
+
   private async post(path: string, fields: Record<string, string>): Promise<string> {
     const headers: Record<string, string> = {
       "content-type": "application/x-www-form-urlencoded",
@@ -84,5 +218,27 @@ export class AdminClient {
     const body = await response.text();
     if (!response.ok) throw new SpendleaseError(response.status, body.trim() || response.statusText);
     return body;
+  }
+
+  private async json<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+    const response = await this.request(method, path, body);
+    return response.json() as Promise<T>;
+  }
+
+  private async request(method: "GET" | "POST", path: string, body?: unknown): Promise<Response> {
+    const headers: Record<string, string> = {};
+    if (body !== undefined) headers["content-type"] = "application/json";
+    if (method === "POST") headers["x-spendlease-admin"] = "1";
+    if (this.token) headers.authorization = `Bearer ${this.token}`;
+    const response = await fetch(this.baseURL + path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new SpendleaseError(response.status, text.trim() || response.statusText);
+    }
+    return response;
   }
 }

@@ -5,18 +5,22 @@ budgeted run, issue a lease, and make one request through the gateway. Anthropic
 uses the same flow with a different provider name and base URL.
 
 > [!NOTE]
-> `spendlease` is pre-v1. The `v0.1.0-alpha.1` tag predates the current gateway
-> and lease implementation. Build from the current `main` branch while
-> evaluating the project, and pin a commit or `sha-...` container tag when you
-> need a repeatable build.
+> `spendlease` is pre-v1. The first usable beta is versioned `v0.2.0-beta.1`.
+> Until that tag is visible on the releases page, build from `main` and pin the
+> commit or `sha-...` container tag used for your evaluation.
 
 ## Prerequisites
 
-- Go 1.25 or later
 - An OpenAI API key
 - Python 3.9 or later for the Python example
 
-Clone the repository and install the command:
+## Install
+
+Download the binary for your platform and its `.sha256` file from the
+[GitHub releases page](https://github.com/premhiru/spendlease/releases), verify
+the checksum, and place `spendlease` (or `spendlease.exe`) on your `PATH`.
+
+To build from source instead, install Go 1.25 or later and run:
 
 ```bash
 git clone https://github.com/premhiru/spendlease.git
@@ -169,7 +173,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="gpt-4o-mini",
+    model="gpt-5.4-mini",
     messages=[{"role": "user", "content": "hello"}],
 )
 print(response.choices[0].message.content)
@@ -189,7 +193,7 @@ URL and credential name for each one.
 curl http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $SPENDLEASE_LEASE_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"hello"}]}'
 ```
 
 ## 6. Turn on enforcement
@@ -208,6 +212,11 @@ lease for this principal:
 ```bash
 spendlease keys revoke --all --principal checkout-agent
 ```
+
+Or use the JSON operator API from an orchestrator to create and close runs,
+issue or revoke individual leases, and inspect effective remaining budget.
+See [API reference](api-reference.md#json-operator-api) for curl examples and
+[SDKs and examples](sdks.md#admin-controls) for typed client methods.
 
 ## Troubleshooting
 

@@ -89,3 +89,21 @@ func TestLeaseCeilingAndKillSwitch(t *testing.T) {
 		t.Fatalf("revoked status = %d, want 401", resp.StatusCode)
 	}
 }
+
+func TestSingleLeaseRevocationIsImmediateAndDurable(t *testing.T) {
+	t.Parallel()
+	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, `{}`) }, store.ModeEnforce, money.MustParseUSD("10.00"))
+	token, lease := seedGatewayLease(t, h, []string{"openai"}, 0)
+
+	ks := NewKillSwitch(h.store, h.revocations)
+	got, err := ks.RevokeLease(context.Background(), lease.ID)
+	if err != nil {
+		t.Fatalf("RevokeLease: %v", err)
+	}
+	if got.RevokedAt == nil || !h.revocations.Revoked(lease.TokenHash) {
+		t.Fatalf("revoked lease = %+v, in-memory=%v", got, h.revocations.Revoked(lease.TokenHash))
+	}
+	if resp := leaseRequest(t, h, token, "/v1/chat/completions", `{"model":"gpt-4o"}`); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked status = %d, want 401", resp.StatusCode)
+	}
+}

@@ -34,8 +34,10 @@ func (s *RevocationSet) Revoked(hash string) bool {
 
 // RevocationStore is the persistence slice used by the kill switch.
 type RevocationStore interface {
+	GetLease(context.Context, string) (store.Lease, error)
 	ListRunsByPrincipal(context.Context, string) ([]store.Run, error)
 	ListLeasesByRun(context.Context, string) ([]store.Lease, error)
+	RevokeLease(context.Context, string, time.Time) error
 	RevokeLeasesForPrincipal(context.Context, string, time.Time) (int, error)
 }
 
@@ -66,4 +68,18 @@ func (k *KillSwitch) RevokePrincipal(ctx context.Context, principalID string) (i
 		}
 	}
 	return k.store.RevokeLeasesForPrincipal(ctx, principalID, time.Now())
+}
+
+// RevokeLease invalidates one lease in memory before persisting the same
+// revocation. If persistence fails, the current process still fails closed.
+func (k *KillSwitch) RevokeLease(ctx context.Context, leaseID string) (store.Lease, error) {
+	lease, err := k.store.GetLease(ctx, leaseID)
+	if err != nil {
+		return store.Lease{}, err
+	}
+	k.set.Revoke(lease.TokenHash)
+	if err := k.store.RevokeLease(ctx, leaseID, time.Now()); err != nil {
+		return store.Lease{}, err
+	}
+	return k.store.GetLease(ctx, leaseID)
 }

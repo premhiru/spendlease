@@ -368,6 +368,43 @@ func TestCloseRun(t *testing.T) {
 	}
 }
 
+func TestCreateLeaseRefusesClosedRun(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	p := seedPrincipal(t, s, "closed-lease")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("1.00"))
+	if err := s.CloseRun(ctx, r.ID); err != nil {
+		t.Fatalf("CloseRun: %v", err)
+	}
+	_, hash := store.NewLeaseToken()
+	err := s.CreateLease(ctx, store.Lease{
+		ID: store.NewLeaseID(), RunID: r.ID, TokenHash: hash,
+		ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now(),
+	})
+	if !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("CreateLease error = %v, want conflict", err)
+	}
+}
+
+func TestCreateLeaseRefusesClosedAncestor(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	p := seedPrincipal(t, s, "closed-parent-lease")
+	parent := seedRun(t, s, p.ID, "", money.MustParseUSD("1.00"))
+	child := seedRun(t, s, p.ID, parent.ID, money.MustParseUSD("1.00"))
+	if err := s.CloseRun(ctx, parent.ID); err != nil {
+		t.Fatalf("CloseRun: %v", err)
+	}
+	_, hash := store.NewLeaseToken()
+	err := s.CreateLease(ctx, store.Lease{
+		ID: store.NewLeaseID(), RunID: child.ID, TokenHash: hash,
+		ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now(),
+	})
+	if !errors.Is(err, store.ErrConflict) || !strings.Contains(err.Error(), parent.ID) {
+		t.Fatalf("CreateLease error = %v, want conflict naming closed parent", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Leases
 // ---------------------------------------------------------------------------
@@ -1241,5 +1278,49 @@ func TestEstimatedFlagSurvivesRoundTrip(t *testing.T) {
 	}
 	if err := ledger.VerifyChain(entries); err != nil {
 		t.Errorf("chain does not verify: %v", err)
+	}
+}
+
+func TestBudgetStatusUsesTheTightestAncestor(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "budget-agent")
+	parent := seedRun(t, s, p.ID, "", money.MustParseUSD("0.50"))
+	child := seedRun(t, s, p.ID, parent.ID, money.MustParseUSD("1.00"))
+	if _, err := s.AppendLedger(ctx, ledger.Entry{
+		RunID: child.ID, PrincipalID: p.ID, Provider: "openai", Model: "gpt-4o-mini",
+		Cost: money.MustParseUSD("0.20"), CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateReservation(ctx, store.Reservation{
+		ID: store.NewReservationID(), RunID: child.ID, Amount: money.MustParseUSD("0.10"),
+		Status: store.ReservationPending, ExpiresAt: time.Now().Add(time.Minute), CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := s.BudgetStatus(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.SpendAllowed || status.Unlimited || status.LimitingRunID != parent.ID || status.EffectiveRemaining != money.MustParseUSD("0.20") {
+		t.Fatalf("status = %+v", status)
+	}
+	if len(status.Levels) != 2 || status.Levels[0].Remaining != money.MustParseUSD("0.70") ||
+		status.Levels[1].Remaining != money.MustParseUSD("0.20") {
+		t.Fatalf("levels = %+v", status.Levels)
+	}
+	if err := s.CloseRun(ctx, parent.ID); err != nil {
+		t.Fatal(err)
+	}
+	status, err = s.BudgetStatus(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.SpendAllowed || status.BlockingRunID != parent.ID || status.Levels[1].Status != store.RunClosed {
+		t.Fatalf("closed-ancestor status = %+v", status)
 	}
 }

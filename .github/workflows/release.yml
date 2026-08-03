@@ -21,7 +21,7 @@ jobs:
     name: Publish container image
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v7
@@ -81,6 +81,7 @@ jobs:
             org.opencontainers.image.description=Spend authorization gateway for AI agents
 
       - name: Build and push
+        id: publish
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -94,6 +95,20 @@ jobs:
             DATE=${{ steps.build.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Record immutable image reference
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p dist
+          printf '%s@%s\n' "${IMAGE}" "${{ steps.publish.outputs.digest }}" > dist/container-image.txt
+
+      - name: Attach immutable image reference to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/container-image.txt
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
 
       # Pull the image we just pushed and exercise its default command. Running
       # only `version` would not catch a non-writable /data volume.
@@ -166,3 +181,94 @@ jobs:
           # Anything with a hyphen in the version is a prerelease: v0.1.0-alpha.1.
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
+
+  python-package:
+    name: Publish Python package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install --upgrade build
+          python -m build sdk/python
+
+      - name: Match package version to release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import pathlib, tomllib, os
+          version = tomllib.loads(pathlib.Path("sdk/python/pyproject.toml").read_text())["project"]["version"]
+          expected = "v" + version.replace("b", "-beta.")
+          if os.environ["RELEASE_TAG"] != expected:
+              raise SystemExit(f"tag {os.environ['RELEASE_TAG']} does not match Python package {version} ({expected})")
+          PY
+
+      - name: Attach Python distributions to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: sdk/python/dist/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+
+      - name: Publish to PyPI with trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/dist/
+
+  npm-package:
+    name: Publish npm package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+
+      - name: Build and pack
+        working-directory: sdk/typescript
+        run: |
+          npm ci
+          mkdir -p dist-package
+          npm pack --pack-destination dist-package
+
+      - name: Match package version to release tag
+        working-directory: sdk/typescript
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${RELEASE_TAG}" != "v${version}" ]; then
+            echo "tag ${RELEASE_TAG} does not match npm package ${version}"
+            exit 1
+          fi
+
+      - name: Attach npm package to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: sdk/typescript/dist-package/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+
+      - name: Publish to npm with provenance
+        working-directory: sdk/typescript
+        run: npm publish --access public --provenance

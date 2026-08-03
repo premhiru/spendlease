@@ -57,3 +57,46 @@ test("AdminClient reports HTTP failures", async () => {
     return true;
   });
 });
+
+test("AdminClient creates runs through the JSON control plane", async () => {
+  let captured;
+  globalThis.fetch = async (url, options) => {
+    captured = { url, options };
+    return {
+      ok: true,
+      status: 201,
+      statusText: "Created",
+      json: async () => ({ id: "run_test", budget_usd: "2.50" }),
+    };
+  };
+  const run = await new AdminClient("https://gateway.example", "admin-secret").createRun(
+    "prn_test",
+    "2.50",
+    "run_parent",
+  );
+  assert.equal(run.id, "run_test");
+  assert.equal(captured.url, "https://gateway.example/api/v1/principals/prn_test/runs");
+  assert.equal(captured.options.headers.authorization, "Bearer admin-secret");
+  assert.equal(captured.options.headers["x-spendlease-admin"], "1");
+  assert.deepEqual(JSON.parse(captured.options.body), {
+    budget_usd: "2.50",
+    parent_run_id: "run_parent",
+  });
+});
+
+test("AdminClient lists leases without mutation headers", async () => {
+  let captured;
+  globalThis.fetch = async (url, options) => {
+    captured = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ leases: [{ id: "lse_test", status: "active" }] }),
+    };
+  };
+  const leases = await new AdminClient("https://gateway.example").listLeases("run_test");
+  assert.equal(leases[0].id, "lse_test");
+  assert.equal(captured.options.method, "GET");
+  assert.equal(captured.options.headers["x-spendlease-admin"], undefined);
+});

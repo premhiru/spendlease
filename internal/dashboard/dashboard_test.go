@@ -84,12 +84,10 @@ func newTestDashboardWithRevoker(t *testing.T, st *fakeStore, revoker PrincipalR
 	t.Helper()
 
 	d, err := New(Options{
-		Store:            st,
-		Logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Version:          "v-test",
-		Models:           26,
-		PricingBreakdown: "openai 10 · anthropic 16",
-		Revoker:          revoker,
+		Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Version: "v-test",
+		PricingRevision: "abcdef0123456789", PricingEffective: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC),
+		PricingLoadedAt:  time.Date(2026, 8, 1, 12, 30, 0, 0, time.UTC),
+		PricingProviders: 2, PricingModels: 26, Revoker: revoker,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -282,7 +280,7 @@ func TestOperationalStatusAndRecentEventsAreShown(t *testing.T) {
 	}
 }
 
-func TestDashboardExplainsBuildAndPricingCount(t *testing.T) {
+func TestDashboardExplainsBuildAndPriceBookFreshness(t *testing.T) {
 	t.Parallel()
 
 	st := &fakeStore{summaries: []store.PrincipalSummary{
@@ -291,8 +289,8 @@ func TestDashboardExplainsBuildAndPricingCount(t *testing.T) {
 	body := get(t, newTestDashboard(t, st), "/").Body.String()
 	for _, want := range []string{
 		"Build v-test",
-		"Pricing loaded for 26 model IDs",
-		"openai 10 · anthropic 16",
+		"Price book abcdef01 · rates through 31 Jul 2026",
+		"Loaded 1 Aug 2026 12:30 UTC · 2 providers · 26 price entries",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard header is missing %q", want)

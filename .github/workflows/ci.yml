@@ -129,6 +129,11 @@ jobs:
           PYTHONPATH: sdk/python/src
         run: python -m unittest discover -s sdk/python/tests
 
+      - name: Build Python distributions
+        run: |
+          python -m pip install --upgrade build
+          python -m build sdk/python
+
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
@@ -142,6 +147,10 @@ jobs:
       - name: Test TypeScript SDK
         working-directory: sdk/typescript
         run: npm test
+
+      - name: Pack TypeScript SDK
+        working-directory: sdk/typescript
+        run: npm pack --dry-run
 
   docker:
     name: Docker image
