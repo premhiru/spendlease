@@ -21,7 +21,6 @@ import (
 	"github.com/premhiru/spendlease/internal/providers"
 	"github.com/premhiru/spendlease/internal/providers/anthropic"
 	"github.com/premhiru/spendlease/internal/providers/openai"
-	"github.com/premhiru/spendlease/internal/store/sqlite"
 	"github.com/premhiru/spendlease/internal/vault"
 )
 
@@ -42,7 +41,7 @@ const (
 func runServe(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("serve", stderr)
 	addr := fs.String("addr", ":4000", "address to listen on")
-	storePath := fs.String("store", "./spendlease.db", "SQLite file path")
+	storePath := storeFlag(fs)
 	openAIBase := fs.String("openai-url", openai.DefaultBaseURL, "OpenAI upstream base URL")
 	anthropicBase := fs.String("anthropic-url", anthropic.DefaultBaseURL, "Anthropic upstream base URL")
 	kimiBase := fs.String("kimi-url", defaultKimiURL, "Kimi upstream base URL")
@@ -130,8 +129,8 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	// The source is logged; the key never is.
 	logger.Info("master key loaded", "source", keySource)
 
-	// Only now does anything touch disk.
-	st, err := sqlite.Open(ctx, *storePath, sqlite.Options{Logger: logger})
+	// Only now does anything touch persistent storage.
+	st, err := openDatastore(ctx, *storePath, logger)
 	if err != nil {
 		return err
 	}

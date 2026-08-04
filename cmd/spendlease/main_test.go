@@ -180,3 +180,36 @@ func TestRedactStore(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPostgresDSN(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{
+		"postgres://db.example/spendlease",
+		"postgresql://db.example/spendlease",
+		"  POSTGRES://db.example/spendlease  ",
+	} {
+		if !isPostgresDSN(target) {
+			t.Errorf("isPostgresDSN(%q) = false", target)
+		}
+	}
+	for _, target := range []string{"spendlease.db", "mysql://db.example/name", "postgres.db"} {
+		if isPostgresDSN(target) {
+			t.Errorf("isPostgresDSN(%q) = true", target)
+		}
+	}
+}
+
+func TestHelpDoesNotExposeStoreEnvironment(t *testing.T) {
+	t.Setenv(EnvStore, "postgres://admin:hunter2@db.example/spendlease")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"serve", "-h"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("run(serve -h) = %d, stderr: %s", code, stderr.String())
+	}
+	combined := stdout.String() + stderr.String()
+	if strings.Contains(combined, "hunter2") {
+		t.Fatalf("help leaked the datastore password: %s", combined)
+	}
+	if !strings.Contains(combined, EnvStore) {
+		t.Fatalf("help does not mention %s: %s", EnvStore, combined)
+	}
+}

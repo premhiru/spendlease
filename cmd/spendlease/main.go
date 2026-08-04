@@ -119,6 +119,16 @@ func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
 	return fs
 }
 
+// storeFlag adds the shared datastore flag without exposing an environment
+// supplied DSN in generated help output. flag normally prints the concrete
+// default, which may contain a database password.
+func storeFlag(fs *flag.FlagSet) *string {
+	target := defaultStore()
+	fs.StringVar(&target, "store", target, "SQLite path or PostgreSQL DSN")
+	fs.Lookup("store").DefValue = "$" + EnvStore + " or ./spendlease.db"
+	return &target
+}
+
 // runVersion prints build and runtime information.
 func runVersion(args []string, stdout io.Writer) error {
 	if len(args) > 0 {

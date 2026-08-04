@@ -8,12 +8,12 @@ the final action, for example `spendlease keys lease issue -h`.
 
 ### `spendlease serve`
 
-Starts the proxy, dashboard, reservation sweeper, and SQLite store.
+Starts the proxy, dashboard, reservation sweeper, and selected datastore.
 
 | Flag | Default | Description |
 |---|---|---|
 | `--addr` | `:4000` | Listen address. |
-| `--store` | `./spendlease.db` | SQLite database path. |
+| `--store` | `SPENDLEASE_STORE` or `./spendlease.db` | SQLite path or PostgreSQL DSN. |
 | `--admin-token` | `SPENDLEASE_ADMIN_TOKEN` | Credential for non-loopback dashboard and admin access. |
 | `--pricing` | embedded book | Directory containing price-book YAML. |
 | `--default-run-budget` | `10.00` | Budget for implicit runs used by principal-key compatibility requests. |
@@ -38,6 +38,11 @@ Runs an in-memory gateway and mock provider with three simulated agents.
 | `--target` | `http://localhost:4000` | Dashboard listen URL. |
 
 The demo never reads the persistent store or a vendor key.
+
+Every command that accepts `--store` accepts either a SQLite path or a
+`postgres://`/`postgresql://` DSN. Use the same value for the gateway and all
+management commands. PostgreSQL storage requires `SPENDLEASE_MASTER_KEY` even
+outside production mode; spendlease never writes a key file beside a DSN.
 
 ### `spendlease version`
 
@@ -160,6 +165,7 @@ spendlease ledger export --format csv --run run_... > ledger.csv
 | `SPENDLEASE_MASTER_KEY` | CLI and gateway | AES-256 key used for vendor credentials. Required in production. |
 | `SPENDLEASE_ENV` | CLI and gateway | Set to `production` to disable automatic development-key creation. |
 | `SPENDLEASE_ADMIN_TOKEN` | gateway | Protects non-loopback dashboard and admin requests. |
+| `SPENDLEASE_STORE` | CLI and gateway | Default SQLite path or PostgreSQL DSN; overridden by `--store`. |
 | `SPENDLEASE_LEASE_TOKEN` | Python and TypeScript helpers | Lease placed in vendor-client authentication options. |
 | `SPENDLEASE_URL` | Python and TypeScript helpers | Gateway URL; defaults to `http://localhost:4000`. |
 

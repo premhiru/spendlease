@@ -38,7 +38,11 @@ func (s *Store) RecentOperationalEvents(
 	if filter.Limit > 200 {
 		filter.Limit = 200
 	}
-	query := `
+	leaseEventOrder := "le.rowid"
+	if s.backend == backendPostgres {
+		leaseEventOrder = "le.event_order"
+	}
+	query := fmt.Sprintf(`
 		SELECT kind, principal_id, principal_name, run_id, lease_id,
 		       provider, model, amount_nanos, remaining_nanos, event_at
 		FROM (
@@ -67,7 +71,7 @@ func (s *Store) RecentOperationalEvents(
 			       p.name AS principal_name, r.id AS run_id, le.id AS lease_id,
 			       le.providers AS provider, '' AS model,
 			       le.ceiling_nanos AS amount_nanos, 0 AS remaining_nanos,
-			       le.revoked_at AS event_at, le.rowid AS event_order
+			       le.revoked_at AS event_at, %s AS event_order
 			FROM leases le
 			JOIN runs r ON r.id = le.run_id
 			JOIN principals p ON p.id = r.principal_id
@@ -79,13 +83,13 @@ func (s *Store) RecentOperationalEvents(
 			       p.name AS principal_name, r.id AS run_id, le.id AS lease_id,
 			       le.providers AS provider, '' AS model,
 			       le.ceiling_nanos AS amount_nanos, 0 AS remaining_nanos,
-			       le.expires_at AS event_at, le.rowid AS event_order
+			       le.expires_at AS event_at, %s AS event_order
 			FROM leases le
 			JOIN runs r ON r.id = le.run_id
 			JOIN principals p ON p.id = r.principal_id
 			WHERE le.revoked_at IS NULL AND le.expires_at <= ?
 		)
-		WHERE 1 = 1`
+		WHERE 1 = 1`, leaseEventOrder, leaseEventOrder)
 
 	args := []any{formatTime(now)}
 	if filter.PrincipalID != "" {

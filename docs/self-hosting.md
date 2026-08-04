@@ -1,8 +1,12 @@
 # Self-hosting
 
-`spendlease` is a single process backed by SQLite. This page covers persistent
-state, the master key, remote dashboard access, backups, and upgrades.
-PostgreSQL is not implemented.
+`spendlease` supports a single-process SQLite deployment and multi-instance
+PostgreSQL deployments. This page covers persistent state, the master key,
+remote dashboard access, backups, and upgrades.
+
+SQLite is the simplest place to begin. Choose PostgreSQL when more than one
+gateway process must share live state, when your platform already operates a
+managed database, or when database-native backup and failover are required.
 
 ## Choose a build
 
@@ -24,7 +28,7 @@ artifacts remain available even when a registry is temporarily unavailable.
 
 ## Run the container
 
-Create a volume for the SQLite database:
+This example uses SQLite. Create a volume for its database:
 
 ```bash
 docker volume create spendlease-data
@@ -83,6 +87,48 @@ service manager such as systemd, provide `SPENDLEASE_ENV=production`,
 `SPENDLEASE_MASTER_KEY`, and any admin token through its credential or secret
 facility rather than a world-readable environment file.
 
+## PostgreSQL
+
+Create a dedicated database and role using your provider's normal workflow.
+The role needs permission to create tables, indexes, functions, and triggers
+in its target schema. Require TLS for any connection that leaves a private
+host or network.
+
+Pass the DSN as `--store` and provide the master key explicitly:
+
+```bash
+export SPENDLEASE_ENV=production
+export SPENDLEASE_MASTER_KEY=<64-hex-character-key>
+export SPENDLEASE_STORE='postgres://spendlease:password@db.example/spendlease?sslmode=require'
+
+spendlease serve
+```
+
+Use the same DSN and master key for management commands:
+
+```bash
+spendlease keys principal create --name checkout-agent
+printf '%s' "$OPENAI_API_KEY" | \
+  spendlease keys provider set openai
+```
+
+The DSN may also use the `postgresql://` scheme. Percent-encode reserved
+characters in usernames and passwords. Credentials are redacted from gateway
+logs. Prefer injecting `SPENDLEASE_STORE` from a secret manager instead of
+placing the DSN in a command line, shell history, image, or source file.
+
+Migrations are embedded and protected by a PostgreSQL advisory lock, so
+replicas may start together. Reservation decisions use a transaction-scoped
+lock per principal, which prevents two replicas from authorizing the same
+remaining budget while allowing unrelated principals to proceed in parallel.
+Ledger appends use a separate transaction-scoped lock so the hash chain has
+one unambiguous head across the deployment.
+
+The built-in pool defaults to 20 open and idle connections per process, with a
+30-minute maximum connection lifetime. Include that multiplication when sizing
+the database connection limit. Current pool settings are fixed defaults; CLI
+pool tuning is a later production-hardening item.
+
 ## Master key
 
 Vendor credentials are encrypted with AES-256-GCM under
@@ -92,8 +138,8 @@ Vendor credentials are encrypted with AES-256-GCM under
 spendlease keys master generate
 ```
 
-Development mode creates a key beside the database when the environment
-variable is absent. Production mode refuses to do this:
+Development mode creates a key beside a SQLite database when the environment
+variable is absent. Production mode and PostgreSQL both refuse to do this:
 
 ```bash
 export SPENDLEASE_ENV=production
@@ -141,7 +187,7 @@ semantics are incompatible with SQLite.
 
 ## Backups
 
-The simplest backup is an offline copy:
+For SQLite, the simplest backup is an offline copy:
 
 1. Stop the gateway.
 2. Copy `spendlease.db` and any `spendlease.db-wal` and
@@ -154,6 +200,17 @@ SQLite client connected to the live database:
 ```sql
 VACUUM INTO 'spendlease-backup.db';
 ```
+
+For PostgreSQL, use the automated backup and point-in-time recovery facilities
+provided by your database service. For a portable logical backup, use
+`pg_dump` with the same DSN:
+
+```bash
+pg_dump --format=custom --file=spendlease.dump "$SPENDLEASE_STORE"
+```
+
+Restore into a separate database and run `spendlease ledger verify` against
+the restored DSN as part of every recovery drill.
 
 The hash chain detects changes to ledger rows; it does not replace backups.
 Test both database restoration and access to the matching master key.
@@ -171,8 +228,10 @@ spendlease ledger export --store /var/lib/spendlease/spendlease.db \
 Before replacing a binary or container:
 
 1. Read the release notes and back up the database.
-2. Stop the old process so only one version performs startup migrations.
-3. Start the pinned new version against the existing database.
+2. For SQLite, stop the old process before starting the new one. PostgreSQL
+   serializes migrations, but deploy one version at a time until release notes
+   explicitly say a rolling upgrade is compatible.
+3. Start the pinned new version against the existing datastore.
 4. Check `/healthz`, the dashboard, and one low-budget request.
 
 There is not yet a guard against opening a database created by a newer binary.

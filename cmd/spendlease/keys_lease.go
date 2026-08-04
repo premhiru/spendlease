@@ -32,7 +32,7 @@ func runKeysRun(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("%w: expected `keys run create`", errUsage)
 	}
 	fs := newFlagSet("keys run create", stderr)
-	path := fs.String("store", "./spendlease.db", "SQLite file path")
+	path := storeFlag(fs)
 	principal := fs.String("principal", "", "principal name or ID")
 	parent := fs.String("parent", "", "parent run ID")
 	budgetRaw := fs.String("budget", "", "run budget in USD")
@@ -69,7 +69,7 @@ func runKeysLease(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("%w: expected `keys lease issue`", errUsage)
 	}
 	fs := newFlagSet("keys lease issue", stderr)
-	path := fs.String("store", "./spendlease.db", "SQLite file path")
+	path := storeFlag(fs)
 	runID := fs.String("run", "", "run ID")
 	ttl := fs.Duration("ttl", 15*time.Minute, "lease lifetime")
 	providers := fs.String("providers", "", "comma-separated provider scope")
@@ -114,7 +114,7 @@ func runKeysLease(args []string, stdout, stderr io.Writer) error {
 
 func runKeysRevoke(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("keys revoke", stderr)
-	path := fs.String("store", "./spendlease.db", "SQLite file path")
+	path := storeFlag(fs)
 	all := fs.Bool("all", false, "revoke every lease")
 	principal := fs.String("principal", "", "limit to one principal name or ID")
 	if err := fs.Parse(args); err != nil {

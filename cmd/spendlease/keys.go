@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/premhiru/spendlease/internal/store"
+	"github.com/premhiru/spendlease/internal/store/postgres"
 	"github.com/premhiru/spendlease/internal/store/sqlite"
 	"github.com/premhiru/spendlease/internal/vault"
 )
@@ -40,11 +41,30 @@ func runKeys(args []string, stdout, stderr io.Writer) error {
 	}
 }
 
+type applicationStore interface {
+	store.Store
+	vault.CredentialStore
+	PrincipalSummaries(context.Context) ([]store.PrincipalSummary, error)
+	RunSummaries(context.Context, string) ([]store.RunSummary, error)
+}
+
 // openStore opens the datastore for a CLI command.
-func openStore(ctx context.Context, path string, stderr io.Writer) (*sqlite.Store, error) {
+func openStore(ctx context.Context, target string, stderr io.Writer) (applicationStore, error) {
 	// CLI commands should be quiet unless something is wrong.
 	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	return sqlite.Open(ctx, path, sqlite.Options{Logger: logger})
+	return openDatastore(ctx, target, logger)
+}
+
+func openDatastore(ctx context.Context, target string, logger *slog.Logger) (applicationStore, error) {
+	if isPostgresDSN(target) {
+		return postgres.Open(ctx, strings.TrimSpace(target), postgres.Options{Logger: logger})
+	}
+	return sqlite.Open(ctx, target, sqlite.Options{Logger: logger})
+}
+
+func isPostgresDSN(target string) bool {
+	lower := strings.ToLower(strings.TrimSpace(target))
+	return strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://")
 }
 
 // runKeysPrincipal handles `keys principal ...`.
@@ -55,7 +75,7 @@ func runKeysPrincipal(args []string, stdout, stderr io.Writer) error {
 	action, rest := args[0], args[1:]
 
 	fs := newFlagSet("keys principal "+action, stderr)
-	storePath := fs.String("store", "./spendlease.db", "SQLite file path")
+	storePath := storeFlag(fs)
 	name := fs.String("name", "", "principal name")
 	mode := fs.String("mode", string(store.ModeObserve), "observe or enforce")
 	if err := fs.Parse(rest); err != nil {
@@ -154,7 +174,7 @@ func runKeysProvider(args []string, stdout, stderr io.Writer) error {
 	provider, rest := takePositional(rest)
 
 	fs := newFlagSet("keys provider "+action, stderr)
-	storePath := fs.String("store", "./spendlease.db", "SQLite file path")
+	storePath := storeFlag(fs)
 	apiKey := fs.String("key", "", "the vendor API key (omit to read from stdin)")
 	if err := fs.Parse(rest); err != nil {
 		return err

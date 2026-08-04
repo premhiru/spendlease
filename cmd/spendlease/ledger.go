@@ -39,7 +39,7 @@ func ledgerUsage(w io.Writer) {
 
 func runLedgerVerify(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("ledger verify", stderr)
-	path := fs.String("store", "./spendlease.db", "SQLite file path")
+	path := storeFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func runLedgerVerify(args []string, stdout, stderr io.Writer) error {
 
 func runLedgerExport(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("ledger export", stderr)
-	path := fs.String("store", "./spendlease.db", "SQLite file path")
+	path := storeFlag(fs)
 	format := fs.String("format", "json", "json or csv")
 	runID := fs.String("run", "", "limit to one run ID")
 	principalID := fs.String("principal", "", "limit to one principal ID")

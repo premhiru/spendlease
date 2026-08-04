@@ -77,8 +77,9 @@ budget blocks, observe-mode would-block decisions, revocations, and
 expirations. Successful calls remain available under **All results** or
 **Allowed**.
 
-Filters run in SQLite before rows are limited, so they can find an older match
-rather than searching only what is already visible. Events can be narrowed by:
+Filters run in the datastore before rows are limited, so they can find an
+older match rather than searching only what is already visible. Events can be
+narrowed by:
 
 - agent;
 - result;

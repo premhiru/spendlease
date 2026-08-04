@@ -114,12 +114,15 @@ func wrap(err error, doing string) error {
 		// Raised by the ledger_no_update and ledger_no_delete triggers.
 		return fmt.Errorf("%w: %s: %v", store.ErrImmutable, doing, err)
 	case strings.Contains(msg, "UNIQUE constraint failed"),
-		strings.Contains(msg, "PRIMARY KEY constraint failed"):
+		strings.Contains(msg, "PRIMARY KEY constraint failed"),
+		strings.Contains(msg, "duplicate key value violates unique constraint"):
 		return fmt.Errorf("%w: %s: %v", store.ErrConflict, doing, err)
-	case strings.Contains(msg, "FOREIGN KEY constraint failed"):
+	case strings.Contains(msg, "FOREIGN KEY constraint failed"),
+		strings.Contains(msg, "violates foreign key constraint"):
 		// The referenced principal, run or lease does not exist.
 		return fmt.Errorf("%w: %s: %v", store.ErrNotFound, doing, err)
-	case strings.Contains(msg, "CHECK constraint failed"):
+	case strings.Contains(msg, "CHECK constraint failed"),
+		strings.Contains(msg, "violates check constraint"):
 		return fmt.Errorf("%w: %s: %v", store.ErrConflict, doing, err)
 	}
 

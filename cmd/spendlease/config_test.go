@@ -68,6 +68,17 @@ func TestResolveAdminToken(t *testing.T) {
 	}
 }
 
+func TestDefaultStore(t *testing.T) {
+	t.Setenv(EnvStore, "  postgres://db.example/spendlease  ")
+	if got := defaultStore(); got != "postgres://db.example/spendlease" {
+		t.Fatalf("defaultStore() = %q", got)
+	}
+	t.Setenv(EnvStore, "")
+	if got := defaultStore(); got != "./spendlease.db" {
+		t.Fatalf("empty defaultStore() = %q", got)
+	}
+}
+
 func TestResolveMasterKeyRejectsMalformedEnvironment(t *testing.T) {
 	t.Setenv(EnvMasterKey, "not-a-valid-hex-key")
 
@@ -146,6 +157,21 @@ func TestProductionRefusesImplicitKey(t *testing.T) {
 	// And nothing was written to disk.
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
 		t.Errorf("production wrote %d file(s) despite refusing to start", len(entries))
+	}
+}
+
+func TestPostgresRefusesImplicitKeyOutsideProduction(t *testing.T) {
+	t.Setenv(EnvMasterKey, "")
+	t.Setenv(EnvEnv, "development")
+
+	_, _, err := resolveMasterKey("postgres://user:secret@db.example/spendlease")
+	if err == nil {
+		t.Fatal("PostgreSQL accepted an implicitly generated master key")
+	}
+	for _, want := range []string{EnvMasterKey, "PostgreSQL"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
 	}
 }
 

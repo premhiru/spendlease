@@ -3,7 +3,7 @@
 ## Is spendlease ready for production?
 
 It is pre-v1. `v0.2.0-beta.1` is the first release intended for an end-to-end
-evaluation, including the encrypted vault, SQLite ledger, reserve/settle
+evaluation, including the encrypted vault, datastore-backed ledger, reserve/settle
 enforcement, short-lived leases, versioned operator API, and immediate kill
 switch. Pin a release digest or commit and evaluate it in observe mode before
 making it a production dependency.
@@ -63,15 +63,17 @@ behind TLS.
 
 Yes. Run `spendlease ledger verify` to check the complete chain and
 `spendlease ledger export --format json|csv` to export it. The guarded JSON API
-and both SDK admin clients expose the same operations. Back up the SQLite
-database as described under [Self-hosting](self-hosting.md#backups); the hash
+and both SDK admin clients expose the same operations. Back up the datastore
+as described under [Self-hosting](self-hosting.md#backups); the hash
 chain is not a substitute for a backup.
 
 ## Is PostgreSQL supported?
 
-Not yet. SQLite is the implemented default and is configured for WAL, foreign
-keys and a busy timeout. PostgreSQL remains an optional-backend milestone, not
-a hidden requirement for the zero-configuration path.
+Yes. Pass a `postgres://` or `postgresql://` DSN to every command through
+`--store`. PostgreSQL serializes schema migrations, budget decisions, and
+ledger appends across gateway instances. SQLite remains the default for a
+single-process installation and needs no database server. See
+[Self-hosting](self-hosting.md#postgresql) for setup and operational guidance.
 
 ## Why no LangChain or CrewAI integration?
 
