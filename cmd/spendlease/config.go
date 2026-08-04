@@ -22,7 +22,17 @@ const (
 	// EnvAdminToken is the credential required to reach the dashboard and the
 	// admin API from anywhere other than the local machine.
 	EnvAdminToken = "SPENDLEASE_ADMIN_TOKEN"
+	// EnvStore selects a SQLite path or PostgreSQL DSN. The --store flag uses
+	// this as its default and can still override it.
+	EnvStore = "SPENDLEASE_STORE"
 )
+
+func defaultStore() string {
+	if target := strings.TrimSpace(os.Getenv(EnvStore)); target != "" {
+		return target
+	}
+	return "./spendlease.db"
+}
 
 // resolveAdminToken returns the admin credential, from the flag if given and
 // the environment otherwise.
@@ -72,13 +82,13 @@ func resolveMasterKey(storePath string) (key vault.MasterKey, source string, err
 	}
 
 	production := strings.EqualFold(os.Getenv(EnvEnv), "production")
-	if production {
+	if production || isPostgresDSN(storePath) {
 		return vault.MasterKey{}, "", fmt.Errorf(
-			"%s is required when %s=production\n"+
+			"%s is required for production or PostgreSQL storage\n"+
 				"Generate one with `spendlease keys master generate`, store it in your secret manager, "+
 				"and provide it to the process.\n"+
 				"Do not keep it beside the database: a key stored next to the data it protects is not a secret",
-			EnvMasterKey, EnvEnv)
+			EnvMasterKey)
 	}
 
 	path := keyFilePath(storePath)

@@ -12,7 +12,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -31,10 +30,13 @@ import (
 // Each call to Open with this path gets its own independent database.
 const InMemory = ":memory:"
 
-// Store is a SQLite-backed store.Store.
+// Store is the shared SQL implementation behind the SQLite and PostgreSQL
+// adapters. SQLite remains the zero-configuration default; PostgreSQL adopts
+// the same implementation after opening and migrating its own connection.
 type Store struct {
-	db     *sql.DB
-	logger *slog.Logger
+	db      *sql.DB
+	logger  *slog.Logger
+	backend backend
 
 	// appendMu serialises ledger appends within this process.
 	//
@@ -43,18 +45,25 @@ type Store struct {
 	// single writer, but two goroutines could still read the same head before
 	// either writes, and produce two entries claiming the same predecessor.
 	//
-	// spendlease is deployed as one process against one database, so a mutex
-	// is the right tool. If two processes ever did share a file, the primary
-	// key on seq and the unique index on hash would turn the race into a
-	// failed insert rather than a forked chain.
+	// A mutex is sufficient for the supported single-process SQLite model. The
+	// PostgreSQL adapter additionally acquires a transaction-scoped advisory
+	// lock below so the critical section spans gateway processes.
 	appendMu sync.Mutex
 
 	// reserveMu serialises budget decisions, releases, expiry and settlement
 	// within this process. The decision itself still runs in a transaction;
 	// the mutex prevents two goroutines using separate deferred transactions
-	// from reading the same balance before either writes its hold.
+	// from reading the same balance before either writes its hold. PostgreSQL
+	// additionally locks per principal across processes.
 	reserveMu sync.Mutex
 }
+
+type backend uint8
+
+const (
+	backendSQLite backend = iota
+	backendPostgres
+)
 
 // Options configures a SQLite store.
 type Options struct {
@@ -73,9 +82,7 @@ type Options struct {
 func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 	logger := opts.Logger
 	if logger == nil {
-		// slog.DiscardHandler would be tidier but arrived in Go 1.24, and
-		// go.mod still targets 1.22.
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		logger = slog.New(slog.DiscardHandler)
 	}
 
 	db, err := sql.Open("sqlite", dsn(path))
@@ -101,7 +108,18 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, fmt.Errorf("migrating sqlite database at %s: %w", path, err)
 	}
 
-	return &Store{db: db, logger: logger}, nil
+	return &Store{db: db, logger: logger, backend: backendSQLite}, nil
+}
+
+// AdoptPostgres returns the shared SQL store over an already connected and
+// migrated PostgreSQL database. It is intentionally narrow: the postgres
+// package owns connection parsing, migrations and pool configuration.
+func AdoptPostgres(db *sql.DB, opts Options) *Store {
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	return &Store{db: db, logger: logger, backend: backendPostgres}
 }
 
 // dsn builds a modernc.org/sqlite connection string with the pragmas this
@@ -128,6 +146,40 @@ func dsn(path string) string {
 
 // Close releases the database handle.
 func (s *Store) Close() error { return s.db.Close() }
+
+// lockBudgetTx serialises reservation decisions for one principal across all
+// PostgreSQL gateway replicas. Every run in a hierarchy belongs to the same
+// principal, so this preserves hierarchical correctness while allowing
+// unrelated principals to reserve concurrently.
+func (s *Store) lockBudgetTx(ctx context.Context, tx *sql.Tx, runID string) error {
+	if s.backend != backendPostgres {
+		return nil
+	}
+	var locked bool
+	err := tx.QueryRowContext(ctx, `
+		SELECT pg_advisory_xact_lock(hashtextextended('spendlease:budget:' || principal_id, 0)) IS NULL
+		FROM runs WHERE id = ?`, runID).Scan(&locked)
+	if err != nil {
+		return wrap(err, "locking principal budget")
+	}
+	return nil
+}
+
+// lockLedgerTx prevents two PostgreSQL processes from reading the same head
+// and sealing different successors. The lock is transaction-scoped, so it is
+// released automatically on commit, rollback, cancellation or connection
+// loss.
+func (s *Store) lockLedgerTx(ctx context.Context, tx *sql.Tx) error {
+	if s.backend != backendPostgres {
+		return nil
+	}
+	var locked bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended('spendlease:ledger', 0)) IS NULL`).Scan(&locked); err != nil {
+		return wrap(err, "locking ledger head")
+	}
+	return nil
+}
 
 // DB exposes the underlying handle. It exists for tests that need to assert
 // on raw SQL behaviour, such as proving the ledger triggers reject writes.
@@ -233,7 +285,17 @@ func (s *Store) CreateRun(ctx context.Context, r store.Run) error {
 		)
 		return wrap(err, "creating run")
 	}
-	res, err := s.db.ExecContext(ctx,
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return wrap(err, "beginning child run creation")
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.lockBudgetTx(ctx, tx, r.ParentRunID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx,
 		`INSERT INTO runs (id, principal_id, parent_run_id, budget_nanos, status, created_at, closed_at)
 		 SELECT ?, ?, id, ?, ?, ?, ? FROM runs
 		 WHERE id = ? AND principal_id = ? AND status = 'active'`,
@@ -248,9 +310,11 @@ func (s *Store) CreateRun(ctx context.Context, r store.Run) error {
 		return wrap(err, "creating run")
 	}
 	if n > 0 {
-		return nil
+		return wrap(tx.Commit(), "committing child run creation")
 	}
-	parent, err := s.GetRun(ctx, r.ParentRunID)
+	parent, err := scanRun(tx.QueryRowContext(ctx,
+		`SELECT id, principal_id, parent_run_id, budget_nanos, status, created_at, closed_at
+		 FROM runs WHERE id = ?`, r.ParentRunID))
 	if err != nil {
 		return err
 	}
@@ -331,7 +395,19 @@ func scanRun(sc scanner) (store.Run, error) {
 
 // CloseRun marks a run finished. Closing an already-closed run is a no-op.
 func (s *Store) CloseRun(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx,
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return wrap(err, "beginning run close")
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.lockBudgetTx(ctx, tx, id); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx,
 		`UPDATE runs SET status = 'closed', closed_at = ?
 		 WHERE id = ? AND status = 'active'`,
 		formatTime(time.Now()), id)
@@ -344,14 +420,18 @@ func (s *Store) CloseRun(ctx context.Context, id string) error {
 		return wrap(err, "closing run")
 	}
 	if n > 0 {
-		return nil
+		return wrap(tx.Commit(), "committing run close")
 	}
 	// Nothing changed: either the run is already closed, or it does not exist.
 	// Only the second is an error.
-	if _, err := s.GetRun(ctx, id); err != nil {
-		return err
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE id = ?`, id).Scan(&exists); err != nil {
+		return wrap(err, "checking closed run")
 	}
-	return nil
+	if exists == 0 {
+		return fmt.Errorf("%w: run %s", store.ErrNotFound, id)
+	}
+	return wrap(tx.Commit(), "committing run close")
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +442,17 @@ func (s *Store) CloseRun(ctx context.Context, id string) error {
 // insert are one statement, so a concurrent close cannot issue a usable lease
 // after the operator has closed the run.
 func (s *Store) CreateLease(ctx context.Context, l store.Lease) error {
-	res, err := s.db.ExecContext(ctx,
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return wrap(err, "beginning lease creation")
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.lockBudgetTx(ctx, tx, l.RunID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx,
 		`WITH RECURSIVE ancestors(id, parent_run_id, status) AS (
 			SELECT id, parent_run_id, status FROM runs WHERE id = ?
 			UNION ALL
@@ -384,10 +474,10 @@ func (s *Store) CreateLease(ctx context.Context, l store.Lease) error {
 		return wrap(err, "creating lease")
 	}
 	if n > 0 {
-		return nil
+		return wrap(tx.Commit(), "committing lease creation")
 	}
 	var blockingID, status string
-	err = s.db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 		WITH RECURSIVE ancestors(id, parent_run_id, status, depth) AS (
 			SELECT id, parent_run_id, status, 0 FROM runs WHERE id = ?
 			UNION ALL
@@ -397,8 +487,12 @@ func (s *Store) CreateLease(ctx context.Context, l store.Lease) error {
 		SELECT id, status FROM ancestors WHERE status != 'active' ORDER BY depth LIMIT 1`, l.RunID).
 		Scan(&blockingID, &status)
 	if errors.Is(err, sql.ErrNoRows) {
-		if _, getErr := s.GetRun(ctx, l.RunID); getErr != nil {
-			return getErr
+		var exists int
+		if getErr := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE id = ?`, l.RunID).Scan(&exists); getErr != nil {
+			return wrap(getErr, "checking lease run")
+		}
+		if exists == 0 {
+			return fmt.Errorf("%w: run %s", store.ErrNotFound, l.RunID)
 		}
 		return fmt.Errorf("%w: run ancestry changed while creating lease", store.ErrConflict)
 	}
@@ -562,6 +656,9 @@ func (s *Store) TryReserve(ctx context.Context, r store.Reservation, enforce boo
 		return decision, wrap(err, "beginning budget decision")
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := s.lockBudgetTx(ctx, tx, r.RunID); err != nil {
+		return decision, err
+	}
 
 	type node struct {
 		id     string
@@ -914,6 +1011,9 @@ func (s *Store) SettleReservation(
 		return ledger.Entry{}, wrap(err, "beginning reservation settlement")
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := s.lockLedgerTx(ctx, tx); err != nil {
+		return ledger.Entry{}, err
+	}
 
 	var existingSeq int64
 	err = tx.QueryRowContext(ctx,
@@ -986,6 +1086,9 @@ func (s *Store) AppendLedger(ctx context.Context, e ledger.Entry) (ledger.Entry,
 		return ledger.Entry{}, wrap(err, "beginning ledger append")
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := s.lockLedgerTx(ctx, tx); err != nil {
+		return ledger.Entry{}, err
+	}
 
 	sealed, err := appendLedgerTx(ctx, tx, e)
 	if err != nil {

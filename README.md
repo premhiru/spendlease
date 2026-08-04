@@ -187,7 +187,7 @@ them with `X-Spendlease-Accounting: unmetered` and a warning.
 ### Overhead
 
 Proxy-path overhead is held under **10ms p99**, excluding upstream provider,
-SQLite reservation, and settlement time. CI fails the build if the streaming benchmark exceeds it. The current
+datastore reservation, and settlement time. CI fails the build if the streaming benchmark exceeds it. The current
 steady-state measurement is **0.74ms p99** over 300 in-memory SSE requests on
 Windows/amd64 (Intel i7-1065G7); run `go test ./internal/gateway -run
 TestStreamingGatewayOverheadP99 -v` to measure the same path locally.
@@ -241,11 +241,12 @@ Full site: **<https://premhiru.github.io/spendlease>**
 
 ## Release status
 
-The `v0.2.0-beta.1` source includes the gateway, encrypted credential vault,
-SQLite store, dated price book, reserve-and-settle enforcement, dashboard,
-versioned operator API, ledger verification/export, SDK helpers, and demo.
-PostgreSQL, multi-tenancy, and the other items listed above are not
-implemented.
+The current source includes the gateway, encrypted credential vault, SQLite
+and PostgreSQL stores, dated price book, reserve-and-settle enforcement,
+dashboard, versioned operator API, ledger verification/export, SDK helpers,
+and demo. PostgreSQL is intended for multi-instance deployments; SQLite
+remains the zero-configuration default. Multi-tenancy and the remaining
+production-roadmap items are not implemented yet.
 
 The project is still pre-v1. The mutable `edge` container tracks `main`, while
 every build also publishes an immutable `sha-...` tag. A tagged beta also
