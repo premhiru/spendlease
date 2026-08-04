@@ -244,9 +244,10 @@ Full site: **<https://premhiru.github.io/spendlease>**
 The current source includes the gateway, encrypted credential vault, SQLite
 and PostgreSQL stores, dated price book, reserve-and-settle enforcement,
 dashboard, versioned operator API, ledger verification/export, SDK helpers,
-and demo. PostgreSQL is intended for multi-instance deployments; SQLite
-remains the zero-configuration default. Multi-tenancy and the remaining
-production-roadmap items are not implemented yet.
+external master-key sources, transactional key rotation, and demo. PostgreSQL
+is intended for multi-instance deployments; SQLite remains the
+zero-configuration default. Multi-tenancy and the remaining production-roadmap
+items are not implemented yet.
 
 The project is still pre-v1. The mutable `edge` container tracks `main`, while
 every build also publishes an immutable `sha-...` tag. A tagged beta also

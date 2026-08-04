@@ -275,7 +275,7 @@ func (g *Gateway) vendorKeyFor(ctx context.Context, name string) (string, *APIEr
 			Message: fmt.Sprintf(
 				"The stored %s credential could not be decrypted.", name),
 			Resolution: "SPENDLEASE_MASTER_KEY does not match the one this database was written with. " +
-				"Restore the original master key, or re-enter the vendor credentials under the new one.",
+				"Restore a matching master key, configure the old key as a previous-key fallback during staged rotation, or re-enter the vendor credentials.",
 			Docs: DocsBase + "/self-hosting/",
 		}
 	}

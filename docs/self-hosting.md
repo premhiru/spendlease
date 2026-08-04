@@ -132,14 +132,38 @@ pool tuning is a later production-hardening item.
 ## Master key
 
 Vendor credentials are encrypted with AES-256-GCM under
-`SPENDLEASE_MASTER_KEY`. Generate a key with:
+one primary master key. Generate a key with:
 
 ```bash
 spendlease keys master generate
 ```
 
-Development mode creates a key beside a SQLite database when the environment
-variable is absent. Production mode and PostgreSQL both refuse to do this:
+Configure exactly one primary source:
+
+- `SPENDLEASE_MASTER_KEY` contains the 64 hexadecimal characters directly.
+- `SPENDLEASE_MASTER_KEY_FILE` names a mounted secret file. This works with
+  Docker secrets, Kubernetes Secrets, Secrets Store CSI drivers, and managed
+  platforms that project a secret into the filesystem.
+- `SPENDLEASE_MASTER_KEY_COMMAND` is a JSON array containing an executable and
+  its arguments. Its standard output must be only the key. The command runs
+  directly, without a shell, has a 15-second timeout, discards standard error,
+  and retains no more than 4 KiB of output.
+
+For example, a local wrapper can retrieve a secret or ask a KMS to decrypt an
+envelope-encrypted key:
+
+```bash
+export SPENDLEASE_MASTER_KEY_COMMAND='["/usr/local/bin/read-spendlease-master-key"]'
+```
+
+Use an absolute executable path, keep cloud credentials in the platform's
+workload identity, and make the wrapper print no labels or JSON. Arguments are
+not passed through a shell, so pipes, redirects, variable expansion, and
+quoted command strings do not work. Put that logic inside the wrapper when it
+is needed.
+
+Development mode creates a key beside a SQLite database when no explicit
+source is configured. Production mode and PostgreSQL both refuse to do this:
 
 ```bash
 export SPENDLEASE_ENV=production
@@ -147,10 +171,38 @@ export SPENDLEASE_MASTER_KEY=<64-hex-character-key>
 ```
 
 Back up the master key separately from the database. Losing it makes stored
-vendor credentials unreadable. Master-key rotation is not implemented; to
-change keys, stop the gateway, provide the new key, and re-enter every vendor
-credential before restarting traffic. Keep a tested backup until the new
-credentials have been verified.
+vendor credentials unreadable.
+
+### Rotate the master key
+
+Rotation is staged so running replicas never face a half-rotated vault:
+
+1. Generate and store the new key. Keep the old key available and retain a
+   tested database backup.
+2. Configure the new key through one primary source above. Configure the old
+   key through exactly one matching fallback source:
+   `SPENDLEASE_PREVIOUS_MASTER_KEY`,
+   `SPENDLEASE_PREVIOUS_MASTER_KEY_FILE`, or
+   `SPENDLEASE_PREVIOUS_MASTER_KEY_COMMAND`.
+3. Deploy that two-key configuration to every gateway. New writes use the new
+   primary key; reads accept either key.
+4. Verify that all ciphertext is readable, then rotate it in one datastore
+   transaction:
+
+   ```bash
+   spendlease keys master verify
+   spendlease keys master rotate --confirm
+   spendlease keys master verify
+   ```
+
+5. Remove the previous-key source and restart every gateway. Run `verify` once
+   more with only the new primary configured.
+
+If any credential cannot be decrypted, rotation rolls back without changing
+another row. SQLite serializes the transaction in-process. PostgreSQL also
+uses a database advisory lock, so credential writes and rotation commands from
+other replicas cannot interleave. Do not remove the old key until the final
+verification and backup recovery drill succeed.
 
 ## Dashboard and admin access
 

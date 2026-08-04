@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,8 +50,44 @@ func TestResolveMasterKeyFromEnvironment(t *testing.T) {
 	if got != want {
 		t.Error("the resolved key does not match the environment")
 	}
-	if source != "environment" {
-		t.Errorf("source = %q, want environment", source)
+	if source != "environment "+EnvMasterKey {
+		t.Errorf("source = %q, want environment source", source)
+	}
+}
+
+func TestResolveMasterKeysWithPreviousFallback(t *testing.T) {
+	primary, _ := vault.GenerateMasterKey()
+	previous, _ := vault.GenerateMasterKey()
+	t.Setenv(EnvMasterKey, primary.Hex())
+	t.Setenv(EnvPreviousMasterKey, previous.Hex())
+
+	got, source, err := resolveMasterKeys(context.Background(), filepath.Join(t.TempDir(), "spendlease.db"))
+	if err != nil {
+		t.Fatalf("resolveMasterKeys: %v", err)
+	}
+	if got.Primary != primary || len(got.Previous) != 1 || got.Previous[0] != previous {
+		t.Fatalf("resolved keyring does not match configured keys")
+	}
+	if !strings.Contains(source, EnvPreviousMasterKey) {
+		t.Fatalf("source = %q, want previous source", source)
+	}
+}
+
+func TestResolveMasterKeyFromMountedFile(t *testing.T) {
+	key, _ := vault.GenerateMasterKey()
+	path := filepath.Join(t.TempDir(), "master-key")
+	if err := os.WriteFile(path, []byte(key.Hex()+"\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv(EnvMasterKey, "")
+	t.Setenv(EnvMasterKeyFile, path)
+
+	got, source, err := resolveMasterKeys(context.Background(), filepath.Join(t.TempDir(), "spendlease.db"))
+	if err != nil {
+		t.Fatalf("resolveMasterKeys: %v", err)
+	}
+	if got.Primary != key || !got.ExplicitPrimary || !strings.Contains(source, path) {
+		t.Fatalf("mounted-file resolution = (%+v, %q)", got, source)
 	}
 }
 
@@ -91,6 +128,19 @@ func TestResolveMasterKeyRejectsMalformedEnvironment(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
+	}
+}
+
+func TestInvalidPreviousKeyDoesNotCreateDevelopmentKey(t *testing.T) {
+	t.Setenv(EnvMasterKey, "")
+	t.Setenv(EnvPreviousMasterKey, "not-a-key")
+	t.Setenv(EnvEnv, "")
+	dir := t.TempDir()
+	if _, _, err := resolveMasterKeys(context.Background(), filepath.Join(dir, "spendlease.db")); err == nil {
+		t.Fatal("invalid previous key was accepted")
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("invalid configuration created %d file(s)", len(entries))
 	}
 }
 

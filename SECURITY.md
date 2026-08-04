@@ -43,7 +43,8 @@ Out of scope:
 
 ## What we guarantee about credentials
 
-- Vendor keys are encrypted at rest with AES-256-GCM under `SPENDLEASE_MASTER_KEY`.
+- Vendor keys are encrypted at rest with AES-256-GCM under the configured
+  primary master key. Rotation re-encrypts the complete vault transactionally.
 - Principal keys (`slk_`) and lease tokens (`sll_`) are stored **only** as SHA-256 hashes. Plaintext is shown once at creation and is not recoverable afterwards: not by us, not by an admin, not from the database.
 - Key material and request bodies are never logged at default log levels.
 
@@ -61,4 +62,9 @@ use a Bearer token. See [self-hosting](docs/self-hosting.md) for the production
 checklist and put TLS in front of the port before exposing it to an untrusted
 network.
 
-In production, `SPENDLEASE_MASTER_KEY` must be set explicitly. The auto-generated development key is refused when `SPENDLEASE_ENV=production`, so a misconfigured deployment fails to start rather than quietly encrypting your vendor credentials under a key that was written to disk beside them.
+In production, configure exactly one explicit primary key source: a direct
+environment value, a mounted secret file, or a no-shell external command. The
+auto-generated development key is refused when `SPENDLEASE_ENV=production`,
+so a misconfigured deployment fails to start rather than quietly encrypting
+vendor credentials under a key written beside the database. External command
+stderr is discarded and its stdout is bounded to reduce disclosure risk.

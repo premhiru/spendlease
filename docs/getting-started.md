@@ -85,7 +85,8 @@ spendlease keys provider list
 ```
 
 For local development, spendlease creates a master key beside the SQLite
-database. Production deployments must provide `SPENDLEASE_MASTER_KEY`; see
+database. Production deployments must provide the key directly, through a
+mounted secret file, or through a secret-manager/KMS command; see
 [Self-hosting](self-hosting.md#master-key).
 
 ## 3. Create a run and issue a lease

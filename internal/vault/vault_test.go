@@ -1,12 +1,14 @@
 package vault
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // memStore is an in-memory CredentialStore.
@@ -49,6 +51,21 @@ func (m *memStore) DeleteCredential(_ context.Context, provider string) error {
 	defer m.mu.Unlock()
 	delete(m.rows, provider)
 	return nil
+}
+
+func (m *memStore) RotateCredentials(_ context.Context, transform func(Credential) (Credential, error)) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	replacements := make(map[string]Credential, len(m.rows))
+	for provider, current := range m.rows {
+		next, err := transform(current)
+		if err != nil {
+			return 0, err
+		}
+		replacements[provider] = next
+	}
+	m.rows = replacements
+	return len(replacements), nil
 }
 
 func newTestVault(t *testing.T) (*Vault, *memStore, MasterKey) {
@@ -238,6 +255,84 @@ func TestRotation(t *testing.T) {
 	}
 	if got != "new-key" {
 		t.Errorf("after rotation Get returned %q, want new-key", got)
+	}
+}
+
+func TestMasterKeyRotationIsAtomic(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	oldKey, _ := GenerateMasterKey()
+	newKey, _ := GenerateMasterKey()
+	st := newMemStore()
+	oldVault, _ := New(oldKey, st)
+	for _, provider := range []string{"openai", "anthropic"} {
+		if err := oldVault.Put(ctx, provider, "secret-for-"+provider); err != nil {
+			t.Fatalf("Put(%s): %v", provider, err)
+		}
+	}
+	before, _ := st.GetCredential(ctx, "openai")
+	time.Sleep(time.Millisecond)
+
+	rotating, err := NewKeyring(newKey, []MasterKey{oldKey}, st)
+	if err != nil {
+		t.Fatalf("NewKeyring: %v", err)
+	}
+	if got, err := rotating.Get(ctx, "openai"); err != nil || got != "secret-for-openai" {
+		t.Fatalf("fallback Get = (%q, %v)", got, err)
+	}
+	count, err := rotating.Rotate(ctx)
+	if err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("Rotate count = %d, want 2", count)
+	}
+
+	newOnly, _ := New(newKey, st)
+	for _, provider := range []string{"openai", "anthropic"} {
+		if got, err := newOnly.Get(ctx, provider); err != nil || got != "secret-for-"+provider {
+			t.Errorf("new-key Get(%s) = (%q, %v)", provider, got, err)
+		}
+	}
+	if _, err := oldVault.Get(ctx, "openai"); !errors.Is(err, ErrDecrypt) {
+		t.Fatalf("old key still decrypts rotated credential: %v", err)
+	}
+	after, _ := st.GetCredential(ctx, "openai")
+	if !after.CreatedAt.Equal(before.CreatedAt) {
+		t.Error("rotation changed the original creation time")
+	}
+	if !after.UpdatedAt.After(before.UpdatedAt) {
+		t.Error("rotation did not advance the update time")
+	}
+	if bytes.Equal(after.Nonce, before.Nonce) || bytes.Equal(after.Ciphertext, before.Ciphertext) {
+		t.Error("rotation reused encryption material")
+	}
+}
+
+func TestMasterKeyRotationRollsBackOnOneBadCredential(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	oldKey, _ := GenerateMasterKey()
+	newKey, _ := GenerateMasterKey()
+	st := newMemStore()
+	oldVault, _ := New(oldKey, st)
+	for _, provider := range []string{"openai", "anthropic"} {
+		if err := oldVault.Put(ctx, provider, "secret-for-"+provider); err != nil {
+			t.Fatalf("Put(%s): %v", provider, err)
+		}
+	}
+	bad := st.rows["anthropic"]
+	bad.Ciphertext = append([]byte(nil), bad.Ciphertext...)
+	bad.Ciphertext[0] ^= 0xff
+	st.rows["anthropic"] = bad
+	before := append([]byte(nil), st.rows["openai"].Ciphertext...)
+
+	rotating, _ := NewKeyring(newKey, []MasterKey{oldKey}, st)
+	if _, err := rotating.Rotate(ctx); !errors.Is(err, ErrDecrypt) {
+		t.Fatalf("Rotate error = %v, want ErrDecrypt", err)
+	}
+	if !bytes.Equal(st.rows["openai"].Ciphertext, before) {
+		t.Fatal("rotation changed a good credential before another credential failed")
 	}
 }
 

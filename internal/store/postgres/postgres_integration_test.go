@@ -222,6 +222,17 @@ func TestPostgresMultiInstanceGuarantees(t *testing.T) {
 	if got, err := stores[1].GetCredential(ctx, credential.Provider); err != nil || string(got.Ciphertext) != "encrypted" {
 		t.Fatalf("GetCredential = (%+v, %v)", got, err)
 	}
+	if count, err := stores[1].RotateCredentials(ctx, func(current vault.Credential) (vault.Credential, error) {
+		if current.Provider == credential.Provider {
+			current.Ciphertext = []byte("rotated")
+		}
+		return current, nil
+	}); err != nil || count == 0 {
+		t.Fatalf("RotateCredentials = (%d, %v)", count, err)
+	}
+	if got, err := stores[0].GetCredential(ctx, credential.Provider); err != nil || string(got.Ciphertext) != "rotated" {
+		t.Fatalf("rotated GetCredential = (%+v, %v)", got, err)
+	}
 
 	// The append-only guarantee must be enforced by PostgreSQL, independently
 	// of the Go API.

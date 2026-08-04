@@ -30,3 +30,4 @@ and references for current behavior.
 | [0017](0017-filter-the-operational-event-stream.md) | Filter the operational event stream | Accepted |
 | [0018](0018-version-the-operator-control-plane.md) | Version the operator control plane | Accepted |
 | [0019](0019-postgresql-multi-instance-storage.md) | PostgreSQL is the multi-instance storage backend | Accepted; amends 0005 and 0014 |
+| [0020](0020-external-key-sources-and-rotation.md) | External key sources and transactional rotation | Accepted; amends 0007 |
