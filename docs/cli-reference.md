@@ -122,14 +122,31 @@ spendlease keys revoke --all [--principal NAME_OR_ID] [--store PATH]
 every current lease in the store. With it, only leases belonging to that
 principal are revoked.
 
-## Master key generation
+## Master key management
 
 ```bash
 spendlease keys master generate
 ```
 
 The 64-character hexadecimal key is written to standard output. Store it in a
-secret manager and provide it as `SPENDLEASE_MASTER_KEY`.
+secret manager and configure one of the primary key sources below.
+
+Verify that every stored vendor credential decrypts without exposing its
+plaintext:
+
+```bash
+spendlease keys master verify [--store PATH_OR_DSN]
+```
+
+After deploying a new primary key and the old key as a previous-key fallback,
+transactionally re-encrypt every credential:
+
+```bash
+spendlease keys master rotate --confirm [--store PATH_OR_DSN]
+```
+
+Rotation refuses to run without `--confirm` and a configured previous key. See
+[Self-hosting](self-hosting.md#rotate-the-master-key) for the staged procedure.
 
 ## Ledger
 
@@ -162,7 +179,12 @@ spendlease ledger export --format csv --run run_... > ledger.csv
 
 | Variable | Read by | Purpose |
 |---|---|---|
-| `SPENDLEASE_MASTER_KEY` | CLI and gateway | AES-256 key used for vendor credentials. Required in production. |
+| `SPENDLEASE_MASTER_KEY` | CLI and gateway | Primary key supplied directly. Mutually exclusive with its file and command forms. |
+| `SPENDLEASE_MASTER_KEY_FILE` | CLI and gateway | File containing the primary key, typically mounted by a secret manager. |
+| `SPENDLEASE_MASTER_KEY_COMMAND` | CLI and gateway | JSON argv array for a no-shell command that prints the primary key. |
+| `SPENDLEASE_PREVIOUS_MASTER_KEY` | CLI and gateway | Direct previous key accepted temporarily during rotation. |
+| `SPENDLEASE_PREVIOUS_MASTER_KEY_FILE` | CLI and gateway | File containing the temporary previous key. |
+| `SPENDLEASE_PREVIOUS_MASTER_KEY_COMMAND` | CLI and gateway | JSON argv command that prints the temporary previous key. |
 | `SPENDLEASE_ENV` | CLI and gateway | Set to `production` to disable automatic development-key creation. |
 | `SPENDLEASE_ADMIN_TOKEN` | gateway | Protects non-loopback dashboard and admin requests. |
 | `SPENDLEASE_STORE` | CLI and gateway | Default SQLite path or PostgreSQL DSN; overridden by `--store`. |

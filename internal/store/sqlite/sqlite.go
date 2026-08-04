@@ -56,6 +56,11 @@ type Store struct {
 	// from reading the same balance before either writes its hold. PostgreSQL
 	// additionally locks per principal across processes.
 	reserveMu sync.Mutex
+
+	// credentialMu serialises credential writes and master-key rotation within
+	// this process. PostgreSQL also takes a database advisory lock so a
+	// rotation transaction spans replicas and management commands.
+	credentialMu sync.Mutex
 }
 
 type backend uint8
@@ -177,6 +182,18 @@ func (s *Store) lockLedgerTx(ctx context.Context, tx *sql.Tx) error {
 	if err := tx.QueryRowContext(ctx,
 		`SELECT pg_advisory_xact_lock(hashtextextended('spendlease:ledger', 0)) IS NULL`).Scan(&locked); err != nil {
 		return wrap(err, "locking ledger head")
+	}
+	return nil
+}
+
+func (s *Store) lockCredentialsTx(ctx context.Context, tx *sql.Tx) error {
+	if s.backend != backendPostgres {
+		return nil
+	}
+	var locked bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended('spendlease:credentials', 0)) IS NULL`).Scan(&locked); err != nil {
+		return wrap(err, "locking credentials")
 	}
 	return nil
 }

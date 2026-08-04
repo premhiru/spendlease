@@ -84,3 +84,4 @@ nav:
       - 17. Filter the operational event stream: adr/0017-filter-the-operational-event-stream.md
       - 18. Version the operator control plane: adr/0018-version-the-operator-control-plane.md
       - 19. PostgreSQL multi-instance storage: adr/0019-postgresql-multi-instance-storage.md
+      - 20. External key sources and rotation: adr/0020-external-key-sources-and-rotation.md

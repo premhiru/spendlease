@@ -102,6 +102,9 @@ type CredentialStore interface {
 	ListCredentialProviders(ctx context.Context) ([]string, error)
 	// DeleteCredential removes a provider's credential.
 	DeleteCredential(ctx context.Context, provider string) error
+	// RotateCredentials transforms every credential in one datastore
+	// transaction. If transform fails, no ciphertext is changed.
+	RotateCredentials(ctx context.Context, transform func(Credential) (Credential, error)) (int, error)
 }
 
 // Vault encrypts and decrypts vendor credentials.
@@ -109,12 +112,36 @@ type CredentialStore interface {
 // It is safe for concurrent use: the AEAD is stateless and the store is
 // required to be concurrency-safe.
 type Vault struct {
-	aead  cipher.AEAD
-	store CredentialStore
+	primary cipher.AEAD
+	readers []cipher.AEAD
+	store   CredentialStore
 }
 
 // New returns a vault that encrypts under key and persists through store.
 func New(key MasterKey, store CredentialStore) (*Vault, error) {
+	return NewKeyring(key, nil, store)
+}
+
+// NewKeyring returns a vault that writes with primary and can also decrypt
+// credentials written with previous keys. Previous keys exist only to make a
+// staged online rotation possible and are never used for new writes.
+func NewKeyring(primary MasterKey, previous []MasterKey, store CredentialStore) (*Vault, error) {
+	primaryAEAD, err := newAEAD(primary)
+	if err != nil {
+		return nil, err
+	}
+	readers := []cipher.AEAD{primaryAEAD}
+	for _, key := range previous {
+		aead, err := newAEAD(key)
+		if err != nil {
+			return nil, err
+		}
+		readers = append(readers, aead)
+	}
+	return &Vault{primary: primaryAEAD, readers: readers, store: store}, nil
+}
+
+func newAEAD(key MasterKey) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, fmt.Errorf("vault: creating cipher: %w", err)
@@ -123,7 +150,7 @@ func New(key MasterKey, store CredentialStore) (*Vault, error) {
 	if err != nil {
 		return nil, fmt.Errorf("vault: creating GCM: %w", err)
 	}
-	return &Vault{aead: aead, store: store}, nil
+	return aead, nil
 }
 
 // Put encrypts and stores a vendor API key, replacing any existing key for
@@ -136,25 +163,14 @@ func (v *Vault) Put(ctx context.Context, provider, apiKey string) error {
 		return errors.New("vault: api key must not be empty")
 	}
 
-	nonce := make([]byte, v.aead.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return fmt.Errorf("vault: reading nonce: %w", err)
-	}
-
-	// The provider name is additional authenticated data. It is not secret,
-	// but binding it to the ciphertext means a row cannot be copied from one
-	// provider to another: decryption of a moved ciphertext fails rather than
-	// silently returning the wrong vendor's key.
-	ciphertext := v.aead.Seal(nil, nonce, []byte(apiKey), []byte(provider))
-
 	now := time.Now().UTC()
-	return v.store.PutCredential(ctx, Credential{
-		Provider:   provider,
-		Nonce:      nonce,
-		Ciphertext: ciphertext,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-	})
+	plaintext := []byte(apiKey)
+	credential, err := v.encrypt(provider, plaintext, now, now)
+	clear(plaintext)
+	if err != nil {
+		return err
+	}
+	return v.store.PutCredential(ctx, credential)
 }
 
 // Get decrypts and returns a provider's vendor API key.
@@ -167,14 +183,77 @@ func (v *Vault) Get(ctx context.Context, provider string) (string, error) {
 		return "", err
 	}
 
-	plaintext, err := v.aead.Open(nil, c.Nonce, c.Ciphertext, []byte(provider))
+	plaintext, err := v.decrypt(c)
 	if err != nil {
 		// Deliberately vague about the cause and silent about the contents:
 		// the useful signal for an operator is "the master key does not match
 		// this database", and anything more would describe key material.
 		return "", fmt.Errorf("%w for %q: the master key may have changed", ErrDecrypt, provider)
 	}
-	return string(plaintext), nil
+	value := string(plaintext)
+	clear(plaintext)
+	return value, nil
+}
+
+func (v *Vault) decrypt(c Credential) ([]byte, error) {
+	for _, aead := range v.readers {
+		plaintext, err := aead.Open(nil, c.Nonce, c.Ciphertext, []byte(c.Provider))
+		if err == nil {
+			return plaintext, nil
+		}
+	}
+	return nil, ErrDecrypt
+}
+
+func (v *Vault) encrypt(provider string, plaintext []byte, createdAt, updatedAt time.Time) (Credential, error) {
+	nonce := make([]byte, v.primary.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return Credential{}, fmt.Errorf("vault: reading nonce: %w", err)
+	}
+	// The provider name is additional authenticated data. Moving ciphertext
+	// between provider rows therefore makes decryption fail.
+	ciphertext := v.primary.Seal(nil, nonce, plaintext, []byte(provider))
+	return Credential{
+		Provider: provider, Nonce: nonce, Ciphertext: ciphertext,
+		CreatedAt: createdAt.UTC(), UpdatedAt: updatedAt.UTC(),
+	}, nil
+}
+
+// Rotate re-encrypts every stored credential under the primary key in one
+// datastore transaction. Readers may use the configured previous keys while
+// a staged deployment is in progress; writes always use the primary key.
+func (v *Vault) Rotate(ctx context.Context) (int, error) {
+	now := time.Now().UTC()
+	return v.store.RotateCredentials(ctx, func(current Credential) (Credential, error) {
+		plaintext, err := v.decrypt(current)
+		if err != nil {
+			return Credential{}, fmt.Errorf("%w for %q: none of the configured master keys match", ErrDecrypt, current.Provider)
+		}
+		replacement, err := v.encrypt(current.Provider, plaintext, current.CreatedAt, now)
+		clear(plaintext)
+		return replacement, err
+	})
+}
+
+// Verify decrypts every stored credential without returning any plaintext.
+// Operators use it before and after a staged key rotation.
+func (v *Vault) Verify(ctx context.Context) (int, error) {
+	providers, err := v.store.ListCredentialProviders(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, provider := range providers {
+		credential, err := v.store.GetCredential(ctx, provider)
+		if err != nil {
+			return 0, err
+		}
+		plaintext, err := v.decrypt(credential)
+		if err != nil {
+			return 0, fmt.Errorf("%w for %q: the master key may have changed", ErrDecrypt, provider)
+		}
+		clear(plaintext)
+	}
+	return len(providers), nil
 }
 
 // Providers returns the providers that currently have a stored key.

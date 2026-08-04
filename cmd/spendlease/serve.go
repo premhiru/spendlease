@@ -122,7 +122,7 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	// Then the master key, which in production must be supplied rather than
 	// generated. Resolving it before opening the store means a refused
 	// production startup creates nothing at all.
-	masterKey, keySource, err := resolveMasterKey(*storePath)
+	masterKeys, keySource, err := resolveMasterKeys(ctx, *storePath)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		}
 	}()
 
-	v, err := vault.New(masterKey, st)
+	v, err := vault.NewKeyring(masterKeys.Primary, masterKeys.Previous, st)
 	if err != nil {
 		return err
 	}

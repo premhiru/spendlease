@@ -190,11 +190,11 @@ func runKeysProvider(args []string, stdout, stderr io.Writer) error {
 	}
 	defer func() { _ = st.Close() }()
 
-	masterKey, _, err := resolveMasterKey(*storePath)
+	masterKeys, _, err := resolveMasterKeys(ctx, *storePath)
 	if err != nil {
 		return err
 	}
-	v, err := vault.New(masterKey, st)
+	v, err := vault.NewKeyring(masterKeys.Primary, masterKeys.Previous, st)
 	if err != nil {
 		return err
 	}
@@ -256,29 +256,111 @@ func runKeysProvider(args []string, stdout, stderr io.Writer) error {
 
 // runKeysMaster handles `keys master ...`.
 func runKeysMaster(args []string, stdout, stderr io.Writer) error {
-	if len(args) == 0 || args[0] != "generate" {
-		return fmt.Errorf("%w: expected `keys master generate`", errUsage)
+	if len(args) == 0 {
+		return fmt.Errorf("%w: expected `keys master generate`, `keys master verify`, or `keys master rotate`", errUsage)
 	}
+	action := args[0]
 
-	fs := newFlagSet("keys master generate", stderr)
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
+	switch action {
+	case "generate":
+		fs := newFlagSet("keys master generate", stderr)
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return fmt.Errorf("%w: keys master generate takes no arguments", errUsage)
+		}
+		k, err := vault.GenerateMasterKey()
+		if err != nil {
+			return err
+		}
+
+		// Printed to stdout so it can be piped into a secret manager, with the
+		// guidance on stderr so it does not contaminate that pipe.
+		fmt.Fprintln(stdout, k.Hex())
+		fmt.Fprintf(stderr,
+			"\nStore this in your secret manager and configure exactly one of %s, %s, or %s.\n"+
+				"Every vendor credential is encrypted under it. If it is lost, those\n"+
+				"credentials cannot be recovered and must be re-entered.\n",
+			EnvMasterKey, EnvMasterKeyFile, EnvMasterKeyCommand)
+		return nil
+
+	case "rotate":
+		fs := newFlagSet("keys master rotate", stderr)
+		storePath := storeFlag(fs)
+		confirm := fs.Bool("confirm", false, "confirm transactional re-encryption")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return fmt.Errorf("%w: keys master rotate takes no positional arguments", errUsage)
+		}
+		if !*confirm {
+			return fmt.Errorf("%w: --confirm is required for master-key rotation", errUsage)
+		}
+		ctx := context.Background()
+		keys, _, err := resolveMasterKeys(ctx, *storePath)
+		if err != nil {
+			return err
+		}
+		if len(keys.Previous) == 0 {
+			return fmt.Errorf("%w: configure a previous master key before rotation using %s, %s, or %s",
+				errUsage, EnvPreviousMasterKey, EnvPreviousMasterKeyFile, EnvPreviousMasterKeyCommand)
+		}
+		if !keys.ExplicitPrimary {
+			return fmt.Errorf("%w: rotation requires an explicit new primary through %s, %s, or %s",
+				errUsage, EnvMasterKey, EnvMasterKeyFile, EnvMasterKeyCommand)
+		}
+		st, err := openStore(ctx, *storePath, stderr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = st.Close() }()
+		v, err := vault.NewKeyring(keys.Primary, keys.Previous, st)
+		if err != nil {
+			return err
+		}
+		count, err := v.Rotate(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "Rotated %d vendor credential(s) to the primary master key.\n", count)
+		fmt.Fprintln(stdout, "Verify every gateway uses the primary key before removing the previous-key fallback.")
+		return nil
+
+	case "verify":
+		fs := newFlagSet("keys master verify", stderr)
+		storePath := storeFlag(fs)
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return fmt.Errorf("%w: keys master verify takes no positional arguments", errUsage)
+		}
+		ctx := context.Background()
+		keys, _, err := resolveMasterKeys(ctx, *storePath)
+		if err != nil {
+			return err
+		}
+		st, err := openStore(ctx, *storePath, stderr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = st.Close() }()
+		v, err := vault.NewKeyring(keys.Primary, keys.Previous, st)
+		if err != nil {
+			return err
+		}
+		count, err := v.Verify(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "Verified %d vendor credential(s) with the configured master key sources.\n", count)
+		return nil
+
+	default:
+		return fmt.Errorf("%w: unknown master-key action %q", errUsage, action)
 	}
-
-	k, err := vault.GenerateMasterKey()
-	if err != nil {
-		return err
-	}
-
-	// Printed to stdout so it can be piped into a secret manager, with the
-	// guidance on stderr so it does not contaminate that pipe.
-	fmt.Fprintln(stdout, k.Hex())
-	fmt.Fprintf(stderr,
-		"\nStore this in your secret manager and provide it as %s.\n"+
-			"Every vendor credential is encrypted under it. If it is lost, those\n"+
-			"credentials cannot be recovered and must be re-entered.\n",
-		EnvMasterKey)
-	return nil
 }
 
 // takePositional lifts a leading non-flag argument out of args.

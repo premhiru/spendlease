@@ -75,6 +75,16 @@ ledger appends across gateway instances. SQLite remains the default for a
 single-process installation and needs no database server. See
 [Self-hosting](self-hosting.md#postgresql) for setup and operational guidance.
 
+## Can the master key come from a secret manager or KMS?
+
+Yes. Supply it directly, mount it as a file, or configure a no-shell command
+that prints it. The file path works with common container and Kubernetes secret
+mounts; the command can call an operator-owned secret-manager or KMS wrapper
+using workload identity. Master-key rotation uses a temporary previous-key
+fallback and re-encrypts the complete credential vault in one transaction.
+Follow the staged procedure under
+[Self-hosting](self-hosting.md#rotate-the-master-key).
+
 ## Why no LangChain or CrewAI integration?
 
 Base-URL override works with vendor SDKs in every language and does not depend
