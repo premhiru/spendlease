@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"strconv"
 	"strings"
 )
@@ -52,7 +53,7 @@ func (c *rebindingConn) BeginTx(ctx context.Context, opts driver.TxOptions) (dri
 	if bc, ok := c.Conn.(driver.ConnBeginTx); ok {
 		return bc.BeginTx(ctx, opts)
 	}
-	return c.Conn.Begin()
+	return nil, errors.New("postgres driver does not implement context-aware transactions")
 }
 
 func (c *rebindingConn) Ping(ctx context.Context) error {
