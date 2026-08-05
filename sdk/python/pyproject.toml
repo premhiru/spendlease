@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,12 +12,23 @@ license = "Apache-2.0"
 authors = [{ name = "spendlease contributors" }]
 keywords = ["ai", "agents", "spend", "budget", "gateway"]
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
 
 [project.urls]
 Homepage = "https://github.com/premhiru/spendlease"
 Documentation = "https://premhiru.github.io/spendlease/"
+Changelog = "https://github.com/premhiru/spendlease/blob/main/CHANGELOG.md"
+Issues = "https://github.com/premhiru/spendlease/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
