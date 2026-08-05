@@ -415,6 +415,7 @@ func (g *Gateway) observeResponse(
 
 	return func(res *http.Response) error {
 		upstreamOK := res.StatusCode >= 200 && res.StatusCode < 300
+		externalID := upstreamRequestID(res.Header)
 
 		// A failed request is not spend, and its body is an error message
 		// rather than a completion. Leave it entirely alone.
@@ -482,12 +483,27 @@ func (g *Gateway) observeResponse(
 				complete:      complete,
 				upstreamOK:    true,
 				reservationID: reservationID,
+				externalID:    externalID,
 			})
 		}
 
 		res.Body = obs
 		return nil
 	}
+}
+
+func upstreamRequestID(header http.Header) string {
+	for _, name := range []string{"X-Request-Id", "Request-Id", "X-Goog-Request-Id", "X-Amzn-Requestid"} {
+		value := strings.TrimSpace(header.Get(name))
+		if value == "" {
+			continue
+		}
+		if len(value) > 256 {
+			value = value[:256]
+		}
+		return value
+	}
+	return ""
 }
 
 // record forwards an observation to the recorder.

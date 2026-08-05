@@ -59,6 +59,7 @@ nav:
   - Reserve and settle: reserve-and-settle.md
   - Policy reference: policy-reference.md
   - Price book: pricing-book.md
+  - Reconciliation: reconciliation.md
   - Self-hosting: self-hosting.md
   - Releasing: releasing.md
   - API reference: api-reference.md
@@ -88,3 +89,4 @@ nav:
       - 21. Named operators, RBAC, and audit: adr/0021-named-operators-rbac-and-audit.md
       - 22. Operational signals and bounded networking: adr/0022-operational-signals-and-bounded-networking.md
       - 23. Release artifacts are independently verifiable: adr/0023-release-artifacts-are-verifiable.md
+      - 24. Itemized usage and normalized reconciliation: adr/0024-itemized-usage-and-reconciliation.md

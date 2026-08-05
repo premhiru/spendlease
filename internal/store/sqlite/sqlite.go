@@ -21,6 +21,7 @@ import (
 	// Registers the "sqlite" driver.
 	_ "modernc.org/sqlite"
 
+	"github.com/premhiru/spendlease/internal/billing"
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/operator"
@@ -1110,7 +1111,8 @@ func ledgerEntryBySeq(ctx context.Context, tx *sql.Tx, seq int64) (ledger.Entry,
 	return scanEntry(tx.QueryRowContext(ctx,
 		`SELECT seq, run_id, principal_id, provider, model,
 		        input_tokens, output_tokens, cost_nanos, estimated,
-		        created_at, prev_hash, hash
+		        created_at, prev_hash, hash, hash_version, usage_json,
+		        external_id, pricing_revision, price_effective
 		 FROM ledger WHERE seq = ?`, seq))
 }
 
@@ -1148,6 +1150,9 @@ func appendLedgerTx(ctx context.Context, tx *sql.Tx, e ledger.Entry) (ledger.Ent
 		e.CreatedAt = time.Now()
 	}
 	e.CreatedAt = e.CreatedAt.UTC()
+	if err := e.Validate(); err != nil {
+		return ledger.Entry{}, err
+	}
 
 	var headSeq int64
 	prev := ledger.GenesisHash
@@ -1164,14 +1169,24 @@ func appendLedgerTx(ctx context.Context, tx *sql.Tx, e ledger.Entry) (ledger.Ent
 
 	e.Seq = headSeq + 1
 	sealed := e.Seal(prev)
+	usageJSON, err := sealed.ItemizedUsage().CanonicalJSON()
+	if err != nil {
+		return ledger.Entry{}, err
+	}
+	priceEffective := ""
+	if !sealed.PriceEffective.IsZero() {
+		priceEffective = formatTime(sealed.PriceEffective)
+	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO ledger (seq, run_id, principal_id, provider, model,
 		                     input_tokens, output_tokens, cost_nanos, estimated,
-		                     created_at, prev_hash, hash)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                     created_at, prev_hash, hash, hash_version, usage_json,
+		                     external_id, pricing_revision, price_effective)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sealed.Seq, sealed.RunID, sealed.PrincipalID, sealed.Provider, sealed.Model,
 		sealed.InputTokens, sealed.OutputTokens, int64(sealed.Cost), boolToInt(sealed.Estimated),
-		formatTime(sealed.CreatedAt), sealed.PrevHash, sealed.Hash,
+		formatTime(sealed.CreatedAt), sealed.PrevHash, sealed.Hash, sealed.HashVersion, usageJSON,
+		sealed.ExternalID, sealed.PricingRevision, priceEffective,
 	); err != nil {
 		return ledger.Entry{}, wrap(err, "appending ledger entry")
 	}
@@ -1183,7 +1198,8 @@ func (s *Store) LedgerEntries(ctx context.Context, f store.LedgerFilter) ([]ledg
 	q := strings.Builder{}
 	q.WriteString(`SELECT seq, run_id, principal_id, provider, model,
 	                      input_tokens, output_tokens, cost_nanos, estimated,
-	                      created_at, prev_hash, hash
+	                      created_at, prev_hash, hash, hash_version, usage_json,
+	                      external_id, pricing_revision, price_effective
 	               FROM ledger`)
 
 	var (
@@ -1236,7 +1252,8 @@ func (s *Store) LedgerHead(ctx context.Context) (ledger.Entry, bool, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT seq, run_id, principal_id, provider, model,
 		        input_tokens, output_tokens, cost_nanos, estimated,
-		        created_at, prev_hash, hash
+		        created_at, prev_hash, hash, hash_version, usage_json,
+		        external_id, pricing_revision, price_effective
 		 FROM ledger ORDER BY seq DESC LIMIT 1`)
 
 	e, err := scanEntry(row)
@@ -1252,12 +1269,15 @@ func (s *Store) LedgerHead(ctx context.Context) (ledger.Entry, bool, error) {
 func scanEntry(sc scanner) (ledger.Entry, error) {
 	var e ledger.Entry
 	var created string
+	var priceEffective string
+	var usageJSON string
 	var cost int64
 	var estimated int
 
 	if err := sc.Scan(&e.Seq, &e.RunID, &e.PrincipalID, &e.Provider, &e.Model,
 		&e.InputTokens, &e.OutputTokens, &cost, &estimated,
-		&created, &e.PrevHash, &e.Hash); err != nil {
+		&created, &e.PrevHash, &e.Hash, &e.HashVersion, &usageJSON,
+		&e.ExternalID, &e.PricingRevision, &priceEffective); err != nil {
 		return ledger.Entry{}, wrap(err, "reading ledger entry")
 	}
 
@@ -1267,6 +1287,18 @@ func scanEntry(sc scanner) (ledger.Entry, error) {
 	var err error
 	if e.CreatedAt, err = parseTime(created); err != nil {
 		return ledger.Entry{}, err
+	}
+	if usageJSON != "" {
+		e.Usage, err = billing.ParseUsageJSON(usageJSON)
+		if err != nil {
+			return ledger.Entry{}, err
+		}
+	}
+	if priceEffective != "" {
+		e.PriceEffective, err = parseTime(priceEffective)
+		if err != nil {
+			return ledger.Entry{}, err
+		}
 	}
 	return e, nil
 }

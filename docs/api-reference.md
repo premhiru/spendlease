@@ -56,9 +56,11 @@ reservation or ledger entry and sets `X-Spendlease-Accounting: unmetered`.
 
 ## Accounting
 
-Every successful supported token-billed request produces a ledger entry containing the provider,
-model, reported or estimated token counts, calculated token cost, run,
-and principal. Entries are append-only and hash-chained.
+Every successful supported token-billed request produces a ledger entry
+containing the provider, model, reported or estimated token counts, itemized
+usage dimensions, calculated token cost, price-book revision/effective date,
+upstream request ID when available, run, and principal. Entries are append-only
+and hash-chained.
 
 The cost is exact for the price-book rate and token counts used in the
 calculation. Reported cache usage and documented long-context tiers are
@@ -263,8 +265,11 @@ curl -sS 'http://localhost:4000/api/v1/ledger/export?format=csv&since=2026-08-01
 ```
 
 Export filters are `run_id`, `principal_id`, and an RFC 3339 `since`
-timestamp. JSON preserves money as strings; CSV includes the chain hashes so
-an export can be retained with its audit evidence.
+timestamp. JSON schema version 2 preserves money as strings and includes the
+named usage object. CSV serializes the same object as `usage_json`. Both include
+pricing provenance, the hash format version, and chain hashes so an export can
+be retained with its audit evidence. Reconciliation is an offline CLI workflow,
+not an operator API mutation; see [Reconciliation](reconciliation.md).
 
 “Local” means both the TCP peer and HTTP host are loopback. Other dashboard and
 operator requests require a named operator token, either through HTTP Basic

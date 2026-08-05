@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/premhiru/spendlease/internal/billing"
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/pricing"
@@ -103,6 +104,9 @@ type observation struct {
 	// reservationID is the hold this completion resolves. Empty preserves the
 	// direct-record path used by accounting unit tests.
 	reservationID string
+	// externalID is the upstream request identifier when the provider exposed
+	// one in its response headers.
+	externalID string
 }
 
 // Reserve estimates the request's upper bound and asks the store for one
@@ -192,6 +196,7 @@ func (r *Recorder) Record(ctx context.Context, obs observation) {
 
 	now := time.Now()
 	price, known := r.book.Lookup(obs.provider, model, now)
+	priceBook := r.book.Metadata(now)
 
 	usage := obs.usage
 	estimated := !known || !obs.usageReported || !obs.complete
@@ -217,9 +222,19 @@ func (r *Recorder) Record(ctx context.Context, obs observation) {
 		Model:        model,
 		InputTokens:  usage.TotalInputTokens(),
 		OutputTokens: usage.OutputTokens,
-		Cost:         cost,
-		Estimated:    estimated,
-		CreatedAt:    now,
+		Usage: billing.TokenUsage(
+			usage.InputTokens,
+			usage.CachedInputTokens,
+			usage.CacheWrite5mTokens,
+			usage.CacheWrite1hTokens,
+			usage.OutputTokens,
+		),
+		ExternalID:      obs.externalID,
+		PricingRevision: priceBook.Revision,
+		PriceEffective:  price.Effective,
+		Cost:            cost,
+		Estimated:       estimated,
+		CreatedAt:       now,
 	}
 	var entry ledger.Entry
 	var err error

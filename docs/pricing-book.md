@@ -137,7 +137,9 @@ the marked estimate still uses the documented `chars/4` heuristic. See
 Known unsupported endpoints and request features are rejected in enforce mode
 with `422 spend_not_enforceable`. Observe mode forwards them, marks the
 response `X-Spendlease-Accounting: unmetered`, and does not create a misleading
-token ledger entry.
+token ledger entry. A normalized vendor statement may still name those units
+for [reconciliation](reconciliation.md); making a unit visible after the fact
+does not make it safe to reserve before egress.
 
 ## Contributing an update
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/premhiru/spendlease/internal/billing"
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/store"
@@ -861,6 +862,8 @@ func TestSettleReservationIsAtomicAndIdempotent(t *testing.T) {
 	entry := ledger.Entry{
 		RunID: r.ID, PrincipalID: p.ID, Provider: "openai", Model: "gpt-4o",
 		InputTokens: 10, OutputTokens: 20, Cost: money.MustParseUSD("0.12"),
+		Usage: billing.TokenUsage(8, 2, 0, 0, 20), ExternalID: "req_settle",
+		PricingRevision: "pricebook-test", PriceEffective: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
 	}
 
 	first, err := s.SettleReservation(ctx, res.ID, entry)
@@ -873,6 +876,11 @@ func TestSettleReservationIsAtomicAndIdempotent(t *testing.T) {
 	}
 	if second.Seq != first.Seq || second.Hash != first.Hash {
 		t.Errorf("second settlement created a different entry: first=%+v second=%+v", first, second)
+	}
+	if second.HashVersion != ledger.HashVersionUsage || second.Usage[billing.UnitCachedInputTokens] != 2 ||
+		second.ExternalID != "req_settle" || second.PricingRevision != "pricebook-test" ||
+		!second.PriceEffective.Equal(entry.PriceEffective) {
+		t.Errorf("itemized ledger fields did not round-trip: %+v", second)
 	}
 	entries, _ := s.LedgerEntries(ctx, store.LedgerFilter{})
 	if len(entries) != 1 {
@@ -979,6 +987,47 @@ func TestLedgerAppendBuildsAChain(t *testing.T) {
 	}
 	if head.Seq != 2 {
 		t.Errorf("head seq = %d, want 2", head.Seq)
+	}
+}
+
+func TestLedgerReadsLegacyRowsAfterItemizedUsageMigration(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := seedPrincipal(t, s, "legacy-agent")
+	r := seedRun(t, s, p.ID, "", money.MustParseUSD("100.00"))
+	createdAt := time.Date(2026, 7, 31, 23, 59, 0, 0, time.UTC)
+	legacy := ledger.Entry{
+		HashVersion: ledger.HashVersionLegacy, Seq: 1, RunID: r.ID, PrincipalID: p.ID,
+		Provider: "openai", Model: "gpt-4o", InputTokens: 100, OutputTokens: 20,
+		Cost: money.MustParseUSD("0.01"), CreatedAt: createdAt,
+	}.Seal(ledger.GenesisHash)
+
+	_, err := s.db.ExecContext(ctx, `INSERT INTO ledger (
+		seq, run_id, principal_id, provider, model, input_tokens, output_tokens,
+		cost_nanos, estimated, created_at, prev_hash, hash
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		legacy.Seq, legacy.RunID, legacy.PrincipalID, legacy.Provider, legacy.Model,
+		legacy.InputTokens, legacy.OutputTokens, int64(legacy.Cost), 0,
+		formatTime(legacy.CreatedAt), legacy.PrevHash, legacy.Hash,
+	)
+	if err != nil {
+		t.Fatalf("insert pre-migration ledger row: %v", err)
+	}
+
+	entries, err := s.LedgerEntries(ctx, store.LedgerFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].HashVersion != ledger.HashVersionLegacy {
+		t.Fatalf("legacy entries = %#v", entries)
+	}
+	if got := entries[0].ItemizedUsage(); got[billing.UnitInputTokens] != 100 || got[billing.UnitOutputTokens] != 20 {
+		t.Fatalf("expanded legacy usage = %#v", got)
+	}
+	if err := ledger.VerifyChain(entries); err != nil {
+		t.Fatalf("legacy chain no longer verifies: %v", err)
 	}
 }
 

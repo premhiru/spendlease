@@ -190,13 +190,31 @@ spendlease ledger export \
   [--since RFC3339]
 ```
 
-Money is emitted as exact decimal USD strings. JSON includes schema `version`
-and wraps the records in an `entries` object; CSV includes a header. Both formats include `prev_hash` and
-`hash`. Redirect standard output to a file when retaining an audit export:
+Money is emitted as exact decimal USD strings. JSON schema version 2 wraps the
+records in an `entries` object; CSV includes a header. Both formats include
+itemized `usage`, pricing provenance, `hash_version`, `prev_hash`, and `hash`.
+Redirect standard output to a file when retaining an audit export:
 
 ```bash
 spendlease ledger export --format csv --run run_... > ledger.csv
 ```
+
+Compare a normalized vendor statement over a half-open accounting period:
+
+```bash
+spendlease ledger reconcile \
+  --statement vendor-normalized.csv \
+  --since 2026-08-01T00:00:00Z \
+  --until 2026-09-01T00:00:00Z \
+  [--cost-tolerance 0.01] \
+  [--format json|csv] \
+  [--fail-on-mismatch] \
+  [--store PATH_OR_DSN]
+```
+
+The report is always written before `--fail-on-mismatch` returns a non-zero
+exit. See [Reconciliation](reconciliation.md) for the statement columns,
+status values, and interpretation rules.
 
 ## Environment variables
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/premhiru/spendlease/internal/billing"
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/operator"
@@ -208,6 +209,7 @@ func TestPostgresMultiInstanceGuarantees(t *testing.T) {
 				RunID: r.ID, PrincipalID: p.ID, Provider: "openai",
 				Model: fmt.Sprintf("concurrent-%02d", i), InputTokens: 10,
 				OutputTokens: 5, Cost: money.MustParseUSD("0.001"), CreatedAt: time.Now().UTC(),
+				ExternalID: fmt.Sprintf("req_%02d", i), PricingRevision: "integration-test",
 			})
 			if err != nil {
 				appendErrs <- err
@@ -228,6 +230,22 @@ func TestPostgresMultiInstanceGuarantees(t *testing.T) {
 	}
 	if len(written) < entries {
 		t.Fatalf("ledger has %d entries, want at least %d", len(written), entries)
+	}
+	foundItemized := false
+	for _, entry := range written {
+		if entry.Model != "concurrent-00" {
+			continue
+		}
+		usage := entry.ItemizedUsage()
+		if entry.HashVersion != ledger.CurrentHashVersion || usage[billing.UnitInputTokens] != 10 ||
+			usage[billing.UnitOutputTokens] != 5 || entry.ExternalID != "req_00" ||
+			entry.PricingRevision != "integration-test" {
+			t.Fatalf("PostgreSQL itemized ledger round trip = %+v", entry)
+		}
+		foundItemized = true
+	}
+	if !foundItemized {
+		t.Fatal("PostgreSQL itemized ledger round trip entry not found")
 	}
 
 	lease := store.Lease{

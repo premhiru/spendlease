@@ -133,12 +133,12 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **Gives orchestrators a versioned control plane.** The guarded JSON API creates and closes runs, issues and revokes individual leases, and reports the tightest remaining budget across a run hierarchy.
 - **Names the humans behind control changes.** Hashed `slo_` operator tokens carry viewer, operator, or admin roles, and every authenticated mutation writes an append-only attempt and result trail.
 - **Exposes production signals.** Separate liveness and datastore readiness endpoints, bounded-label Prometheus metrics, concurrency and network timeouts, and signed asynchronous alert webhooks make failure visible without putting monitoring on the request path.
-- **Verifies and exports audit data.** The CLI and JSON API verify the complete hash chain and export filtered JSON or CSV without losing money precision.
+- **Verifies, exports, and reconciles audit data.** Versioned ledger entries preserve itemized usage and pricing provenance. The CLI compares a normalized vendor statement without losing money precision or rewriting history.
 - **Forwards SSE without response buffering.** Chunks are flushed as they arrive while usage events are observed for settlement.
 
 ## What it does not do
 
-- **No reconciliation or ERP export.** It will not close your books or talk to NetSuite.
+- **No direct vendor-billing or ERP connector.** Reconciliation uses a documented normalized CSV; it will not fetch invoices, close books, or talk to NetSuite.
 - **No charts.** The dashboard is one table, sorted by spend descending.
 - **No framework integrations.** No LangChain, CrewAI, or LlamaIndex adapters. Base-URL override works everywhere and does not rot.
 - **No multi-tenancy or SSO.** The service is single-tenant and self-hosted. Named operator roles protect the control plane, but there is no external identity-provider integration.
@@ -233,6 +233,7 @@ first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
 | [Reserve and settle](docs/reserve-and-settle.md) | The deep explanation, streaming caveat included |
 | [Policy reference](docs/policy-reference.md) | Every policy field |
 | [Price book](docs/pricing-book.md) | Format, and how to contribute updates |
+| [Reconciliation](docs/reconciliation.md) | Compare the ledger with a normalized vendor statement |
 | [Self-hosting](docs/self-hosting.md) | Persistent deployment, backups, and key management |
 | [Releasing](docs/releasing.md) | Maintainer release and trusted-publisher setup |
 | [API reference](docs/api-reference.md) | Admin and gateway HTTP surface |
@@ -245,7 +246,7 @@ Full site: **<https://premhiru.github.io/spendlease>**
 
 The current source includes the gateway, encrypted credential vault, SQLite
 and PostgreSQL stores, dated price book, reserve-and-settle enforcement,
-dashboard, versioned operator API, ledger verification/export, SDK helpers,
+dashboard, versioned operator API, ledger verification/export/reconciliation, SDK helpers,
 external master-key sources, transactional key rotation, named operator RBAC,
 append-only control audit, and demo. PostgreSQL
 is intended for multi-instance deployments; SQLite remains the
