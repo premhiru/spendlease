@@ -6,9 +6,10 @@ please open an issue or fix it with the change that exposed the problem.
 
 ## Clone to green tests
 
-You need Go 1.25 or later, Git, and Make. The full race test also needs a C
-toolchain. See [ADR-0004](docs/adr/0004-go-version-floor.md) for the Go version
-decision.
+You need Go 1.25.12 or later, Git, and Make. The full race test also needs a C
+toolchain. See [ADR-0004](docs/adr/0004-go-version-floor.md) and its security
+patch amendment in [ADR-0023](docs/adr/0023-release-artifacts-are-verifiable.md)
+for the Go version decision.
 
 ```bash
 git clone https://github.com/premhiru/spendlease.git

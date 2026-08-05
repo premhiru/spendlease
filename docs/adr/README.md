@@ -14,7 +14,7 @@ and references for current behavior.
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
 | [0002](0002-project-name-and-module-path.md) | Project name and Go module path | Accepted |
 | [0003](0003-money-as-int64-nanodollars.md) | Money as int64 nanodollars | Accepted |
-| [0004](0004-go-version-floor.md) | Go version floor is 1.25 | Accepted |
+| [0004](0004-go-version-floor.md) | Go version floor is 1.25 | Accepted; patch-floor policy amended by 0023 |
 | [0005](0005-ledger-integrity.md) | How ledger immutability is actually enforced | Accepted |
 | [0006](0006-provider-routing.md) | Routing requests to providers by path | Accepted |
 | [0007](0007-credential-vault-and-master-key.md) | The credential vault, and where the master key comes from | Accepted |
@@ -33,3 +33,4 @@ and references for current behavior.
 | [0020](0020-external-key-sources-and-rotation.md) | External key sources and transactional rotation | Accepted; amends 0007 |
 | [0021](0021-named-operators-rbac-and-audit.md) | Named operators, RBAC, and append-only audit | Accepted; amends 0018 |
 | [0022](0022-operational-signals-and-bounded-networking.md) | Operational signals and bounded networking | Accepted |
+| [0023](0023-release-artifacts-are-verifiable.md) | Release artifacts are independently verifiable | Accepted; amends 0004 |

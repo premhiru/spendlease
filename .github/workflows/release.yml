@@ -21,12 +21,14 @@ jobs:
     name: Publish container image
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: write
+      id-token: write
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
 
       # setup-buildx pulls the buildkit image from Docker Hub, which is
       # unauthenticated and rate limited on GitHub runners. It has already
@@ -35,18 +37,18 @@ jobs:
       - name: Set up buildx
         id: buildx
         continue-on-error: true
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Set up buildx (retry)
         if: steps.buildx.outcome == 'failure'
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Record the build timestamp
+      - name: Record the source timestamp
         id: build
-        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        run: echo "date=$(git show -s --format=%cI "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
 
       - name: Log in to ghcr.io
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -58,8 +60,11 @@ jobs:
       # tag name is what marks a prerelease: v0.1.0-alpha.1.
       - name: Decide whether latest moves
         id: flavor
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" != *-* ]]; then
+          if [[ "$REF_TYPE" == "tag" && "$REF_NAME" != *-* ]]; then
             echo "value=latest=true" >> "$GITHUB_OUTPUT"
           else
             echo "value=latest=false" >> "$GITHUB_OUTPUT"
@@ -67,7 +72,7 @@ jobs:
 
       - name: Derive tags
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.IMAGE }}
           tags: |
@@ -82,10 +87,12 @@ jobs:
 
       - name: Build and push
         id: publish
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           push: true
+          provenance: mode=max
+          sbom: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -96,6 +103,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Sign and attest the image digest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+
       - name: Record immutable image reference
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -104,7 +118,7 @@ jobs:
 
       - name: Attach immutable image reference to release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           files: dist/container-image.txt
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -119,7 +133,7 @@ jobs:
           container=$(docker run -d -p 127.0.0.1::4000 "$tag")
           trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
           port=$(docker port "$container" 4000/tcp | awk -F: '{print $NF}')
-          for attempt in {1..20}; do
+          for _ in {1..20}; do
             if curl --fail --silent "http://127.0.0.1:${port}/healthz" &&
                curl --fail --silent "http://127.0.0.1:${port}/readyz"; then
               exit 0
@@ -139,7 +153,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     strategy:
       matrix:
         include:
@@ -154,14 +170,15 @@ jobs:
           - goos: windows
             goarch: amd64
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Build
+        id: build
         env:
           CGO_ENABLED: 0
           GOOS: ${{ matrix.goos }}
@@ -170,13 +187,42 @@ jobs:
           ext=""
           [ "$GOOS" = "windows" ] && ext=".exe"
           name="spendlease_${GITHUB_REF_NAME}_${GOOS}_${GOARCH}${ext}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          build_date=$(git show -s --format=%cI "$GITHUB_SHA")
           go build -trimpath \
-            -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA::7} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA::7} -X main.date=${build_date}" \
             -o "dist/${name}" ./cmd/spendlease
           (cd dist && sha256sum "${name}" > "${name}.sha256")
 
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          file: dist/${{ steps.build.outputs.name }}
+          format: spdx-json
+          output-file: dist/${{ steps.build.outputs.name }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: dist/${{ steps.build.outputs.name }}
+
+      - name: Attest SBOM
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: dist/${{ steps.build.outputs.name }}
+          sbom-path: dist/${{ steps.build.outputs.name }}.spdx.json
+
+      - name: Include offline verification bundles
+        run: |
+          cp '${{ steps.provenance.outputs.bundle-path }}' 'dist/${{ steps.build.outputs.name }}.provenance.sigstore.json'
+          cp '${{ steps.sbom.outputs.bundle-path }}' 'dist/${{ steps.build.outputs.name }}.sbom.sigstore.json'
+
       - name: Upload to the release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           files: dist/*
           # Anything with a hyphen in the version is a prerelease: v0.1.0-alpha.1.
@@ -189,12 +235,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
+      attestations: write
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
 
@@ -215,15 +262,31 @@ jobs:
               raise SystemExit(f"tag {os.environ['RELEASE_TAG']} does not match Python package {version} ({expected})")
           PY
 
-      - name: Attach Python distributions to release
-        uses: softprops/action-gh-release@v3
+      - name: Record Python package checksums
+        run: |
+          mkdir -p dist/python-package
+          (cd sdk/python/dist && sha256sum -- *) > dist/python-package/SHA256SUMS
+
+      - name: Attest Python package provenance
+        id: python-provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
-          files: sdk/python/dist/*
+          subject-checksums: dist/python-package/SHA256SUMS
+
+      - name: Include Python provenance bundle
+        run: cp '${{ steps.python-provenance.outputs.bundle-path }}' dist/python-package/python-package.provenance.sigstore.json
+
+      - name: Attach Python distributions to release
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
+        with:
+          files: |
+            sdk/python/dist/*
+            dist/python-package/*
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
 
       - name: Publish to PyPI with trusted publishing
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           packages-dir: sdk/python/dist/
 
@@ -233,12 +296,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm
     permissions:
+      attestations: write
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
@@ -263,8 +327,20 @@ jobs:
             exit 1
           fi
 
+      - name: Record npm package checksum
+        run: (cd sdk/typescript/dist-package && sha256sum -- * > SHA256SUMS)
+
+      - name: Attest npm package provenance
+        id: npm-provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-checksums: sdk/typescript/dist-package/SHA256SUMS
+
+      - name: Include npm provenance bundle
+        run: cp '${{ steps.npm-provenance.outputs.bundle-path }}' sdk/typescript/dist-package/npm-package.provenance.sigstore.json
+
       - name: Attach npm package to release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           files: sdk/typescript/dist-package/*
           prerelease: ${{ contains(github.ref_name, '-') }}

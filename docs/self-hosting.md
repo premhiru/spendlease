@@ -20,11 +20,39 @@ The container registry publishes three useful kinds of tag:
 Evaluate `edge`, then deploy the corresponding `sha-...` tag rather than a
 mutable tag. Source builds should likewise pin a commit.
 
-Tagged releases attach platform binaries and checksums, Python wheel/source
-archives, an npm tarball, and `container-image.txt`. The last file contains
-the immutable `ghcr.io/...@sha256:...` reference for that build. Registry
-packages are published through PyPI and npm trusted publishing; GitHub release
-artifacts remain available even when a registry is temporarily unavailable.
+Tagged releases attach platform binaries and checksums, SPDX SBOMs, signed
+provenance and SBOM bundles, Python wheel/source archives, an npm tarball, and
+`container-image.txt`. The last file contains the immutable
+`ghcr.io/...@sha256:...` reference for that build. Registry packages are
+published through PyPI and npm trusted publishing; GitHub release artifacts
+remain available even when a registry is temporarily unavailable.
+
+Verify a downloaded binary before running it:
+
+```bash
+sha256sum -c spendlease_v0.2.0-beta.1_linux_amd64.sha256
+gh attestation verify spendlease_v0.2.0-beta.1_linux_amd64 \
+  --repo premhiru/spendlease \
+  --signer-workflow premhiru/spendlease/.github/workflows/release.yml \
+  --source-ref refs/tags/v0.2.0-beta.1
+```
+
+The second command verifies signed SLSA provenance through GitHub. To verify
+the release-provided bundle instead, pass
+`--bundle spendlease_...provenance.sigstore.json`. For a fully offline check,
+obtain and retain a trusted root ahead of time with
+`gh attestation trusted-root > trusted_root.jsonl`, then also pass
+`--custom-trusted-root trusted_root.jsonl`.
+
+Use the digest from `container-image.txt` for the same check against the image:
+
+```bash
+gh attestation verify \
+  oci://ghcr.io/premhiru/spendlease@sha256:... \
+  --repo premhiru/spendlease \
+  --signer-workflow premhiru/spendlease/.github/workflows/release.yml \
+  --source-ref refs/tags/v0.2.0-beta.1
+```
 
 ## Run the container
 
