@@ -61,20 +61,41 @@ type Options struct {
 	Guard Guard
 	// Revoker activates the principal-wide kill switch.
 	Revoker PrincipalRevoker
+	// Manager enables guided principal, run and lease management. When nil,
+	// the dashboard remains read-only apart from the existing mode and kill
+	// controls.
+	Manager AgentManager
+	// LeaseRevoker revokes one lease from the management workspace.
+	LeaseRevoker LeaseRevoker
+	// Credentials enables the admin-only provider settings panel. Plaintext
+	// keys are accepted for storage but are never returned by this interface.
+	Credentials ProviderCredentials
+	// CredentialStatus reports which providers have a key without granting
+	// write access. The demo uses this to show its mock credential while
+	// keeping the provider settings form disabled.
+	CredentialStatus ProviderStatusSource
+	// Providers is the set of names the running gateway actually routes.
+	Providers []string
 }
 
 // Dashboard serves the spend table.
 type Dashboard struct {
-	store         SummaryStore
-	logger        *slog.Logger
-	tmpl          *template.Template
-	static        http.Handler
-	guard         Guard
-	version       string
-	pricingLabel  string
-	pricingDetail string
-	warning       string
-	revoker       PrincipalRevoker
+	store            SummaryStore
+	logger           *slog.Logger
+	tmpl             *template.Template
+	static           http.Handler
+	guard            Guard
+	version          string
+	pricingLabel     string
+	pricingDetail    string
+	warning          string
+	revoker          PrincipalRevoker
+	manager          AgentManager
+	leaseRevoker     LeaseRevoker
+	credentials      ProviderCredentials
+	credentialStatus ProviderStatusSource
+	providers        []string
+	providerSet      map[string]struct{}
 }
 
 // New parses the templates and returns a dashboard.
@@ -86,18 +107,32 @@ func New(opts Options) (*Dashboard, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Dashboard{
-		store:         opts.Store,
-		logger:        opts.Logger,
-		tmpl:          tmpl,
-		static:        http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
-		guard:         opts.Guard,
-		version:       opts.Version,
-		pricingLabel:  priceBookLabel(opts.PricingRevision, opts.PricingEffective),
-		pricingDetail: priceBookDetail(opts.PricingLoadedAt, opts.PricingProviders, opts.PricingModels),
-		warning:       opts.Warning,
-		revoker:       opts.Revoker,
-	}, nil
+	credentialStatus := opts.CredentialStatus
+	if credentialStatus == nil {
+		credentialStatus, _ = opts.Credentials.(ProviderStatusSource)
+	}
+	d := &Dashboard{
+		store:            opts.Store,
+		logger:           opts.Logger,
+		tmpl:             tmpl,
+		static:           http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
+		guard:            opts.Guard,
+		version:          opts.Version,
+		pricingLabel:     priceBookLabel(opts.PricingRevision, opts.PricingEffective),
+		pricingDetail:    priceBookDetail(opts.PricingLoadedAt, opts.PricingProviders, opts.PricingModels),
+		warning:          opts.Warning,
+		revoker:          opts.Revoker,
+		manager:          opts.Manager,
+		leaseRevoker:     opts.LeaseRevoker,
+		credentials:      opts.Credentials,
+		credentialStatus: credentialStatus,
+		providers:        normalizeProviderNames(opts.Providers),
+		providerSet:      make(map[string]struct{}),
+	}
+	for _, name := range d.providers {
+		d.providerSet[name] = struct{}{}
+	}
+	return d, nil
 }
 
 // Routes registers the dashboard's handlers on a mux.
@@ -113,6 +148,7 @@ func (d *Dashboard) Routes(mux *http.ServeMux) {
 	if d.revoker != nil {
 		mux.Handle("POST /admin/principals/{id}/revoke", d.guard.ProtectRole(operator.RoleAdmin, http.HandlerFunc(d.handleRevoke)))
 	}
+	d.managementRoutes(mux)
 
 	// Stylesheet and htmx. No secrets, and requiring credentials for them
 	// would mean an unauthenticated browser could not even render the login
@@ -140,17 +176,22 @@ func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 // view is what the templates render.
 type view struct {
-	BuildLabel    string
-	OperatorLabel string
-	CanAdmin      bool
-	PricingLabel  string
-	PricingDetail string
-	Warning       string
-	Principals    []row
-	Total         money.Nanos
-	Notice        string
-	Events        []eventRow
-	EventFilter   eventFilterView
+	BuildLabel       string
+	OperatorLabel    string
+	CanAdmin         bool
+	CanOperate       bool
+	CanManage        bool
+	CanOnboard       bool
+	CanCredentials   bool
+	PricingLabel     string
+	PricingDetail    string
+	Warning          string
+	Principals       []row
+	Total            money.Nanos
+	Notice           string
+	Events           []eventRow
+	EventFilter      eventFilterView
+	ProviderSettings providerSettingsView
 }
 
 type eventFilterView struct {
@@ -211,6 +252,13 @@ func (d *Dashboard) handlePage(w http.ResponseWriter, r *http.Request) {
 		d.fail(w, "building the dashboard", err)
 		return
 	}
+	if v.CanOnboard || v.CanCredentials {
+		v.ProviderSettings.Providers, err = d.providerStatuses(r.Context())
+		if err != nil {
+			d.fail(w, "reading provider credential status", err)
+			return
+		}
+	}
 	d.render(w, "dashboard.html", v)
 }
 
@@ -269,8 +317,12 @@ func (d *Dashboard) build(r *http.Request) (view, error) {
 	}
 	if identity, ok := operator.IdentityFromContext(ctx); ok {
 		v.OperatorLabel = identity.Name + " · " + string(identity.Role)
+		v.CanOperate = identity.Role.Allows(operator.RoleOperator)
 		v.CanAdmin = identity.Role.Allows(operator.RoleAdmin)
 	}
+	v.CanManage = v.CanOperate && d.manager != nil
+	v.CanOnboard = v.CanAdmin && d.manager != nil && len(d.providers) > 0
+	v.CanCredentials = v.CanAdmin && d.credentials != nil && len(d.providers) > 0
 
 	for _, s := range summaries {
 		v.Total += s.Spend

@@ -392,6 +392,10 @@ type Store interface {
 	// CreatePrincipal inserts a principal. It returns ErrConflict if the name
 	// or key hash is already taken.
 	CreatePrincipal(ctx context.Context, p Principal) error
+	// CreatePrincipalRunLease inserts a new principal, its first root run and
+	// its first lease in one transaction. Dashboard onboarding uses this so a
+	// datastore failure cannot leave a half-created agent behind.
+	CreatePrincipalRunLease(ctx context.Context, p Principal, r Run, l Lease) error
 	// GetPrincipal returns a principal by ID, or ErrNotFound.
 	GetPrincipal(ctx context.Context, id string) (Principal, error)
 	// GetPrincipalByKeyHash resolves an slk_ key hash to its principal. This

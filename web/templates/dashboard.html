@@ -16,6 +16,7 @@
 <title>spendlease</title>
 <link rel="stylesheet" href="/static/dashboard.css">
 <script src="/static/htmx.min.js" defer></script>
+<script src="/static/dashboard.js" defer></script>
 </head>
 <body hx-headers='{"X-Spendlease-Admin":"1"}'>
 <div class="wrap">
@@ -36,12 +37,24 @@
   <div class="warning">{{ .Warning }}</div>
   {{ end }}
 
+  {{ if .CanOnboard }}
+  {{ template "onboarding" . }}
+  {{ end }}
+
+  {{ if .CanCredentials }}
+  {{ template "provider-settings" .ProviderSettings }}
+  {{ end }}
+
   {{/*
     The table template carries its own id and polling attributes, because it
     replaces itself on every swap. Wrapping it in a second polling element
     here would nest two nodes with the same id and poll twice as often.
   */}}
   {{ template "table" . }}
+
+  {{ if .CanManage }}
+  {{ template "agent-access-empty" . }}
+  {{ end }}
 
   <footer>
     <p>

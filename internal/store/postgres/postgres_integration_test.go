@@ -109,6 +109,26 @@ func TestPostgresMultiInstanceGuarantees(t *testing.T) {
 	if _, err := stores[1].GetPrincipal(ctx, "prn_missing"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("missing GetPrincipal error = %v, want ErrNotFound", err)
 	}
+	_, bundlePrincipalHash := store.NewPrincipalKey()
+	_, bundleLeaseHash := store.NewLeaseToken()
+	bundlePrincipal := store.Principal{
+		ID: store.NewPrincipalID(), Name: "postgres-bundle-" + store.NewPrincipalID(),
+		KeyHash: bundlePrincipalHash, Mode: store.ModeObserve, CreatedAt: time.Now().UTC(),
+	}
+	bundleRun := store.Run{
+		ID: store.NewRunID(), PrincipalID: bundlePrincipal.ID, Budget: money.MustParseUSD("0.50"),
+		Status: store.RunActive, CreatedAt: time.Now().UTC(),
+	}
+	bundleLease := store.Lease{
+		ID: store.NewLeaseID(), RunID: bundleRun.ID, TokenHash: bundleLeaseHash, Providers: []string{"openai"},
+		ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now().UTC(),
+	}
+	if err := stores[0].CreatePrincipalRunLease(ctx, bundlePrincipal, bundleRun, bundleLease); err != nil {
+		t.Fatalf("CreatePrincipalRunLease: %v", err)
+	}
+	if got, err := stores[1].GetLease(ctx, bundleLease.ID); err != nil || got.RunID != bundleRun.ID {
+		t.Fatalf("bundled lease = (%+v, %v)", got, err)
+	}
 	r := store.Run{
 		ID: store.NewRunID(), PrincipalID: p.ID, Budget: money.MustParseUSD("1.00"),
 		Status: store.RunActive, CreatedAt: time.Now().UTC(),

@@ -271,7 +271,7 @@ func TestStaticAssetsAreUnguarded(t *testing.T) {
 
 	h := guarded(t, "")
 
-	for _, asset := range []string{"/static/dashboard.css", "/static/htmx.min.js"} {
+	for _, asset := range []string{"/static/dashboard.css", "/static/htmx.min.js", "/static/dashboard.js"} {
 		t.Run(asset, func(t *testing.T) {
 			t.Parallel()
 
@@ -299,7 +299,7 @@ func TestAssetsAreServedFromTheBinary(t *testing.T) {
 			t.Errorf("the page loads %q from the network; it must render offline", remote)
 		}
 	}
-	for _, local := range []string{"/static/dashboard.css", "/static/htmx.min.js"} {
+	for _, local := range []string{"/static/dashboard.css", "/static/htmx.min.js", "/static/dashboard.js"} {
 		if !strings.Contains(page, local) {
 			t.Errorf("the page does not reference %s", local)
 		}

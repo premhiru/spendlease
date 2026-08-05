@@ -72,9 +72,10 @@ Both packages export `AdminClient`. Supply a named operator token when calling
 from off-machine. Mutation methods automatically send the required
 `X-Spendlease-Admin: 1` header.
 
-The original dashboard controls remain available as `set_mode`/`setMode` and
-`revoke`; they return the refreshed dashboard table HTML. The versioned JSON
-methods return structured records:
+The mode and principal-wide revoke routes remain available as
+`set_mode`/`setMode` and `revoke`; they return the refreshed dashboard table
+HTML. The dashboard's onboarding forms are intentionally not SDK methods. The
+versioned JSON methods return structured records:
 
 | Operation | Python | TypeScript |
 |---|---|---|

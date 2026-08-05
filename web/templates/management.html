@@ -1,0 +1,235 @@
+{{ define "onboarding" }}
+<section class="management-panel" aria-labelledby="add-agent-title">
+  <div class="section-heading">
+    <div>
+      <h2 id="add-agent-title">Add an agent</h2>
+      <p>Create its identity, first budgeted run, and short-lived lease together.</p>
+    </div>
+    <span class="status ok">Admin</span>
+  </div>
+
+  <form class="management-form"
+        method="post"
+        action="/admin/agents"
+        hx-post="/admin/agents"
+        hx-target="#onboarding-result"
+        hx-swap="innerHTML">
+    <label>
+      <span>Agent name</span>
+      <input name="name" required maxlength="100" placeholder="checkout-agent" autocomplete="off">
+    </label>
+    <label>
+      <span>Mode</span>
+      <select name="mode">
+        <option value="observe" selected>Observe first</option>
+        <option value="enforce">Enforce immediately</option>
+      </select>
+    </label>
+    <label>
+      <span>Run budget (USD)</span>
+      <input name="budget_usd" required inputmode="decimal" value="0.50" pattern="[0-9]+([.][0-9]{1,9})?">
+    </label>
+    <label>
+      <span>Lease duration</span>
+      <select name="ttl_seconds">
+        <option value="900">15 minutes</option>
+        <option value="3600" selected>1 hour</option>
+        <option value="86400">24 hours</option>
+        <option value="604800">7 days</option>
+        <option value="2592000">30 days</option>
+      </select>
+    </label>
+    <fieldset class="provider-choice">
+      <legend>Allowed providers</legend>
+      {{ range .ProviderSettings.Providers }}
+      <label class="provider-check">
+        <input type="checkbox" name="providers" value="{{ .Name }}"{{ if eq .Name "openai" }} checked{{ end }}>
+        <span>{{ .Label }}</span>
+        <span class="provider-state {{ if .Configured }}configured{{ end }}">{{ if .Configured }}key stored{{ else }}key needed{{ end }}</span>
+      </label>
+      {{ end }}
+    </fieldset>
+    <div class="form-actions">
+      <button class="primary" type="submit">Create agent and lease</button>
+      <span>The lease token is displayed once.</span>
+    </div>
+  </form>
+  <div id="onboarding-result" class="management-result" aria-live="polite"></div>
+</section>
+{{ end }}
+
+{{ define "onboarding-result" }}
+{{ if .Error }}
+<div class="form-error" role="alert">{{ .Error }}</div>
+{{ else }}
+<div class="one-time-secret" role="status">
+  <div class="section-heading">
+    <div>
+      <h3>{{ .Name }} is ready</h3>
+      <p>Run <code>{{ .RunID }}</code> has a ${{ .Budget }} budget in {{ .Mode }} mode.</p>
+    </div>
+    <span class="status ok">Created</span>
+  </div>
+  <p class="secret-warning">Copy this lease now. It is shown once and cannot be recovered.</p>
+  <div class="secret-row">
+    <input data-secret type="text" value="{{ .Token }}" readonly aria-label="One-time lease token">
+    <button type="button" data-copy-secret>Copy lease</button>
+  </div>
+  <dl class="setup-details">
+    <div><dt>Principal</dt><dd><code>{{ .PrincipalID }}</code></dd></div>
+    <div><dt>Expires</dt><dd>{{ .ExpiresAt }}</dd></div>
+  </dl>
+  <div class="endpoint-list">
+    {{ range .Endpoints }}
+    <div><strong>{{ .Label }}</strong><code>{{ .Endpoint }}</code>{{ if not .Configured }}<span class="status warning">provider key needed</span>{{ end }}</div>
+    {{ end }}
+  </div>
+  <p class="section-hint">Use the lease as the vendor SDK API key. Use the provider URL above as its base URL.</p>
+</div>
+{{ end }}
+{{ end }}
+
+{{ define "provider-settings" }}
+<section id="provider-settings" class="management-panel" aria-labelledby="provider-settings-title">
+  <div class="section-heading">
+    <div>
+      <h2 id="provider-settings-title">Provider keys</h2>
+      <p>Keys are encrypted at rest. The dashboard can replace or remove them, never reveal them.</p>
+    </div>
+    <span class="status warning">Admin only</span>
+  </div>
+  {{ if .Error }}<div class="form-error" role="alert">{{ .Error }}</div>{{ end }}
+  {{ if .Notice }}<div class="notice" role="status">{{ .Notice }}</div>{{ end }}
+  <div class="provider-grid">
+    {{ range .Providers }}
+    <form class="provider-card"
+          method="post"
+          action="/admin/providers/{{ .Name }}"
+          hx-post="/admin/providers/{{ .Name }}"
+          hx-target="#provider-settings"
+          hx-swap="outerHTML">
+      <div class="provider-card-heading">
+        <strong>{{ .Label }}</strong>
+        <span class="status {{ if .Configured }}ok{{ else }}muted{{ end }}">{{ if .Configured }}Configured{{ else }}Not configured{{ end }}</span>
+      </div>
+      <label>
+        <span>{{ if .Configured }}Replacement API key{{ else }}API key{{ end }}</span>
+        <input type="password" name="api_key" required autocomplete="new-password" placeholder="Paste once">
+      </label>
+      <div class="provider-actions">
+        <button class="primary" type="submit">{{ if .Configured }}Replace key{{ else }}Store key{{ end }}</button>
+        {{ if .Configured }}
+        <button class="danger-button" type="button"
+                hx-delete="/admin/providers/{{ .Name }}"
+                hx-target="#provider-settings"
+                hx-swap="outerHTML"
+                hx-confirm="Remove the {{ .Label }} key? Requests to this provider will fail until a new key is stored.">Remove</button>
+        {{ end }}
+      </div>
+    </form>
+    {{ end }}
+  </div>
+</section>
+{{ end }}
+
+{{ define "agent-access-empty" }}
+<section class="management-panel" aria-labelledby="agent-access-title">
+  <div class="section-heading">
+    <div>
+      <h2 id="agent-access-title">Agent access</h2>
+      <p>Choose <strong>Manage</strong> beside an agent to create runs, issue leases, or close access.</p>
+    </div>
+    <span class="status">Operator</span>
+  </div>
+  <div id="agent-access" class="management-result" aria-live="polite"></div>
+</section>
+{{ end }}
+
+{{ define "agent-access" }}
+<div id="agent-access" class="access-workspace" aria-live="polite">
+  <div class="section-heading">
+    <div>
+      <h3>{{ .PrincipalName }}</h3>
+      <p><code>{{ .PrincipalID }}</code></p>
+    </div>
+    <button type="button" class="quiet-button" data-close-access>Close panel</button>
+  </div>
+  {{ if .Error }}<div class="form-error" role="alert">{{ .Error }}</div>{{ end }}
+  {{ if .Notice }}<div class="notice" role="status">{{ .Notice }}</div>{{ end }}
+  {{ if .Issued }}
+  <div class="one-time-secret" role="status">
+    <h4>New lease for <code>{{ .Issued.RunID }}</code></h4>
+    <p class="secret-warning">Copy this lease now. It is shown once and cannot be recovered.</p>
+    <div class="secret-row">
+      <input data-secret type="text" value="{{ .Issued.Token }}" readonly aria-label="One-time lease token">
+      <button type="button" data-copy-secret>Copy lease</button>
+    </div>
+    <p class="section-hint">Expires {{ .Issued.ExpiresAt }}.</p>
+    <div class="endpoint-list">
+      {{ range .Issued.Endpoints }}
+      <div><strong>{{ .Label }}</strong><code>{{ .Endpoint }}</code>{{ if not .Configured }}<span class="status warning">provider key needed</span>{{ end }}</div>
+      {{ end }}
+    </div>
+  </div>
+  {{ end }}
+
+  <form class="inline-create-run"
+        hx-post="/admin/principals/{{ .PrincipalID }}/runs"
+        hx-target="#agent-access"
+        hx-swap="outerHTML">
+    <label><span>New run budget (USD)</span><input name="budget_usd" required value="0.50" inputmode="decimal"></label>
+    <button class="primary" type="submit">Create run</button>
+  </form>
+
+  {{ if not .Runs }}
+  <div class="events-empty">This agent has no runs.</div>
+  {{ end }}
+  <div class="run-list">
+    {{ range .Runs }}
+    <article class="run-card">
+      <div class="run-card-heading">
+        <div><strong><code>{{ .ID }}</code></strong><span>${{ .Budget }} budget · {{ .CreatedAt }}</span></div>
+        <span class="status {{ if .Active }}ok{{ else }}muted{{ end }}">{{ .Status }}</span>
+      </div>
+      {{ if .Active }}
+      <form class="lease-form"
+            hx-post="/admin/runs/{{ .ID }}/leases"
+            hx-target="#agent-access"
+            hx-swap="outerHTML">
+        <label><span>Duration</span><select name="ttl_seconds"><option value="900">15 minutes</option><option value="3600" selected>1 hour</option><option value="86400">24 hours</option><option value="604800">7 days</option><option value="2592000">30 days</option></select></label>
+        <label><span>Lease ceiling (optional)</span><input name="ceiling_usd" inputmode="decimal" placeholder="Inherit run budget"></label>
+        <fieldset class="provider-choice compact">
+          <legend>Providers</legend>
+          {{ range $.Providers }}
+          <label class="provider-check"><input type="checkbox" name="providers" value="{{ .Name }}"{{ if eq .Name "openai" }} checked{{ end }}><span>{{ .Label }}</span></label>
+          {{ end }}
+        </fieldset>
+        <div class="form-actions">
+          <button class="primary" type="submit">Issue new lease</button>
+          <button class="danger-button" type="button" hx-post="/admin/runs/{{ .ID }}/close" hx-target="#agent-access" hx-swap="outerHTML" hx-confirm="Close this run? Its leases will immediately stop authorizing spend.">Close run</button>
+        </div>
+      </form>
+      {{ end }}
+      {{ if .Leases }}
+      <div class="table-scroll">
+      <table class="lease-table">
+        <thead><tr><th>Lease</th><th>Providers</th><th>Ceiling</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {{ range .Leases }}
+        <tr>
+          <td><code>{{ .ID }}</code></td><td>{{ .Providers }}</td><td>${{ .Ceiling }}</td><td>{{ .ExpiresAt }}</td>
+          <td><span class="status {{ if .Active }}ok{{ else }}muted{{ end }}">{{ .Status }}</span></td>
+          <td>{{ if .Active }}<button class="danger-button" hx-post="/admin/leases/{{ .ID }}/revoke" hx-target="#agent-access" hx-swap="outerHTML" hx-confirm="Revoke this lease now?">Revoke</button>{{ end }}</td>
+        </tr>
+        {{ end }}
+        </tbody>
+      </table>
+      </div>
+      {{ else }}
+      <p class="section-hint">No leases have been issued for this run.</p>
+      {{ end }}
+    </article>
+    {{ end }}
+  </div>
+</div>
+{{ end }}

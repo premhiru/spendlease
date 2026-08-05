@@ -167,8 +167,21 @@ Vendor responses are passed through unchanged, including error status codes and 
 | `GET` | `/metrics` | none | Aggregate Prometheus text metrics with bounded labels and no principal, run, model, or credential values. |
 | `GET` | `/` | local or `viewer`+ | Embedded spend dashboard. |
 | `GET` | `/table` | local or `viewer`+ | Dashboard table fragment used by htmx. |
+| `POST` | `/admin/agents` | local or `admin` | Create a principal, initial run, and one-time lease from the dashboard. |
+| `GET` | `/admin/principals/{id}/access` | local or `operator`+ | Render run and lease management for one agent. |
+| `POST` | `/admin/principals/{id}/runs` | local or `operator`+ | Create a root run from the dashboard. |
+| `POST` | `/admin/runs/{id}/leases` | local or `operator`+ | Issue a one-time lease from the dashboard. |
+| `POST` | `/admin/runs/{id}/close` | local or `operator`+ | Close a run from the dashboard. |
+| `POST` | `/admin/leases/{id}/revoke` | local or `operator`+ | Revoke one lease from the dashboard. |
 | `POST` | `/admin/principals/{id}/mode` | local or `admin` | Switch between `observe` and `enforce`. |
 | `POST` | `/admin/principals/{id}/revoke` | local or `admin` | Immediately revoke every current lease. |
+| `POST` | `/admin/providers/{provider}` | local or `admin` | Store or replace a provider key without echoing it. |
+| `DELETE` | `/admin/providers/{provider}` | local or `admin` | Remove a stored provider key. |
+
+The `/admin/...` routes return HTML fragments for the embedded dashboard and
+are not a versioned automation contract. Scripts should use `/api/v1` and the
+CLI. Every dashboard mutation is same-origin, carries the anti-CSRF header,
+and is recorded in the operator audit trail when auditing is configured.
 
 ## JSON operator API
 

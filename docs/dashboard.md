@@ -27,7 +27,7 @@ Rows are sorted by recorded spend, highest first.
 | Blocked | Requests rejected before egress. Observe-mode would-block decisions are shown separately. |
 | Spend | Sum of calculated token cost across the principal's runs. |
 | Last event | Most recent allowed call, budget decision, revocation, or expiration. |
-| Kill | Revokes every active lease for the principal. |
+| Actions | Opens run and lease management. Admins can also revoke every active lease for the principal. |
 
 The table refreshes every three seconds. Refresh pauses while a button has
 focus so a control is not replaced during a click.
@@ -43,7 +43,42 @@ usage and billing data. The spend column covers the price-book token charges
 documented under [Price book](pricing-book.md#what-is-not-modeled), not every
 possible vendor fee.
 
-## Controls
+## Add an agent
+
+Admins can create an agent without assembling several CLI commands. **Add an
+agent** asks for a unique name, mode, positive run budget, lease duration, and
+one or more allowed providers.
+
+The principal, root run, and first lease are committed in one datastore
+transaction. A failure does not leave a half-created agent. The resulting
+`sll_...` lease appears once, beside the provider base URLs. Only its hash is
+stored, so closing or refreshing the result cannot reveal it again.
+
+Dashboard-created principals deliberately do not expose their long-lived
+`slk_...` compatibility key. Applications should use leases. The CLI remains
+available for a legacy integration that still requires a principal key.
+
+## Provider keys
+
+The admin-only **Provider keys** panel reports whether each routed provider is
+configured. An admin can store, replace, or remove a key. Submitted keys go
+straight to the encrypted credential vault and are not included in the HTML
+response, logs, or later status reads.
+
+Removing a key does not revoke leases. Requests scoped to that provider return
+`503 provider_credential_missing` until a replacement is stored.
+
+## Run and lease controls
+
+**Manage** opens one agent's runs and lease metadata. An operator or admin can
+create a root run with a positive budget, issue a provider-scoped lease with
+an optional lower ceiling, revoke one active lease, or close a run. Closing a
+run prevents every lease on that run from authorizing more spend.
+
+New lease tokens are shown once. Existing lease rows contain identifiers,
+scope, ceilings, expiry, and status, never plaintext tokens.
+
+## Mode and kill controls
 
 Clicking the mode value alternates between `observe` and `enforce`. It calls:
 
@@ -60,7 +95,9 @@ The response confirms how many active leases were revoked. The row then shows
 the recent-events table.
 
 Both controls return an updated table fragment and use the same authorization
-guard as the rest of the dashboard.
+guard as the rest of the dashboard. Mode changes and principal-wide revocation
+require `admin`; run and individual-lease management require `operator` or
+`admin`.
 
 ## Recent events
 
@@ -94,9 +131,10 @@ summary table above is never changed by event filters.
 Credential-free access requires both a loopback TCP peer and loopback HTTP
 host. Non-local access uses a named `slo_` operator token. In the browser,
 enter the operator name and token in the HTTP Basic prompt. The header shows
-the current name and role; viewers and operators see read-only mode and kill
-columns because those controls require `admin`. Mutations also require the
-dashboard's anti-CSRF header and a same-origin browser request.
+the current name and role. Viewers can inspect spend and events; operators can
+manage runs and individual leases; admins can also create agents, manage
+provider keys, switch mode, and use the principal-wide kill switch. Mutations
+require the dashboard's anti-CSRF header and a same-origin browser request.
 
 The older `SPENDLEASE_ADMIN_TOKEN` and `--admin-token` credential remains a
 temporary `legacy-admin` migration path.
@@ -106,7 +144,8 @@ dashboard. See [Self-hosting](self-hosting.md#dashboard-and-admin-access).
 
 ## Current limitations
 
-The dashboard does not provide charts or per-run drill-down.
+The dashboard does not provide charts or historical spend reports. Its run
+workspace is for access management, not per-run accounting analysis.
 The recent-events table is an operational view capped at 200 matching rows,
 not an invoice or full audit export. Use `spendlease ledger export` or the
 guarded `/api/v1/ledger/export` endpoint for the complete filtered data, and

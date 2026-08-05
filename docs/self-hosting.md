@@ -260,9 +260,10 @@ must also send `X-Spendlease-Admin: 1`; both bundled SDK clients do so. The
 dashboard supplies that header and rejects cross-origin writes.
 
 Roles are cumulative. `viewer` is read-only, `operator` can create and close
-runs and issue or revoke leases, and `admin` can also switch enforcement and
-activate a principal-wide kill switch. The dashboard shows the signed-in name
-and role and hides admin controls from lower roles.
+runs and issue or revoke leases, and `admin` can also create principals,
+manage provider keys, switch enforcement, and activate a principal-wide kill
+switch. The dashboard shows the signed-in name and role and hides controls
+from lower roles.
 
 `SPENDLEASE_ADMIN_TOKEN` and `--admin-token` still work as a shared
 `legacy-admin` identity for upgrades from an older release. Startup logs a
