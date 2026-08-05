@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/premhiru/spendlease/internal/billing"
 	"github.com/premhiru/spendlease/internal/money"
 )
 
@@ -41,6 +42,51 @@ func TestComputeHashIsDeterministic(t *testing.T) {
 	e := testEntry(1)
 	if a, b := e.ComputeHash(GenesisHash), e.ComputeHash(GenesisHash); a != b {
 		t.Errorf("ComputeHash is not deterministic: %s != %s", a, b)
+	}
+}
+
+func TestVersionTwoHashCoversUsageAndPricingProvenance(t *testing.T) {
+	t.Parallel()
+
+	base := testEntry(1)
+	base.HashVersion = HashVersionUsage
+	base.Usage = billing.TokenUsage(900, 100, 0, 0, 500)
+	base.ExternalID = "req_123"
+	base.PricingRevision = "abcdef012345"
+	base.PriceEffective = time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	baseHash := base.ComputeHash(GenesisHash)
+
+	tests := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{"Usage", func(e *Entry) { e.Usage[billing.UnitCachedInputTokens]++ }},
+		{"ExternalID", func(e *Entry) { e.ExternalID = "req_other" }},
+		{"PricingRevision", func(e *Entry) { e.PricingRevision = "other" }},
+		{"PriceEffective", func(e *Entry) { e.PriceEffective = e.PriceEffective.Add(time.Second) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			copy := base
+			copy.Usage = base.Usage.Normalized()
+			tt.mutate(&copy)
+			if got := copy.ComputeHash(GenesisHash); got == baseHash {
+				t.Fatalf("changing %s did not change the v2 hash", tt.name)
+			}
+		})
+	}
+}
+
+func TestLegacyHashStillVerifies(t *testing.T) {
+	t.Parallel()
+	e := testEntry(1)
+	e.HashVersion = HashVersionLegacy
+	sealed := e.Seal(GenesisHash)
+	if sealed.HashVersion != HashVersionLegacy {
+		t.Fatalf("hash version = %d", sealed.HashVersion)
+	}
+	if err := VerifyChain([]Entry{sealed}); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	spendlease "github.com/premhiru/spendlease"
+	"github.com/premhiru/spendlease/internal/billing"
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/pricing"
@@ -163,6 +164,7 @@ func TestRecordsExactUsageFromVendor(t *testing.T) {
 
 	h := newRecordingHarness(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-Id", "req_vendor_123")
 		_, _ = io.WriteString(w, `{
 			"id": "chatcmpl-1",
 			"choices": [{"message": {"content": "hi"}}],
@@ -180,6 +182,13 @@ func TestRecordsExactUsageFromVendor(t *testing.T) {
 	}
 	if e.InputTokens != 1200 || e.OutputTokens != 800 {
 		t.Errorf("tokens = %d in / %d out, want 1200/800", e.InputTokens, e.OutputTokens)
+	}
+	if e.HashVersion != ledger.HashVersionUsage || e.Usage[billing.UnitInputTokens] != 1200 ||
+		e.Usage[billing.UnitOutputTokens] != 800 || e.ExternalID != "req_vendor_123" {
+		t.Errorf("itemized usage/provenance missing: %+v", e)
+	}
+	if e.PricingRevision == "" || e.PriceEffective.IsZero() {
+		t.Errorf("pricing provenance missing: revision=%q effective=%s", e.PricingRevision, e.PriceEffective)
 	}
 	// gpt-4o: 1200 * 2.50/1M + 800 * 10.00/1M = 0.003 + 0.008
 	if want := money.MustParseUSD("0.011"); e.Cost != want {

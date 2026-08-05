@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,5 +93,42 @@ func TestLedgerExportCommand(t *testing.T) {
 				t.Fatalf("stdout = %q", stdout.String())
 			}
 		})
+	}
+}
+
+func TestLedgerReconcileCommand(t *testing.T) {
+	t.Parallel()
+	path := seedLedgerCommandStore(t)
+	statementPath := filepath.Join(t.TempDir(), "statement.csv")
+	now := time.Now().UTC()
+	statement := "provider,model,usage_json,cost_usd,occurred_at,external_id\n" +
+		fmt.Sprintf(`openai,gpt-4o-mini,"{""input_tokens"":10,""output_tokens"":5}",0.001,%s,`, now.Format(time.RFC3339Nano)) + "\n"
+	if err := os.WriteFile(statementPath, []byte(statement), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{
+		"reconcile", "--store", path, "--statement", statementPath,
+		"--since", now.Add(-time.Hour).Format(time.RFC3339),
+		"--until", now.Add(time.Hour).Format(time.RFC3339),
+	}
+	var stdout, stderr bytes.Buffer
+	if err := runLedger(args, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), `"status":"match"`) {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+
+	args = append(args, "--cost-tolerance", "0", "--fail-on-mismatch")
+	statement = strings.Replace(statement, ",0.001,", ",0.02,", 1)
+	if err := os.WriteFile(statementPath, []byte(statement), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if err := runLedger(args, &stdout, &stderr); err == nil {
+		t.Fatal("mismatched reconciliation returned success")
+	}
+	if !strings.Contains(stdout.String(), `"status":"mismatch"`) {
+		t.Fatalf("mismatch report was not written: %q", stdout.String())
 	}
 }

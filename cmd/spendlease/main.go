@@ -6,7 +6,7 @@
 //	serve     run the gateway and dashboard
 //	demo      run a simulated agent fleet against a mock provider
 //	keys      manage principals, runs and leases
-//	ledger    verify or export the append-only spend ledger
+//	ledger    verify, export, or reconcile the append-only spend ledger
 //	version   print version information
 //
 // Run "spendlease <command> -h" for the flags of an individual command.
@@ -98,7 +98,7 @@ Commands:
   serve     Run the gateway
   demo      Run a simulated agent fleet against a mock provider
   keys      Manage principals, operators, credentials, runs, leases, and revocation
-  ledger    Verify or export the append-only spend ledger
+  ledger    Verify, export, or reconcile the append-only spend ledger
   version   Print version information
 
 Getting started:

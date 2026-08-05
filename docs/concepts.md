@@ -111,7 +111,15 @@ The ledger is the record produced after a reservation settles.
 
 The ledger is **append-only from the first commit**. There is no `UPDATE` path and no `DELETE` path, and that is enforced by a database trigger rather than by convention — application code cannot rewrite history even by accident.
 
-Each entry carries the hash of the entry before it, forming a chain. Changing any historical entry breaks every hash after it, which makes tampering detectable rather than merely discouraged.
+Each entry carries the hash of the entry before it, forming a chain. Changing
+any historical entry breaks every hash after it, which makes tampering
+detectable rather than merely discouraged.
+
+Hash version 2 also covers exact named usage dimensions, the upstream request
+ID when available, and the price-book revision/effective date used for the
+charge. Version 1 rows from an older database remain valid and continue to
+verify without being rewritten. See [Reconciliation](reconciliation.md) for
+comparing a billing period with a normalized vendor statement.
 
 ## Money
 
