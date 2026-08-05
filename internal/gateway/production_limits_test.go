@@ -15,6 +15,12 @@ import (
 	"github.com/premhiru/spendlease/internal/store"
 )
 
+type productionRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f productionRoundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
 type observerCall struct {
 	status int
 	kind   string
@@ -90,7 +96,7 @@ func authenticatedRequest(t *testing.T, client *http.Client, baseURL string) *ht
 func TestMaxInFlightFailsFastAndLeavesOperationsReachable(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
-	transport := roundTripFunc(func(*http.Request) (*http.Response, error) {
+	transport := productionRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		close(started)
 		<-release
 		return &http.Response{
@@ -143,7 +149,7 @@ func TestMaxInFlightFailsFastAndLeavesOperationsReachable(t *testing.T) {
 }
 
 func TestNonStreamingUpstreamTimeout(t *testing.T) {
-	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	transport := productionRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})
