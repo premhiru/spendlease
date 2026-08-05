@@ -19,6 +19,12 @@ Starts the proxy, dashboard, reservation sweeper, and selected datastore.
 | `--default-run-budget` | `10.00` | Budget for implicit runs used by principal-key compatibility requests. |
 | `--reservation-ttl` | `15m` | Maximum pending hold lifetime. |
 | `--reservation-sweep-interval` | `30s` | Expired-hold scan interval. |
+| `--max-inflight` | `256` | Concurrent proxied-request limit; `0` disables it. Operational endpoints remain available. |
+| `--request-read-timeout` | `30s` | Maximum time to read request headers and body. |
+| `--upstream-connect-timeout` | `10s` | Vendor TCP and TLS connection timeout. |
+| `--upstream-header-timeout` | `5m` | Maximum wait for vendor response headers, including streamed requests. |
+| `--upstream-timeout` | `10m` | Total timeout for non-streaming vendor requests. Streams have no total timeout. |
+| `--alert-webhook` | `SPENDLEASE_ALERT_WEBHOOK` | Optional operational alert destination. HTTPS is required in production. |
 | `--openai-url` | `https://api.openai.com` | OpenAI upstream base URL. Useful for tests and private compatible endpoints. |
 | `--anthropic-url` | `https://api.anthropic.com` | Anthropic upstream base URL. |
 | `--kimi-url` | `https://api.moonshot.ai` | Kimi upstream base URL. |
@@ -204,6 +210,8 @@ spendlease ledger export --format csv --run run_... > ledger.csv
 | `SPENDLEASE_PREVIOUS_MASTER_KEY_COMMAND` | CLI and gateway | JSON argv command that prints the temporary previous key. |
 | `SPENDLEASE_ENV` | CLI and gateway | Set to `production` to disable automatic development-key creation. |
 | `SPENDLEASE_ADMIN_TOKEN` | gateway | Deprecated shared admin credential retained for migration to named operators. |
+| `SPENDLEASE_ALERT_WEBHOOK` | gateway | Optional HTTP(S) endpoint for operational alert events. |
+| `SPENDLEASE_ALERT_WEBHOOK_SECRET` | gateway | HMAC-SHA256 signing secret. Required with a webhook in production. |
 | `SPENDLEASE_STORE` | CLI and gateway | Default SQLite path or PostgreSQL DSN; overridden by `--store`. |
 | `SPENDLEASE_LEASE_TOKEN` | Python and TypeScript helpers | Lease placed in vendor-client authentication options. |
 | `SPENDLEASE_URL` | Python and TypeScript helpers | Gateway URL; defaults to `http://localhost:4000`. |

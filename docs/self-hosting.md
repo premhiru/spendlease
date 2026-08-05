@@ -57,6 +57,7 @@ Check the process before adding credentials:
 
 ```bash
 curl http://localhost:4000/healthz
+curl http://localhost:4000/readyz
 ```
 
 Run management commands inside the container so they use the same database
@@ -241,6 +242,59 @@ the handler runs and a result record afterward. If the attempt cannot be
 stored, the request fails with `503` without running the mutation. Inspect the
 trail with `spendlease keys operator audit` or `GET /api/v1/operator-audit`.
 
+## Health, metrics, and alerts
+
+Use `/healthz` only for process liveness. It deliberately performs no I/O and
+stays healthy during a datastore outage. Use `/readyz` for load-balancer and
+orchestrator readiness; it returns `503` if the datastore does not answer
+within two seconds. The gateway also decrypts every stored vendor credential
+once during startup, so a mismatched master key prevents a process from
+becoming available.
+
+`/metrics` serves Prometheus text without authentication. Its labels are
+limited to surface, status class, configured provider, mode, and outcome. It
+does not expose principal or run IDs, model names, request paths, prompts, or
+credentials. Restrict the operational port at the network layer even though
+the payload is aggregate.
+
+The main series are:
+
+- `spendlease_http_requests_total`;
+- `spendlease_http_request_duration_seconds_sum`;
+- `spendlease_http_response_bytes_total`;
+- `spendlease_budget_decisions_total`; and
+- `spendlease_alert_delivery_total`.
+
+An optional webhook reports `budget_blocked`, `budget_would_block`,
+`budget_decision_error`, `spend_unenforceable`, `upstream_error`, and
+`audit_result_failed` events:
+
+```bash
+export SPENDLEASE_ALERT_WEBHOOK=https://alerts.example/spendlease
+export SPENDLEASE_ALERT_WEBHOOK_SECRET=<random-secret>
+spendlease serve
+```
+
+Events are small `v1` JSON objects with an `alt_` event ID, UTC timestamp,
+type, and sanitized identifiers relevant to the failure. Delivery uses a
+128-event memory queue, never blocks the agent request, retries three times,
+and records sent, failed, or dropped totals in metrics. The queue drains for
+up to ten seconds during graceful shutdown.
+
+The raw JSON body is signed as
+`X-Spendlease-Signature: sha256=<hex HMAC-SHA256>`. Verify that header before
+parsing the event. Webhook redirects are refused. Production mode requires an
+HTTPS URL and a signing secret; local development may use HTTP for a receiver
+on loopback.
+
+The server defaults to 256 concurrent proxied requests. Excess requests fail
+quickly with `503` and `Retry-After: 1`; health, readiness, metrics, and the
+dashboard remain reachable. Request reads, vendor connects, TLS handshakes,
+response headers, and non-streaming requests all have explicit deadlines.
+Streaming responses have no total write deadline, because a valid completion
+may remain open for minutes. Tune the corresponding `serve` flags only after
+measuring vendor latency and datastore capacity.
+
 ## SQLite behavior
 
 Migrations are embedded and run at startup, one transaction at a time. The
@@ -299,7 +353,8 @@ Before replacing a binary or container:
    serializes migrations, but deploy one version at a time until release notes
    explicitly say a rolling upgrade is compatible.
 3. Start the pinned new version against the existing datastore.
-4. Check `/healthz`, the dashboard, and one low-budget request.
+4. Check `/healthz`, `/readyz`, the dashboard, metrics scrape, and one
+   low-budget request.
 
 There is not yet a guard against opening a database created by a newer binary.
 Keep the backup until the upgraded deployment has been verified. Downgrades

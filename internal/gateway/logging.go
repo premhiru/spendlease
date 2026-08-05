@@ -27,12 +27,13 @@ func (g *Gateway) logRequests(next http.Handler) http.Handler {
 		r = r.WithContext(context.WithValue(r.Context(), ctxInfo, info))
 
 		next.ServeHTTP(rec, r)
+		duration := time.Since(start)
 
 		attrs := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", duration.Milliseconds(),
 			"bytes", rec.written,
 		}
 		if info.principalID != "" {
@@ -56,6 +57,9 @@ func (g *Gateway) logRequests(next http.Handler) http.Handler {
 		// actually distinguishes a server-sent event stream.
 		if ct := rec.Header().Get("Content-Type"); strings.HasPrefix(ct, "text/event-stream") {
 			attrs = append(attrs, "streamed", true, "flushes", rec.flushes)
+		}
+		if g.observer != nil {
+			g.observer.ObserveRequest(r.URL.Path, info.provider, rec.status, duration, rec.written)
 		}
 
 		switch {

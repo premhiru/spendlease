@@ -48,6 +48,7 @@ type applicationStore interface {
 	store.Store
 	vault.CredentialStore
 	operator.Store
+	PingContext(context.Context) error
 	PrincipalSummaries(context.Context) ([]store.PrincipalSummary, error)
 	RunSummaries(context.Context, string) ([]store.RunSummary, error)
 }

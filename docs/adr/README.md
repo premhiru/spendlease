@@ -32,3 +32,4 @@ and references for current behavior.
 | [0019](0019-postgresql-multi-instance-storage.md) | PostgreSQL is the multi-instance storage backend | Accepted; amends 0005 and 0014 |
 | [0020](0020-external-key-sources-and-rotation.md) | External key sources and transactional rotation | Accepted; amends 0007 |
 | [0021](0021-named-operators-rbac-and-audit.md) | Named operators, RBAC, and append-only audit | Accepted; amends 0018 |
+| [0022](0022-operational-signals-and-bounded-networking.md) | Operational signals and bounded networking | Accepted |

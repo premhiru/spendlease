@@ -32,6 +32,10 @@ const (
 	// EnvAdminToken is the credential required to reach the dashboard and the
 	// admin API from anywhere other than the local machine.
 	EnvAdminToken = "SPENDLEASE_ADMIN_TOKEN"
+	// EnvAlertWebhook is the optional operational alert destination.
+	EnvAlertWebhook = "SPENDLEASE_ALERT_WEBHOOK"
+	// EnvAlertWebhookSecret signs alert bodies with HMAC-SHA256.
+	EnvAlertWebhookSecret = "SPENDLEASE_ALERT_WEBHOOK_SECRET"
 	// EnvStore selects a SQLite path or PostgreSQL DSN. The --store flag uses
 	// this as its default and can still override it.
 	EnvStore = "SPENDLEASE_STORE"

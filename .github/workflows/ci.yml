@@ -208,7 +208,8 @@ jobs:
           trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
           port=$(docker port "$container" 4000/tcp | awk -F: '{print $NF}')
           for attempt in {1..20}; do
-            if curl --fail --silent "http://127.0.0.1:${port}/healthz"; then
+            if curl --fail --silent "http://127.0.0.1:${port}/healthz" &&
+               curl --fail --silent "http://127.0.0.1:${port}/readyz"; then
               exit 0
             fi
             if ! docker inspect --format '{{.State.Running}}' "$container" | grep -q true; then

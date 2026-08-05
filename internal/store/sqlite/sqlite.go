@@ -157,6 +157,12 @@ func dsn(path string) string {
 // Close releases the database handle.
 func (s *Store) Close() error { return s.db.Close() }
 
+// PingContext checks whether the datastore can serve a request. PostgreSQL
+// uses the connection pool; SQLite verifies its single live connection.
+func (s *Store) PingContext(ctx context.Context) error {
+	return wrap(s.db.PingContext(ctx), "checking datastore readiness")
+}
+
 // lockBudgetTx serialises reservation decisions for one principal across all
 // PostgreSQL gateway replicas. Every run in a hierarchy belongs to the same
 // principal, so this preserves hierarchical correctness while allowing

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/premhiru/spendlease/internal/dashboard"
 	"github.com/premhiru/spendlease/internal/gateway"
 	"github.com/premhiru/spendlease/internal/money"
+	"github.com/premhiru/spendlease/internal/observability"
 	"github.com/premhiru/spendlease/internal/providers"
 	"github.com/premhiru/spendlease/internal/providers/anthropic"
 	"github.com/premhiru/spendlease/internal/providers/openai"
@@ -28,6 +30,8 @@ import (
 // shutdown. Streaming completions can legitimately run for a while, so this
 // is generous rather than snappy.
 const shutdownGrace = 30 * time.Second
+
+const alertDrainGrace = 10 * time.Second
 
 const (
 	defaultKimiURL     = "https://api.moonshot.ai"
@@ -58,6 +62,14 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		"how often abandoned budget holds are reclaimed")
 	adminTokenFlag := fs.String("admin-token", "",
 		"credential required to reach the dashboard from off-machine (default: $"+EnvAdminToken+")")
+	alertWebhook := strings.TrimSpace(os.Getenv(EnvAlertWebhook))
+	fs.StringVar(&alertWebhook, "alert-webhook", alertWebhook, "HTTPS endpoint for operational alerts")
+	fs.Lookup("alert-webhook").DefValue = "$" + EnvAlertWebhook
+	maxInFlight := fs.Int("max-inflight", 256, "maximum concurrent proxied requests (0 disables the limit)")
+	requestReadTimeout := fs.Duration("request-read-timeout", 30*time.Second, "maximum time to read request headers and body")
+	upstreamConnectTimeout := fs.Duration("upstream-connect-timeout", 10*time.Second, "vendor connection timeout")
+	upstreamHeaderTimeout := fs.Duration("upstream-header-timeout", 5*time.Minute, "maximum wait for vendor response headers")
+	upstreamTimeout := fs.Duration("upstream-timeout", 10*time.Minute, "total timeout for non-streaming vendor requests")
 	logLevel := fs.String("log-level", "info", "debug, info, warn or error")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -118,6 +130,21 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	if *sweepInterval <= 0 {
 		return fmt.Errorf("%w: -reservation-sweep-interval must be positive", errUsage)
 	}
+	if *maxInFlight < 0 {
+		return fmt.Errorf("%w: -max-inflight cannot be negative", errUsage)
+	}
+	for name, value := range map[string]time.Duration{
+		"request-read-timeout": *requestReadTimeout, "upstream-connect-timeout": *upstreamConnectTimeout,
+		"upstream-header-timeout": *upstreamHeaderTimeout, "upstream-timeout": *upstreamTimeout,
+	} {
+		if value <= 0 {
+			return fmt.Errorf("%w: -%s must be positive", errUsage, name)
+		}
+	}
+	alertSecret := strings.TrimSpace(os.Getenv(EnvAlertWebhookSecret))
+	if err := validateAlertWebhook(alertWebhook, alertSecret, strings.EqualFold(os.Getenv(EnvEnv), "production")); err != nil {
+		return err
+	}
 
 	// Then the master key, which in production must be supplied rather than
 	// generated. Resolving it before opening the store means a refused
@@ -144,6 +171,11 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	verifiedCredentials, err := v.Verify(ctx)
+	if err != nil {
+		return fmt.Errorf("verifying credential vault at startup: %w", err)
+	}
+	logger.Info("credential vault verified", "credentials", verifiedCredentials)
 
 	budget, err := money.ParseUSD(*defaultBudget)
 	if err != nil {
@@ -167,9 +199,26 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	revocations := gateway.NewRevocationSet()
 	killSwitch := gateway.NewKillSwitch(st, revocations)
 	pricingMetadata := book.Metadata(time.Now())
+	telemetry, err := observability.New(observability.Options{
+		Store: st, Logger: logger, Version: version,
+		WebhookURL: alertWebhook, WebhookSecret: alertSecret,
+	})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), alertDrainGrace)
+		defer cancel()
+		if err := telemetry.Close(closeCtx); err != nil {
+			logger.Error("draining alert webhook queue", "error", err)
+		}
+	}()
 	guard := dashboard.Guard{
 		Token: adminToken, Operators: st, Auditor: st,
-		OnAuditError: func(err error) { logger.Error("recording operator audit result", "error", err) },
+		OnAuditError: func(err error) {
+			logger.Error("recording operator audit result", "error", err)
+			telemetry.Notify("audit_result_failed", nil)
+		},
 	}
 	dash, err := dashboard.New(dashboard.Options{
 		Store: st, Logger: logger, Version: version,
@@ -187,15 +236,27 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	}
 	reportOperatorAccess(stdout, *addr, activeOperators, adminToken)
 
+	upstreamTransport := &http.Transport{
+		Proxy:             http.ProxyFromEnvironment,
+		DialContext:       (&net.Dialer{Timeout: *upstreamConnectTimeout, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2: true, MaxIdleConns: 100, MaxIdleConnsPerHost: 20,
+		IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: *upstreamConnectTimeout,
+		ResponseHeaderTimeout: *upstreamHeaderTimeout, ExpectContinueTimeout: time.Second,
+	}
+	defer upstreamTransport.CloseIdleConnections()
 	gw, err := gateway.New(gateway.Options{
-		Principals:  st,
-		Leases:      st,
-		Revocations: revocations,
-		Credentials: v,
-		Registry:    registry,
-		Recorder:    gateway.NewRecorder(st, book, budget, logger, *reservationTTL),
-		Dashboard:   gateway.RouteGroup{dash, api},
-		Logger:      logger,
+		Principals:      st,
+		Leases:          st,
+		Revocations:     revocations,
+		Credentials:     v,
+		Registry:        registry,
+		Recorder:        gateway.NewRecorder(st, book, budget, logger, *reservationTTL),
+		Dashboard:       gateway.RouteGroup{dash, api, telemetry},
+		Logger:          logger,
+		Transport:       upstreamTransport,
+		UpstreamTimeout: *upstreamTimeout,
+		MaxInFlight:     *maxInFlight,
+		Observer:        telemetry,
 	})
 	if err != nil {
 		return err
@@ -213,8 +274,10 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		Handler: gw.Handler(),
 		// No write timeout: a streaming completion can legitimately take
 		// minutes, and a deadline here would sever it mid-stream.
-		ReadHeaderTimeout: 15 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       *requestReadTimeout,
 		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	errCh := make(chan error, 1)
@@ -237,6 +300,26 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutting down: %w", err)
+	}
+	return nil
+}
+
+func validateAlertWebhook(rawURL, secret string, production bool) error {
+	if rawURL == "" {
+		if secret != "" {
+			return fmt.Errorf("%s is set but %s is empty", EnvAlertWebhookSecret, EnvAlertWebhook)
+		}
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
+		return fmt.Errorf("%w: alert webhook must be an http(s) URL without embedded credentials", errUsage)
+	}
+	if production && u.Scheme != "https" {
+		return fmt.Errorf("%w: %s must use HTTPS in production", errUsage, EnvAlertWebhook)
+	}
+	if production && secret == "" {
+		return fmt.Errorf("%w: %s is required when production alert delivery is enabled", errUsage, EnvAlertWebhookSecret)
 	}
 	return nil
 }

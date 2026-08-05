@@ -93,6 +93,14 @@ hashes. HTTP mutations leave an append-only attempt and result trail, so a
 shared credential is not needed. The old `SPENDLEASE_ADMIN_TOKEN` remains only
 to make upgrades possible and should be removed after clients migrate.
 
+## How should I monitor a production gateway?
+
+Probe `/healthz` for liveness and `/readyz` for datastore readiness. Scrape
+`/metrics` with Prometheus for aggregate request, latency, byte, budget, and
+alert-delivery counters. For immediate budget and upstream failures, configure
+the signed alert webhook. These surfaces intentionally omit prompts,
+credentials, model names, and per-agent labels.
+
 ## Why no LangChain or CrewAI integration?
 
 Base-URL override works with vendor SDKs in every language and does not depend
