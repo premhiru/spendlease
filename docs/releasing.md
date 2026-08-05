@@ -8,29 +8,30 @@ This page is for maintainers. Releases are tag-driven and use
 The workflow uses short-lived GitHub OIDC credentials; do not add long-lived
 PyPI or npm tokens to repository secrets.
 
-For PyPI, create a pending trusted publisher for project `spendlease` with:
+The PyPI project `spendlease` now exists. Keep its trusted publisher configured
+with:
 
 - owner `premhiru`;
 - repository `spendlease`;
 - workflow `release.yml`; and
 - environment `pypi`.
 
-PyPI can create a project from a pending publisher, but the pending record does
-not reserve the name. Configure it immediately before the release and confirm
-that `https://pypi.org/project/spendlease/` is still unclaimed. Follow PyPI's
+For a new project or fork, PyPI can create the initial project from a pending
+publisher. A pending record does not reserve the name, so configure it
+immediately before the first release and follow PyPI's
 [pending publisher procedure](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
 
-For npm, first make sure the `@spendlease` scope is controlled by the project
-maintainer. npm configures trusted publishers from an existing package's
-settings; it does not provide PyPI's pending-publisher flow. If the package has
-never been published, claim it with a reviewed bootstrap prerelease such as
-`0.2.0-beta.0`, using an interactive npm login with 2FA and the `beta` dist-tag.
-Do this from a temporary clean checkout and do not change the release branch.
-Then configure trusted publishing for package `@spendlease/sdk`, repository
-`premhiru/spendlease`, workflow `release.yml`, environment `npm`, and allowed
-action `npm publish`. npm requires CLI 11.5.1 or later and Node 22.14.0 or
-later for OIDC publishing; the workflow checks this before packing. The fields
-and current constraints are documented in npm's
+The npm package `@spendlease/sdk` also exists. Keep its trusted publisher set
+to repository `premhiru/spendlease`, workflow `release.yml`, environment
+`npm`, and allowed action `npm publish`.
+
+npm can only configure trusted publishing after a package exists. For a new
+package or fork, first control its scope and publish a reviewed bootstrap
+prerelease with an interactive 2FA login and a prerelease dist-tag. Do this
+from a temporary clean checkout without changing the release branch, then add
+the trusted publisher in the package settings. npm requires CLI 11.5.1 or
+later and Node 22.14.0 or later for OIDC publishing; the workflow checks these
+versions before packing. The current constraints are documented in npm's
 [trusted publishing guide](https://docs.npmjs.com/trusted-publishers/).
 
 Protect the `pypi` and `npm` GitHub environments so only an authorized

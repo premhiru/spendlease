@@ -8,9 +8,9 @@ append-only ledger.
 
 !!! note "Pre-v1"
 
-    `v0.2.0-beta.1` is the first release intended for an end-to-end
-    evaluation. It is not a stable v1 API. Use an immutable container digest
-    or pinned commit for repeatable evaluation.
+    `v0.2.0-beta.1` is the current release and the first intended for an
+    end-to-end evaluation. It is not a stable v1 API. Use the release's
+    immutable container digest or a pinned commit for repeatable evaluation.
 
 ## The problem
 

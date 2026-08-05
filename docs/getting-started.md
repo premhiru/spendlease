@@ -1,13 +1,13 @@
 # Getting started
 
-This guide uses the current source tree to store an OpenAI key, create a
-budgeted run, issue a lease, and make one request through the gateway. Anthropic
-uses the same flow with a different provider name and base URL.
+This guide uses `v0.2.0-beta.1` to store an OpenAI key, create a budgeted run,
+issue a lease, and make one request through the gateway. Anthropic uses the
+same flow with a different provider name and base URL.
 
 > [!NOTE]
-> `spendlease` is pre-v1. The first usable beta is versioned `v0.2.0-beta.1`.
-> Until that tag is visible on the releases page, build from `main` and pin the
-> commit or `sha-...` container tag used for your evaluation.
+> `spendlease` is pre-v1. `v0.2.0-beta.1` is the current beta. Pin its verified
+> binary or the immutable container digest from `container-image.txt` while
+> evaluating it; use `edge` only when you deliberately want unreleased `main`.
 
 ## Prerequisites
 
@@ -17,8 +17,9 @@ uses the same flow with a different provider name and base URL.
 ## Install
 
 Download the binary for your platform and its `.sha256` file from the
-[GitHub releases page](https://github.com/premhiru/spendlease/releases), verify
-the checksum, and place `spendlease` (or `spendlease.exe`) on your `PATH`.
+[`v0.2.0-beta.1` release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1),
+verify the checksum, and place `spendlease` (or `spendlease.exe`) on your
+`PATH`.
 
 To build from source instead, install Go 1.25.12 or later and run:
 
@@ -140,12 +141,10 @@ second terminal for the next step. The dashboard is available at the same URL.
 
 ### Python helper
 
-From the repository root, install the thin spendlease helper and the official
-OpenAI client:
+Install the thin spendlease helper and the official OpenAI client:
 
 ```bash
-python -m pip install ./sdk/python openai
-python examples/openai_python.py
+python -m pip install 'spendlease==0.2.0b1' openai
 ```
 
 The relevant application code is:
