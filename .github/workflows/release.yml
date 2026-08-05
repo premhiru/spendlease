@@ -172,7 +172,7 @@ jobs:
 
       - name: Attach immutable image reference to release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           files: dist/container-image.txt
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -277,7 +277,7 @@ jobs:
           cp '${{ steps.sbom.outputs.bundle-path }}' 'dist/${{ steps.build.outputs.name }}.sbom.sigstore.json'
 
       - name: Upload to the release
-        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           files: dist/*
           # Anything with a hyphen in the version is a prerelease: v0.1.0-alpha.1.
@@ -336,7 +336,7 @@ jobs:
         run: cp '${{ steps.python-provenance.outputs.bundle-path }}' dist/python-package/python-package.provenance.sigstore.json
 
       - name: Attach Python distributions to release
-        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           files: |
             sdk/python/dist/*
@@ -362,7 +362,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
@@ -407,7 +407,7 @@ jobs:
         run: cp '${{ steps.npm-provenance.outputs.bundle-path }}' sdk/typescript/dist-package/npm-package.provenance.sigstore.json
 
       - name: Attach npm package to release
-        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           files: sdk/typescript/dist-package/*
           prerelease: ${{ contains(github.ref_name, '-') }}
