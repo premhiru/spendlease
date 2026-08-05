@@ -45,22 +45,27 @@ Out of scope:
 
 - Vendor keys are encrypted at rest with AES-256-GCM under the configured
   primary master key. Rotation re-encrypts the complete vault transactionally.
-- Principal keys (`slk_`) and lease tokens (`sll_`) are stored **only** as SHA-256 hashes. Plaintext is shown once at creation and is not recoverable afterwards: not by us, not by an admin, not from the database.
+- Principal keys (`slk_`), lease tokens (`sll_`), and named operator tokens
+  (`slo_`) are stored **only** as SHA-256 hashes. Plaintext is shown once at
+  creation and is not recoverable afterwards.
+- Authenticated HTTP mutations produce append-only attempt and result records.
+  The database rejects updates and deletes against that operator audit table.
 - Key material and request bodies are never logged at default log levels.
 
 If you find any of these three statements to be untrue in practice, that is a vulnerability and we want the report.
 
 ## Deployment notes
 
-`spendlease` ships with no authentication on the admin API only when both the
+`spendlease` ships with no authentication on the operator API only when both the
 TCP peer and HTTP host are loopback, because the 60-second quickstart depends
-on it. Non-loopback or non-local-host access fails closed unless
-`SPENDLEASE_ADMIN_TOKEN` or `--admin-token` is set. State-changing requests
+on it. Non-loopback or non-local-host access fails closed unless a named
+operator exists. State-changing requests
 also require `X-Spendlease-Admin: 1` and browser mutations must be same-origin.
-The dashboard accepts the token through HTTP Basic authentication; scripts may
-use a Bearer token. See [self-hosting](docs/self-hosting.md) for the production
-checklist and put TLS in front of the port before exposing it to an untrusted
-network.
+The dashboard accepts operator tokens through HTTP Basic authentication;
+scripts use Bearer authentication. `SPENDLEASE_ADMIN_TOKEN` remains only as a
+logged, deprecated migration path. See [self-hosting](docs/self-hosting.md) for
+the production checklist and put TLS in front of the port before exposing it
+to an untrusted network.
 
 In production, configure exactly one explicit primary key source: a direct
 environment value, a mounted secret file, or a no-shell external command. The

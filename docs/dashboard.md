@@ -92,18 +92,24 @@ summary table above is never changed by event filters.
 ## Remote access
 
 Credential-free access requires both a loopback TCP peer and loopback HTTP
-host. Non-local access is refused unless `SPENDLEASE_ADMIN_TOKEN` or
-`--admin-token` is configured. Browsers use HTTP Basic authentication with any
-username and the token as the password. Mutations also require the dashboard's
-anti-CSRF header and a same-origin browser request.
+host. Non-local access uses a named `slo_` operator token. In the browser,
+enter the operator name and token in the HTTP Basic prompt. The header shows
+the current name and role; viewers and operators see read-only mode and kill
+columns because those controls require `admin`. Mutations also require the
+dashboard's anti-CSRF header and a same-origin browser request.
+
+The older `SPENDLEASE_ADMIN_TOKEN` and `--admin-token` credential remains a
+temporary `legacy-admin` migration path.
 
 Place TLS and a network access policy in front of a remotely reachable
 dashboard. See [Self-hosting](self-hosting.md#dashboard-and-admin-access).
 
 ## Current limitations
 
-The dashboard does not provide charts, per-run drill-down, or user accounts.
+The dashboard does not provide charts or per-run drill-down.
 The recent-events table is an operational view capped at 200 matching rows,
 not an invoice or full audit export. Use `spendlease ledger export` or the
 guarded `/api/v1/ledger/export` endpoint for the complete filtered data, and
-use the matching verify command or endpoint to check the hash chain.
+use the matching verify command or endpoint to check the hash chain. Operator
+control changes have a separate append-only trail available through
+`spendlease keys operator audit`.

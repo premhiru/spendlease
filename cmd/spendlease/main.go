@@ -97,7 +97,7 @@ Usage:
 Commands:
   serve     Run the gateway
   demo      Run a simulated agent fleet against a mock provider
-  keys      Manage principals, vendor credentials, runs, leases, and revocation
+  keys      Manage principals, operators, credentials, runs, leases, and revocation
   ledger    Verify or export the append-only spend ledger
   version   Print version information
 

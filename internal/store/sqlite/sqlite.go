@@ -23,6 +23,7 @@ import (
 
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
+	"github.com/premhiru/spendlease/internal/operator"
 	"github.com/premhiru/spendlease/internal/store"
 )
 
@@ -61,6 +62,10 @@ type Store struct {
 	// this process. PostgreSQL also takes a database advisory lock so a
 	// rotation transaction spans replicas and management commands.
 	credentialMu sync.Mutex
+
+	// operatorMu protects operator lifecycle invariants, including the rule
+	// that a deployment cannot disable or demote its final active admin.
+	operatorMu sync.Mutex
 }
 
 type backend uint8
@@ -198,9 +203,23 @@ func (s *Store) lockCredentialsTx(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+func (s *Store) lockOperatorsTx(ctx context.Context, tx *sql.Tx) error {
+	if s.backend != backendPostgres {
+		return nil
+	}
+	var locked bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended('spendlease:operators', 0)) IS NULL`).Scan(&locked); err != nil {
+		return wrap(err, "locking operators")
+	}
+	return nil
+}
+
 // DB exposes the underlying handle. It exists for tests that need to assert
 // on raw SQL behaviour, such as proving the ledger triggers reject writes.
 func (s *Store) DB() *sql.DB { return s.db }
+
+var _ operator.Store = (*Store)(nil)
 
 // ---------------------------------------------------------------------------
 // Principals

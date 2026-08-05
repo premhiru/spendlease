@@ -84,8 +84,8 @@ spendlease serve --store /var/lib/spendlease/spendlease.db
 
 Run every `spendlease keys ...` command with the same `--store` path. For a
 service manager such as systemd, provide `SPENDLEASE_ENV=production`,
-`SPENDLEASE_MASTER_KEY`, and any admin token through its credential or secret
-facility rather than a world-readable environment file.
+the master-key source, and any temporary legacy admin token through its
+credential or secret facility rather than a world-readable environment file.
 
 ## PostgreSQL
 
@@ -208,23 +208,38 @@ verification and backup recovery drill succeed.
 
 Credential-free dashboard access requires both a loopback TCP peer and a
 loopback `Host` such as `localhost:4000`. This prevents a same-host reverse
-proxy or DNS-rebound hostname from inheriting local trust. Other requests are
-refused unless an admin token is configured:
+proxy or DNS-rebound hostname from inheriting local trust. Create a named
+admin before exposing the gateway on a network interface:
 
 ```bash
-SPENDLEASE_ADMIN_TOKEN="a-long-random-secret" \
-  spendlease serve --addr 0.0.0.0:4000
+spendlease keys operator create --name alice --role admin
+spendlease serve --addr 0.0.0.0:4000
 ```
 
-`--admin-token` overrides the environment variable. Scripts can send
-`Authorization: Bearer <token>`. State-changing requests must also send
-`X-Spendlease-Admin: 1`; both bundled SDK clients do so. Browsers use HTTP
-Basic authentication with any username and the token as the password. The
-dashboard supplies the mutation header and rejects cross-origin writes.
+The command prints an `slo_` token once. Scripts send it as
+`Authorization: Bearer <token>`. Browsers use HTTP Basic authentication with
+the operator name as username and token as password. State-changing requests
+must also send `X-Spendlease-Admin: 1`; both bundled SDK clients do so. The
+dashboard supplies that header and rejects cross-origin writes.
 
-The admin token does not encrypt traffic. Put TLS at a trusted reverse proxy
-in front of any remotely reachable gateway, restrict network access, and do
-not expose port 4000 directly to the public internet.
+Roles are cumulative. `viewer` is read-only, `operator` can create and close
+runs and issue or revoke leases, and `admin` can also switch enforcement and
+activate a principal-wide kill switch. The dashboard shows the signed-in name
+and role and hides admin controls from lower roles.
+
+`SPENDLEASE_ADMIN_TOKEN` and `--admin-token` still work as a shared
+`legacy-admin` identity for upgrades from an older release. Startup logs a
+warning when either is used. Create named operators, update clients, then
+remove the shared token.
+
+Operator tokens do not encrypt traffic. Put TLS at a trusted reverse proxy in
+front of any remotely reachable gateway, restrict network access, and do not
+expose port 4000 directly to the public internet.
+
+Every authenticated HTTP mutation writes an immutable attempt record before
+the handler runs and a result record afterward. If the attempt cannot be
+stored, the request fails with `503` without running the mutation. Inspect the
+trail with `spendlease keys operator audit` or `GET /api/v1/operator-audit`.
 
 ## SQLite behavior
 

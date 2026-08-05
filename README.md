@@ -131,6 +131,7 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **Rejects revoked leases on the next request.** `POST /admin/principals/{id}/revoke` invalidates every lease for that principal against an in-memory revocation set. `spendlease keys revoke --all` provides the same control from the CLI.
 - **Keeps a tamper-evident ledger.** Append-only, enforced by a database trigger, with each entry carrying the previous entry's hash.
 - **Gives orchestrators a versioned control plane.** The guarded JSON API creates and closes runs, issues and revokes individual leases, and reports the tightest remaining budget across a run hierarchy.
+- **Names the humans behind control changes.** Hashed `slo_` operator tokens carry viewer, operator, or admin roles, and every authenticated mutation writes an append-only attempt and result trail.
 - **Verifies and exports audit data.** The CLI and JSON API verify the complete hash chain and export filtered JSON or CSV without losing money precision.
 - **Forwards SSE without response buffering.** Chunks are flushed as they arrive while usage events are observed for settlement.
 
@@ -139,7 +140,7 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **No reconciliation or ERP export.** It will not close your books or talk to NetSuite.
 - **No charts.** The dashboard is one table, sorted by spend descending.
 - **No framework integrations.** No LangChain, CrewAI, or LlamaIndex adapters. Base-URL override works everywhere and does not rot.
-- **No multi-tenancy, SSO, or RBAC.** Single tenant, self-hosted, one shared admin surface.
+- **No multi-tenancy or SSO.** The service is single-tenant and self-hosted. Named operator roles protect the control plane, but there is no external identity-provider integration.
 - **No anomaly detection or least-cost routing.** It enforces the budget you set; it will not second-guess your model choice.
 - **No payment rails.** It authorizes spend against vendor accounts you already have. It does not move money.
 - **Not a proxy for correctness.** It counts dollars, not tokens-well-spent.
@@ -244,7 +245,8 @@ Full site: **<https://premhiru.github.io/spendlease>**
 The current source includes the gateway, encrypted credential vault, SQLite
 and PostgreSQL stores, dated price book, reserve-and-settle enforcement,
 dashboard, versioned operator API, ledger verification/export, SDK helpers,
-external master-key sources, transactional key rotation, and demo. PostgreSQL
+external master-key sources, transactional key rotation, named operator RBAC,
+append-only control audit, and demo. PostgreSQL
 is intended for multi-instance deployments; SQLite remains the
 zero-configuration default. Multi-tenancy and the remaining production-roadmap
 items are not implemented yet.

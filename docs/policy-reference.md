@@ -96,6 +96,8 @@ rates and fallback ceiling; they are never treated as free.
 ## Not implemented
 
 There is no per-endpoint policy, time-of-day policy, approval workflow,
-multi-currency rule, RBAC, anomaly detector or general expression language.
-Provider scope and per-lease ceilings are enforced on every lease; they
-do not expand the principal policy into a generic capability system.
+multi-currency rule, principal-level role system, anomaly detector or general
+expression language. Provider scope and per-lease ceilings are enforced on
+every lease; they do not expand the principal policy into a generic capability
+system. The separate viewer/operator/admin roles apply only to human control-
+plane access.

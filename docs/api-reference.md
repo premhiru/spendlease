@@ -161,16 +161,17 @@ Vendor responses are passed through unchanged, including error status codes and 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/healthz` | none | Liveness. Returns `{"status":"ok"}`. |
-| `GET` | `/` | local or admin token | Embedded spend dashboard. |
-| `GET` | `/table` | local or admin token | Dashboard table fragment used by htmx. |
-| `POST` | `/admin/principals/{id}/mode` | local or admin token | Switch between `observe` and `enforce`. |
-| `POST` | `/admin/principals/{id}/revoke` | local or admin token | Immediately revoke every current lease. |
+| `GET` | `/` | local or `viewer`+ | Embedded spend dashboard. |
+| `GET` | `/table` | local or `viewer`+ | Dashboard table fragment used by htmx. |
+| `POST` | `/admin/principals/{id}/mode` | local or `admin` | Switch between `observe` and `enforce`. |
+| `POST` | `/admin/principals/{id}/revoke` | local or `admin` | Immediately revoke every current lease. |
 
 ## JSON operator API
 
-The `/api/v1` API is intended for orchestrators and operator scripts. It uses
-the same local-or-admin-token guard as the dashboard. Remote requests send
-`Authorization: Bearer <admin-token>`. Every `POST` must also send
+The `/api/v1` API is intended for orchestrators and operator scripts. Remote
+requests send `Authorization: Bearer slo_...`. Read endpoints require
+`viewer`; run and lease mutations require `operator`; audit export requires
+`admin`. Roles inherit the permissions below them. Every `POST` must also send
 `X-Spendlease-Admin: 1`; JSON bodies require `Content-Type: application/json`.
 Unknown request fields and bodies larger than 1 MiB are rejected.
 
@@ -178,18 +179,19 @@ Amounts are decimal USD strings. This avoids floating-point rounding in
 clients. Timestamps are RFC 3339. A lease token appears only in the successful
 issue response and cannot be recovered later.
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/v1/principals/{principal-id}/runs` | List runs, newest first. |
-| `POST` | `/api/v1/principals/{principal-id}/runs` | Create a run. |
-| `GET` | `/api/v1/runs/{run-id}` | Read one run. |
-| `POST` | `/api/v1/runs/{run-id}/close` | Close a run. |
-| `GET` | `/api/v1/runs/{run-id}/budget` | Read settled spend, pending holds, and effective remaining budget. |
-| `GET` | `/api/v1/runs/{run-id}/leases` | List lease metadata without tokens. |
-| `POST` | `/api/v1/runs/{run-id}/leases` | Issue a lease. |
-| `POST` | `/api/v1/leases/{lease-id}/revoke` | Revoke one lease immediately. |
-| `GET` | `/api/v1/ledger/verify` | Verify the complete hash chain. |
-| `GET` | `/api/v1/ledger/export` | Export filtered JSON or CSV. |
+| Method | Path | Role | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/principals/{principal-id}/runs` | `viewer` | List runs, newest first. |
+| `POST` | `/api/v1/principals/{principal-id}/runs` | `operator` | Create a run. |
+| `GET` | `/api/v1/runs/{run-id}` | `viewer` | Read one run. |
+| `POST` | `/api/v1/runs/{run-id}/close` | `operator` | Close a run. |
+| `GET` | `/api/v1/runs/{run-id}/budget` | `viewer` | Read settled spend, pending holds, and effective remaining budget. |
+| `GET` | `/api/v1/runs/{run-id}/leases` | `viewer` | List lease metadata without tokens. |
+| `POST` | `/api/v1/runs/{run-id}/leases` | `operator` | Issue a lease. |
+| `POST` | `/api/v1/leases/{lease-id}/revoke` | `operator` | Revoke one lease immediately. |
+| `GET` | `/api/v1/ledger/verify` | `viewer` | Verify the complete hash chain. |
+| `GET` | `/api/v1/ledger/export` | `viewer` | Export filtered JSON or CSV. |
+| `GET` | `/api/v1/operator-audit` | `admin` | Read newest audit records; filters are `actor_id`, `action`, `since`, and `limit`. |
 
 ### Create a run and issue a lease
 
@@ -263,11 +265,11 @@ timestamp. JSON preserves money as strings; CSV includes the chain hashes so
 an export can be retained with its audit evidence.
 
 “Local” means both the TCP peer and HTTP host are loopback. Other dashboard and
-admin requests require `SPENDLEASE_ADMIN_TOKEN` (or `--admin-token`) and either HTTP
-Basic authentication with the token as password or
-`Authorization: Bearer <token>`. State-changing requests also require
-`X-Spendlease-Admin: 1` and browser requests must be same-origin. Without a
-configured token, remote access is refused with `403`.
+operator requests require a named operator token, either through HTTP Basic
+authentication or `Authorization: Bearer <token>`. State-changing requests
+also require `X-Spendlease-Admin: 1`, and browser requests must be same-origin.
+Without an active named operator or the deprecated shared migration token,
+remote access is refused with `403`.
 
 ## Errors
 

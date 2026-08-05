@@ -26,6 +26,7 @@
       <p class="subtitle">Spend by agent, highest first.</p>
     </div>
     <div class="meta">
+	  {{ if .OperatorLabel }}<div>{{ .OperatorLabel }}</div>{{ end }}
       <div>{{ .BuildLabel }}</div>
       <div title="{{ .PricingDetail }}">{{ .PricingLabel }}</div>
     </div>

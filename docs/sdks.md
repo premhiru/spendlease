@@ -64,8 +64,8 @@ Use `lease.anthropicOptions()` with the official Anthropic client.
 
 ## Admin controls
 
-Both packages export `AdminClient`. Supply the gateway's admin token when
-calling from off-machine. Mutation methods automatically send the required
+Both packages export `AdminClient`. Supply a named operator token when calling
+from off-machine. Mutation methods automatically send the required
 `X-Spendlease-Admin: 1` header.
 
 The original dashboard controls remain available as `set_mode`/`setMode` and
@@ -117,8 +117,8 @@ console.log((await admin.remainingBudget(run.id)).effective_remaining_usd);
 await admin.revokeLease(lease.id);
 ```
 
-The admin client is for operator tooling, not agent code. Do not place
-`SPENDLEASE_ADMIN_TOKEN` in an agent environment.
+The admin client is for operator tooling, not agent code. Do not place an
+`slo_` operator token in an agent environment.
 
 ## Runnable examples
 
