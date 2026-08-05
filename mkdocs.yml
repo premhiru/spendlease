@@ -91,3 +91,4 @@ nav:
       - 22. Operational signals and bounded networking: adr/0022-operational-signals-and-bounded-networking.md
       - 23. Release artifacts are independently verifiable: adr/0023-release-artifacts-are-verifiable.md
       - 24. Itemized usage and normalized reconciliation: adr/0024-itemized-usage-and-reconciliation.md
+      - 25. Dashboard onboarding is a guarded control plane: adr/0025-dashboard-onboarding-is-a-guarded-control-plane.md

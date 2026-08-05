@@ -31,7 +31,7 @@ a ceiling below the run budget.
 | [CLI reference](cli-reference.md) | Commands, flags, and environment variables |
 | [SDKs and examples](sdks.md) | Python and TypeScript helpers |
 | [API reference](api-reference.md) | Versioned run, lease, budget, and ledger operations |
-| [Dashboard](dashboard.md) | Spend table, controls, and access |
+| [Dashboard](dashboard.md) | Agent setup, provider keys, spend, leases, and access controls |
 | [Concepts](concepts.md) | Principal, run, lease, reservation |
 | [Reserve and settle](reserve-and-settle.md) | How spend is authorized before a call completes |
 | [Price book](pricing-book.md) | Cost data, and how to contribute updates |

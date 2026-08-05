@@ -47,7 +47,10 @@ go run ./cmd/spendlease demo
 
 For a real provider, follow [Getting started](docs/getting-started.md). It
 covers the binary and Docker workflows, persistent state, vendor credentials,
-leases, and the environment variables used by an application.
+leases, and the environment variables used by an application. The dashboard
+can create the agent, budget, and one-time lease in one form. The CLI handles
+the same bootstrap for scripts, while the JSON API manages runs and leases
+after an identity exists.
 
 ## Integration
 

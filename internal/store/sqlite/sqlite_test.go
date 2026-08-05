@@ -1373,3 +1373,44 @@ func TestBudgetStatusUsesTheTightestAncestor(t *testing.T) {
 		t.Fatalf("closed-ancestor status = %+v", status)
 	}
 }
+
+func TestCreatePrincipalRunLeaseRollsBackTheWholeAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := newTestStore(t)
+	seed := seedPrincipal(t, s, "seed")
+	seedRun := seedRun(t, s, seed.ID, "", money.MustParseUSD("1.00"))
+	_, seedHash := store.NewLeaseToken()
+	duplicateLeaseID := store.NewLeaseID()
+	if err := s.CreateLease(ctx, store.Lease{
+		ID: duplicateLeaseID, RunID: seedRun.ID, TokenHash: seedHash,
+		ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, principalHash := store.NewPrincipalKey()
+	_, leaseHash := store.NewLeaseToken()
+	p := store.Principal{
+		ID: store.NewPrincipalID(), Name: "should-roll-back", KeyHash: principalHash,
+		Mode: store.ModeObserve, CreatedAt: time.Now(),
+	}
+	r := store.Run{
+		ID: store.NewRunID(), PrincipalID: p.ID, Budget: money.MustParseUSD("0.50"),
+		Status: store.RunActive, CreatedAt: time.Now(),
+	}
+	l := store.Lease{
+		ID: duplicateLeaseID, RunID: r.ID, TokenHash: leaseHash,
+		ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now(),
+	}
+	if err := s.CreatePrincipalRunLease(ctx, p, r, l); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("error = %v, want conflict", err)
+	}
+	if _, err := s.GetPrincipal(ctx, p.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("principal survived rollback: %v", err)
+	}
+	if _, err := s.GetRun(ctx, r.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("run survived rollback: %v", err)
+	}
+}

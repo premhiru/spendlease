@@ -3,6 +3,17 @@
 This file records user-visible changes. Release tags and package versions use
 the same version; Python prerelease spelling follows PEP 440.
 
+## Unreleased
+
+### Added
+
+- The dashboard can create an agent, its first budgeted run, and a scoped
+  one-time lease in one form. Operators can create and close runs, issue new
+  leases, and revoke individual leases without using the CLI.
+- Admins can store, replace, and remove provider API keys from the dashboard.
+  The UI reports configuration status but never reads a key back from the
+  encrypted credential vault.
+
 ## [0.2.0-beta.1] - 2026-08-05
 
 The first beta intended for an end-to-end, self-hosted evaluation.

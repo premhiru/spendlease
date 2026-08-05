@@ -16,9 +16,13 @@
   {{ if not .Principals }}
   <div class="empty">
     <p class="lead">No agents yet.</p>
-    <p class="hint">Register one, then point an SDK at this gateway:</p>
+    {{ if .CanOnboard }}
+    <p class="hint">Use <strong>Add an agent</strong> above to create a budget and one-time lease.</p>
+    {{ else }}
+    <p class="hint">Ask an admin to register one, or use the CLI:</p>
     <pre><code>spendlease keys principal create --name my-agent
 spendlease keys provider set openai --key sk-...</code></pre>
+    {{ end }}
   </div>
   {{ else }}
 
@@ -35,7 +39,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
         <th class="num">Blocked</th>
         <th class="num">Spend</th>
         <th class="num">Last event</th>
-        <th>Kill</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -107,6 +111,10 @@ spendlease keys provider set openai --key sk-...</code></pre>
 
         <td class="seen">{{ .LastEvent }}</td>
         <td>
+		  <div class="row-actions">
+		  {{ if $.CanManage }}
+		  <button class="quiet-button" hx-get="/admin/principals/{{ .ID }}/access" hx-target="#agent-access" hx-swap="outerHTML" title="Manage runs and leases">Manage</button>
+		  {{ end }}
 		  {{ if $.CanAdmin }}
           {{ if .ActiveLeases }}
           <button class="kill" hx-post="/admin/principals/{{ .ID }}/revoke" hx-target="#table" hx-swap="outerHTML" hx-include="#event-filters" title="Revoke every active lease now">Revoke</button>
@@ -114,8 +122,9 @@ spendlease keys provider set openai --key sk-...</code></pre>
           <span class="muted-control">No active leases</span>
           {{ end }}
 		  {{ else }}
-		  <span class="muted-control">Admin only</span>
+		  {{ if not $.CanManage }}<span class="muted-control">Admin only</span>{{ end }}
 		  {{ end }}
+		  </div>
         </td>
       </tr>
       {{ end }}

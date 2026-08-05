@@ -225,7 +225,8 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
 		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
 		PricingModels: pricingMetadata.Models, Warning: operatorDashboardWarning(*addr, activeOperators, adminToken),
-		Guard: guard, Revoker: killSwitch,
+		Guard: guard, Revoker: killSwitch, Manager: st, LeaseRevoker: killSwitch,
+		Credentials: v, CredentialStatus: v, Providers: registry.Names(),
 	})
 	if err != nil {
 		return err

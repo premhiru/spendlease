@@ -47,6 +47,26 @@ Open the dashboard URL printed by the command. The demo stops after 30 seconds;
 use `--duration 0` to leave it running until Ctrl+C. Its database is in memory,
 so none of the demo state is reused below.
 
+## Use the dashboard instead
+
+The numbered steps below show the CLI because those commands are easy to
+automate. For an interactive setup, start the persistent gateway first:
+
+```bash
+spendlease serve
+```
+
+Open <http://localhost:4000>. Under **Provider keys**, store the OpenAI key.
+Then use **Add an agent** to choose a name, mode, run budget, lease duration,
+and allowed providers. The dashboard creates the principal, first run, and
+lease together and shows the `sll_...` token once.
+
+Copy that lease into `SPENDLEASE_LEASE_TOKEN`, use the displayed provider base
+URL in the vendor SDK, and continue at [Make a request](#5-make-a-request).
+The provider key is never shown again. Dashboard-created principals do not
+expose the older `slk_...` compatibility key; use the CLI below only if a
+legacy integration still needs one.
+
 ## 1. Create a principal
 
 A principal is the stable identity of an agent or service:

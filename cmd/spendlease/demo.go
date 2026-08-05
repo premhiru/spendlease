@@ -120,6 +120,7 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
 		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
 		PricingModels: pricingMetadata.Models, Guard: guard, Revoker: killSwitch,
+		Manager: st, LeaseRevoker: killSwitch, CredentialStatus: v, Providers: registry.Names(),
 	})
 	if err != nil {
 		return err

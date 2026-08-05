@@ -35,3 +35,4 @@ and references for current behavior.
 | [0022](0022-operational-signals-and-bounded-networking.md) | Operational signals and bounded networking | Accepted |
 | [0023](0023-release-artifacts-are-verifiable.md) | Release artifacts are independently verifiable | Accepted; amends 0004 |
 | [0024](0024-itemized-usage-and-reconciliation.md) | Itemized usage and normalized reconciliation | Accepted; amends 0005 |
+| [0025](0025-dashboard-onboarding-is-a-guarded-control-plane.md) | Dashboard onboarding is a guarded control plane | Accepted; amends 0013, 0018, and 0021 |

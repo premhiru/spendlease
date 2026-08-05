@@ -244,6 +244,50 @@ func (s *Store) CreatePrincipal(ctx context.Context, p store.Principal) error {
 	return wrap(err, "creating principal")
 }
 
+// CreatePrincipalRunLease creates the three records needed by a new agent in
+// one transaction. The run is deliberately required to be a root run: an
+// agent that does not exist yet cannot safely join another principal's run
+// hierarchy during onboarding.
+func (s *Store) CreatePrincipalRunLease(ctx context.Context, p store.Principal, r store.Run, l store.Lease) error {
+	if !p.Mode.Valid() {
+		return fmt.Errorf("%w: mode %q is not observe or enforce", store.ErrConflict, p.Mode)
+	}
+	if !r.Status.Valid() || r.Status != store.RunActive {
+		return fmt.Errorf("%w: initial run must be active", store.ErrConflict)
+	}
+	if r.PrincipalID != p.ID || r.ParentRunID != "" || l.RunID != r.ID {
+		return fmt.Errorf("%w: principal, run and lease do not form one root agent", store.ErrConflict)
+	}
+
+	s.reserveMu.Lock()
+	defer s.reserveMu.Unlock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return wrap(err, "beginning agent creation")
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO principals (id, name, key_hash, mode, created_at) VALUES (?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.KeyHash, string(p.Mode), formatTime(p.CreatedAt)); err != nil {
+		return wrap(err, "creating principal")
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO runs (id, principal_id, parent_run_id, budget_nanos, status, created_at, closed_at)
+		 VALUES (?, ?, NULL, ?, ?, ?, ?)`,
+		r.ID, r.PrincipalID, int64(r.Budget), string(r.Status), formatTime(r.CreatedAt), nullTime(r.ClosedAt)); err != nil {
+		return wrap(err, "creating initial run")
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO leases (id, run_id, token_hash, providers, ceiling_nanos, expires_at, revoked_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		l.ID, l.RunID, l.TokenHash, encodeProviders(l.Providers), int64(l.Ceiling),
+		formatTime(l.ExpiresAt), nullTime(l.RevokedAt), formatTime(l.CreatedAt)); err != nil {
+		return wrap(err, "creating initial lease")
+	}
+	return wrap(tx.Commit(), "committing agent creation")
+}
+
 // GetPrincipal returns a principal by ID.
 func (s *Store) GetPrincipal(ctx context.Context, id string) (store.Principal, error) {
 	return s.principalWhere(ctx, "id = ?", id)
