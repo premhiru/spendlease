@@ -30,7 +30,12 @@ PYTHONPATH=sdk/python/src python -m unittest discover -s sdk/python/tests
 (cd sdk/typescript && npm ci && npm test)
 python -m pip install -r docs/requirements.txt
 mkdocs build --strict
+python scripts/release_preflight.py
 ```
+
+The release preflight keeps the Python, npm, tag, changelog, repository, and
+packaged-license metadata aligned. Run it for any SDK, packaging, or release
+workflow change, even when the declared version stays the same.
 
 To build and start the gateway locally:
 

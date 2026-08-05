@@ -235,7 +235,9 @@ first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
 | [Price book](docs/pricing-book.md) | Format, and how to contribute updates |
 | [Reconciliation](docs/reconciliation.md) | Compare the ledger with a normalized vendor statement |
 | [Self-hosting](docs/self-hosting.md) | Persistent deployment, backups, and key management |
+| [Upgrade to beta](docs/upgrading-to-beta.md) | Changes and checks for an existing alpha deployment |
 | [Releasing](docs/releasing.md) | Maintainer release and trusted-publisher setup |
+| [Changelog](CHANGELOG.md) | User-visible changes by release |
 | [API reference](docs/api-reference.md) | Admin and gateway HTTP surface |
 | [FAQ](docs/faq.md) | |
 | [ADRs](docs/adr/) | Why things are the way they are |

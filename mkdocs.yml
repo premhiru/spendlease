@@ -61,6 +61,7 @@ nav:
   - Price book: pricing-book.md
   - Reconciliation: reconciliation.md
   - Self-hosting: self-hosting.md
+  - Upgrade to beta: upgrading-to-beta.md
   - Releasing: releasing.md
   - API reference: api-reference.md
   - FAQ: faq.md

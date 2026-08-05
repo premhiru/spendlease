@@ -374,6 +374,9 @@ spendlease ledger export --store /var/lib/spendlease/spendlease.db \
 
 ## Upgrades
 
+Deployments moving from the public alpha should follow the dedicated
+[`v0.2.0-beta.1` upgrade guide](upgrading-to-beta.md).
+
 Before replacing a binary or container:
 
 1. Read the release notes and back up the database.

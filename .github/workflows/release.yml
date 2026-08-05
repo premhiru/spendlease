@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 defaults:
   run:
     shell: bash
@@ -17,8 +21,58 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
+  preflight:
+    name: Validate release intent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      - name: Check versions and changelog
+        env:
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$IS_TAG" == "true" ]]; then
+            python scripts/release_preflight.py --tag "$RELEASE_TAG"
+          else
+            python scripts/release_preflight.py
+          fi
+
+      - name: Require a merged main commit
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::Release tags must point to a commit already merged into main."
+            exit 1
+          }
+
+      - name: Require confirmed registry publishers
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          PYPI_READY: ${{ vars.PYPI_TRUSTED_PUBLISHER_READY }}
+          NPM_READY: ${{ vars.NPM_TRUSTED_PUBLISHER_READY }}
+        run: |
+          failed=false
+          if [[ "$PYPI_READY" != "true" ]]; then
+            echo "::error::Set PYPI_TRUSTED_PUBLISHER_READY=true only after the pending publisher is configured."
+            failed=true
+          fi
+          if [[ "$NPM_READY" != "true" ]]; then
+            echo "::error::Set NPM_TRUSTED_PUBLISHER_READY=true only after @spendlease/sdk has a trusted publisher."
+            failed=true
+          fi
+          [[ "$failed" == "false" ]]
+
   image:
     name: Publish container image
+    needs: preflight
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -149,6 +203,7 @@ jobs:
 
   binaries:
     name: Attach binaries to release
+    needs: preflight
     # Only tags produce a GitHub release; main pushes just refresh :edge.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -231,6 +286,7 @@ jobs:
 
   python-package:
     name: Publish Python package
+    needs: preflight
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi
@@ -247,8 +303,11 @@ jobs:
 
       - name: Build wheel and source distribution
         run: |
-          python -m pip install --upgrade build
+          python -m pip install build==1.5.0 twine==7.0.0
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GITHUB_SHA")
+          export SOURCE_DATE_EPOCH
           python -m build sdk/python
+          python -m twine check sdk/python/dist/*
 
       - name: Match package version to release tag
         env:
@@ -292,6 +351,7 @@ jobs:
 
   npm-package:
     name: Publish npm package
+    needs: preflight
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: npm
@@ -306,14 +366,21 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
-          cache: npm
-          cache-dependency-path: sdk/typescript/package-lock.json
+          package-manager-cache: false
 
       - name: Build and pack
         working-directory: sdk/typescript
         run: |
+          minimum=11.5.1
+          current=$(npm --version)
+          if [[ "$(printf '%s\n%s\n' "$minimum" "$current" | sort -V | head -n1)" != "$minimum" ]]; then
+            echo "npm $minimum or later is required for trusted publishing; found $current"
+            exit 1
+          fi
           npm ci
           mkdir -p dist-package
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GITHUB_SHA")
+          export SOURCE_DATE_EPOCH
           npm pack --pack-destination dist-package
 
       - name: Match package version to release tag
