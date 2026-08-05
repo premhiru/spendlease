@@ -20,9 +20,11 @@ notices the vendor bill.
 ## Quickstart
 
 > [!NOTE]
-> `spendlease` is pre-v1. The first usable beta is versioned
-> `v0.2.0-beta.1`. Until that tag appears on the releases page, use `:edge` to
-> evaluate the current container and pin a `sha-...` tag for repeatable work.
+> `spendlease` is pre-v1. `v0.2.0-beta.1` will be the first complete project
+> beta and has not been released yet. Until it appears on the releases page,
+> evaluate `ghcr.io/premhiru/spendlease:edge` and pin the corresponding
+> `sha-...` image tag for repeatable work. The npm `0.2.0-beta.0` package is
+> only a registry bootstrap, not a project release.
 
 The demo starts a temporary gateway, a mock provider, and three simulated
 agents. It does not need a vendor key and deletes its in-memory state when it
