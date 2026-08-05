@@ -254,8 +254,9 @@ items are not implemented yet.
 
 The project is still pre-v1. The mutable `edge` container tracks `main`, while
 every build also publishes an immutable `sha-...` tag. A tagged beta also
-publishes platform binaries, a digest-pinned container reference, and Python
-and npm package artifacts on the GitHub release.
+publishes platform binaries, a digest-pinned container reference, Python and
+npm package artifacts, checksums, SPDX SBOMs, and signed provenance on the
+GitHub release.
 
 ## Contributing
 

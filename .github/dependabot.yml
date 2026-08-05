@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      workflow-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: /sdk/python
+    schedule:
+      interval: monthly
+    groups:
+      python-sdk-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /sdk/typescript
+    schedule:
+      interval: monthly
+    groups:
+      typescript-sdk-dependencies:
+        patterns: ["*"]

@@ -20,7 +20,7 @@ Download the binary for your platform and its `.sha256` file from the
 [GitHub releases page](https://github.com/premhiru/spendlease/releases), verify
 the checksum, and place `spendlease` (or `spendlease.exe`) on your `PATH`.
 
-To build from source instead, install Go 1.25 or later and run:
+To build from source instead, install Go 1.25.12 or later and run:
 
 ```bash
 git clone https://github.com/premhiru/spendlease.git
