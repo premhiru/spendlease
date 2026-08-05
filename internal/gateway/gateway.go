@@ -71,6 +71,19 @@ type Options struct {
 	// timeout, which is the right default because a long streaming completion
 	// is normal and indistinguishable from a hang at request time.
 	UpstreamTimeout time.Duration
+	// MaxInFlight bounds concurrent proxy requests. Operational endpoints are
+	// excluded so readiness and metrics remain available under load.
+	MaxInFlight int
+	// Observer receives bounded-label metrics and sanitized alert events.
+	Observer Observer
+}
+
+// Observer is the production telemetry surface. Implementations must not
+// block request completion in Notify.
+type Observer interface {
+	ObserveRequest(path, provider string, status int, duration time.Duration, written int64)
+	ObserveBudget(provider, mode, outcome string)
+	Notify(kind string, fields map[string]string)
 }
 
 // RouteRegistrar is anything that adds its own handlers to the gateway's mux.
@@ -96,15 +109,18 @@ func (group RouteGroup) Routes(mux *http.ServeMux) {
 
 // Gateway proxies agent requests to vendor APIs.
 type Gateway struct {
-	principals  PrincipalLookup
-	leases      LeaseLookup
-	revocations *RevocationSet
-	credentials CredentialSource
-	registry    *providers.Registry
-	recorder    *Recorder
-	dashboard   RouteRegistrar
-	logger      *slog.Logger
-	transport   http.RoundTripper
+	principals      PrincipalLookup
+	leases          LeaseLookup
+	revocations     *RevocationSet
+	credentials     CredentialSource
+	registry        *providers.Registry
+	recorder        *Recorder
+	dashboard       RouteRegistrar
+	logger          *slog.Logger
+	transport       http.RoundTripper
+	upstreamTimeout time.Duration
+	inflight        chan struct{}
+	observer        Observer
 }
 
 // New returns a gateway.
@@ -127,16 +143,23 @@ func New(opts Options) (*Gateway, error) {
 		transport = http.DefaultTransport
 	}
 
+	var inflight chan struct{}
+	if opts.MaxInFlight > 0 {
+		inflight = make(chan struct{}, opts.MaxInFlight)
+	}
 	return &Gateway{
-		principals:  opts.Principals,
-		leases:      opts.Leases,
-		revocations: opts.Revocations,
-		credentials: opts.Credentials,
-		registry:    opts.Registry,
-		recorder:    opts.Recorder,
-		dashboard:   opts.Dashboard,
-		logger:      opts.Logger,
-		transport:   transport,
+		principals:      opts.Principals,
+		leases:          opts.Leases,
+		revocations:     opts.Revocations,
+		credentials:     opts.Credentials,
+		registry:        opts.Registry,
+		recorder:        opts.Recorder,
+		dashboard:       opts.Dashboard,
+		logger:          opts.Logger,
+		transport:       transport,
+		upstreamTimeout: opts.UpstreamTimeout,
+		inflight:        inflight,
+		observer:        opts.Observer,
 	}, nil
 }
 
@@ -155,9 +178,29 @@ func (g *Gateway) Handler() http.Handler {
 	} else {
 		mux.HandleFunc("GET /{$}", g.handleRoot)
 	}
-	mux.Handle("/", g.authenticate(http.HandlerFunc(g.handleProxy)))
+	mux.Handle("/", g.limit(g.authenticate(http.HandlerFunc(g.handleProxy))))
 
 	return g.logRequests(mux)
+}
+
+func (g *Gateway) limit(next http.Handler) http.Handler {
+	if g.inflight == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case g.inflight <- struct{}{}:
+			defer func() { <-g.inflight }()
+			next.ServeHTTP(w, r)
+		default:
+			w.Header().Set("Retry-After", "1")
+			writeError(w, g.logger, http.StatusServiceUnavailable, APIErrorDetail{
+				Type:       ErrTypeInternal,
+				Message:    "spendlease has reached its configured concurrent-request limit.",
+				Resolution: "Retry after the indicated delay, or raise --max-inflight after checking datastore and vendor capacity.",
+			})
+		}
+	})
 }
 
 // handleHealth reports liveness. It is deliberately unauthenticated and

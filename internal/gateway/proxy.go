@@ -64,6 +64,7 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	billing := provider.Billing(r.Method, upstreamPath)
 	if billing.Class == providers.BillingUnsupported && principal.Mode == store.ModeEnforce {
+		g.observeUnenforceable(principal, provider.Name(), billing.Reason)
 		writeUnenforceableSpend(w, g.logger, principal, provider.Name(), billing.Reason)
 		return
 	}
@@ -106,7 +107,6 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 	if info := infoFrom(ctx); info != nil {
 		info.model = requestInfo.Model
 	}
-
 	metered := billing.Class == providers.BillingToken && inspectable && requestInfo.Model != "" &&
 		requestInfo.UnsupportedBilling == ""
 	unmeteredReason := ""
@@ -122,6 +122,7 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	if unmeteredReason != "" {
 		if principal.Mode == store.ModeEnforce {
+			g.observeUnenforceable(principal, provider.Name(), unmeteredReason)
 			writeUnenforceableSpend(w, g.logger, principal, provider.Name(), unmeteredReason)
 			return
 		}
@@ -136,6 +137,12 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		if reserveErr != nil {
 			g.logger.Error("could not make budget decision",
 				"principal", principal.ID, "run", runIDFrom(ctx), "error", reserveErr)
+			if g.observer != nil {
+				g.observer.ObserveBudget(provider.Name(), string(principal.Mode), "other")
+				g.observer.Notify("budget_decision_error", map[string]string{
+					"principal": principal.ID, "run": runIDFrom(ctx), "provider": provider.Name(),
+				})
+			}
 			if principal.Mode == store.ModeEnforce {
 				writeError(w, g.logger, http.StatusInternalServerError, APIErrorDetail{
 					Type:       ErrTypeInternal,
@@ -150,15 +157,32 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 			g.logger.Warn("observe mode is forwarding without a reservation",
 				"principal", principal.ID, "run", runIDFrom(ctx))
 		} else if !decision.Allowed {
+			if g.observer != nil {
+				g.observer.ObserveBudget(provider.Name(), string(principal.Mode), "blocked")
+				g.observer.Notify("budget_blocked", map[string]string{
+					"principal": principal.ID, "run": decision.RunID, "provider": provider.Name(),
+					"remaining_usd": decision.Remaining.String(), "requested_usd": decision.Requested.String(),
+				})
+			}
 			writeBudgetExceeded(w, g.logger, principal, decision)
 			return
 		} else {
 			reservationID = reservation.ID
 			if decision.WouldBlock {
+				if g.observer != nil {
+					g.observer.ObserveBudget(provider.Name(), string(principal.Mode), "would_block")
+					g.observer.Notify("budget_would_block", map[string]string{
+						"principal": principal.ID, "run": decision.RunID, "provider": provider.Name(),
+						"shortfall_usd": decision.Shortfall.String(),
+					})
+				}
 				g.logger.Warn("request would have exceeded budget",
 					"principal", principal.ID, "run", decision.RunID,
 					"requested", decision.Requested.String(), "shortfall", decision.Shortfall.String(),
 					"mode", string(principal.Mode))
+			}
+			if g.observer != nil && !decision.WouldBlock {
+				g.observer.ObserveBudget(provider.Name(), string(principal.Mode), "allowed")
 			}
 		}
 	}
@@ -183,6 +207,12 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if !requestInfo.Stream && g.upstreamTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, g.upstreamTimeout)
+		defer cancel()
+		r = r.WithContext(ctx)
+	}
 	base := provider.BaseURL()
 
 	proxy := &httputil.ReverseProxy{
@@ -226,6 +256,11 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 			g.logger.Error("upstream request failed",
 				"provider", provider.Name(), "principal", principal.ID,
 				"path", r.URL.Path, "error", err)
+			if g.observer != nil {
+				g.observer.Notify("upstream_error", map[string]string{
+					"principal": principal.ID, "provider": provider.Name(), "path": r.URL.Path,
+				})
+			}
 
 			writeError(w, g.logger, http.StatusBadGateway, APIErrorDetail{
 				Type:      ErrTypeUpstream,
@@ -240,6 +275,16 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy.ServeHTTP(w, r)
+}
+
+func (g *Gateway) observeUnenforceable(principal store.Principal, provider, reason string) {
+	if g.observer == nil {
+		return
+	}
+	g.observer.ObserveBudget(provider, string(principal.Mode), "limited")
+	g.observer.Notify("spend_unenforceable", map[string]string{
+		"principal": principal.ID, "provider": provider, "reason": reason,
+	})
 }
 
 func writeUnenforceableSpend(

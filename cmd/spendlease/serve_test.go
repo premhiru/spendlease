@@ -57,6 +57,34 @@ func TestReportAdminAccess(t *testing.T) {
 	}
 }
 
+func TestValidateAlertWebhook(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		url        string
+		secret     string
+		production bool
+		wantErr    bool
+	}{
+		{name: "disabled"},
+		{name: "local http", url: "http://127.0.0.1:9000/hook"},
+		{name: "production signed https", url: "https://alerts.example/hook", secret: "secret", production: true},
+		{name: "production refuses http", url: "http://alerts.example/hook", secret: "secret", production: true, wantErr: true},
+		{name: "production requires signature", url: "https://alerts.example/hook", production: true, wantErr: true},
+		{name: "secret without URL", secret: "secret", wantErr: true},
+		{name: "embedded credentials", url: "https://user:pass@alerts.example/hook", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateAlertWebhook(tt.url, tt.secret, tt.production)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateAlertWebhook error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestServeRefusesProductionBeforeTouchingDisk goes through run() rather than
 // resolveMasterKey, because the bug it guards against was one of ordering
 // rather than logic.

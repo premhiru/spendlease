@@ -161,6 +161,8 @@ Vendor responses are passed through unchanged, including error status codes and 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/healthz` | none | Liveness. Returns `{"status":"ok"}`. |
+| `GET` | `/readyz` | none | Readiness. Returns `200` only when the datastore responds within two seconds. |
+| `GET` | `/metrics` | none | Aggregate Prometheus text metrics with bounded labels and no principal, run, model, or credential values. |
 | `GET` | `/` | local or `viewer`+ | Embedded spend dashboard. |
 | `GET` | `/table` | local or `viewer`+ | Dashboard table fragment used by htmx. |
 | `POST` | `/admin/principals/{id}/mode` | local or `admin` | Switch between `observe` and `enforce`. |

@@ -132,6 +132,7 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **Keeps a tamper-evident ledger.** Append-only, enforced by a database trigger, with each entry carrying the previous entry's hash.
 - **Gives orchestrators a versioned control plane.** The guarded JSON API creates and closes runs, issues and revokes individual leases, and reports the tightest remaining budget across a run hierarchy.
 - **Names the humans behind control changes.** Hashed `slo_` operator tokens carry viewer, operator, or admin roles, and every authenticated mutation writes an append-only attempt and result trail.
+- **Exposes production signals.** Separate liveness and datastore readiness endpoints, bounded-label Prometheus metrics, concurrency and network timeouts, and signed asynchronous alert webhooks make failure visible without putting monitoring on the request path.
 - **Verifies and exports audit data.** The CLI and JSON API verify the complete hash chain and export filtered JSON or CSV without losing money precision.
 - **Forwards SSE without response buffering.** Chunks are flushed as they arrive while usage events are observed for settlement.
 

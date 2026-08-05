@@ -51,6 +51,9 @@ Out of scope:
 - Authenticated HTTP mutations produce append-only attempt and result records.
   The database rejects updates and deletes against that operator audit table.
 - Key material and request bodies are never logged at default log levels.
+- Metrics and alert events exclude prompts, headers, credentials, model names,
+  and raw error text. Production webhooks require HTTPS and an HMAC secret;
+  redirects are refused so signatures are not forwarded to another host.
 
 If you find any of these three statements to be untrue in practice, that is a vulnerability and we want the report.
 
