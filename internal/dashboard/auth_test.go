@@ -1,13 +1,17 @@
 package dashboard
 
 import (
+	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/premhiru/spendlease/internal/operator"
 	"github.com/premhiru/spendlease/internal/store"
 )
 
@@ -334,5 +338,122 @@ func TestIsLoopback(t *testing.T) {
 				t.Errorf("isLoopback(%q) = %v, want %v", tt.addr, got, tt.want)
 			}
 		})
+	}
+}
+
+type operatorGuardStore struct {
+	op       operator.Operator
+	records  []operator.AuditRecord
+	auditErr error
+}
+
+func (s *operatorGuardStore) GetOperatorByTokenHash(_ context.Context, hash string) (operator.Operator, error) {
+	if hash == s.op.TokenHash {
+		return s.op, nil
+	}
+	return operator.Operator{}, store.ErrNotFound
+}
+
+func (s *operatorGuardStore) HasActiveOperators(context.Context) (bool, error) {
+	return s.op.Active() && s.op.ID != "", nil
+}
+
+func (s *operatorGuardStore) AppendOperatorAudit(_ context.Context, record operator.AuditRecord) error {
+	if s.auditErr != nil {
+		return s.auditErr
+	}
+	s.records = append(s.records, record)
+	return nil
+}
+
+func TestNamedOperatorRolesAndAudit(t *testing.T) {
+	token, hash := operator.NewToken()
+	backend := &operatorGuardStore{op: operator.Operator{
+		ID: "opr_alice", Name: "alice", TokenHash: hash, Role: operator.RoleOperator,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}}
+	guard := Guard{Operators: backend, Auditor: backend}
+
+	request := func(required operator.Role, method string) *httptest.ResponseRecorder {
+		h := guard.ProtectRole(required, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			identity, ok := operator.IdentityFromContext(r.Context())
+			if !ok || identity.Name != "alice" {
+				t.Error("named identity was not attached to the request")
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		req := httptest.NewRequest(method, "http://gateway.example/api/v1/runs/run_a/close", nil)
+		req.Host = "gateway.example"
+		req.RemoteAddr = "203.0.113.9:5000"
+		req.Header.Set("Authorization", "Bearer "+token)
+		if method == http.MethodPost {
+			req.Header.Set(AdminRequestHeader, "1")
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if got := request(operator.RoleOperator, http.MethodPost).Code; got != http.StatusNoContent {
+		t.Fatalf("operator mutation status = %d", got)
+	}
+	if len(backend.records) != 2 || backend.records[0].Phase != "attempt" || backend.records[1].StatusCode != http.StatusNoContent {
+		t.Fatalf("audit records = %+v", backend.records)
+	}
+	if got := request(operator.RoleAdmin, http.MethodPost).Code; got != http.StatusForbidden {
+		t.Fatalf("operator reached admin route with status %d", got)
+	}
+	if got := request(operator.RoleViewer, http.MethodGet).Code; got != http.StatusNoContent {
+		t.Fatalf("operator could not read viewer route: %d", got)
+	}
+}
+
+func TestAuditAttemptFailurePreventsMutation(t *testing.T) {
+	token, hash := operator.NewToken()
+	backend := &operatorGuardStore{
+		op:       operator.Operator{ID: "opr_admin", Name: "admin", TokenHash: hash, Role: operator.RoleAdmin},
+		auditErr: errors.New("database unavailable"),
+	}
+	called := false
+	h := (Guard{Operators: backend, Auditor: backend}).ProtectRole(
+		operator.RoleOperator, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+	req := httptest.NewRequest(http.MethodPost, "http://gateway.example/api/v1/runs", nil)
+	req.Host = "gateway.example"
+	req.RemoteAddr = "203.0.113.9:5000"
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(AdminRequestHeader, "1")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable || called {
+		t.Fatalf("audit failure status/called = %d/%v", rec.Code, called)
+	}
+}
+
+func TestViewerDashboardIsReadOnlyAndIdentified(t *testing.T) {
+	token, hash := operator.NewToken()
+	backend := &operatorGuardStore{op: operator.Operator{
+		ID: "opr_viewer", Name: "violet", TokenHash: hash, Role: operator.RoleViewer,
+	}}
+	d, err := New(Options{
+		Store: &fakeStore{summaries: []store.PrincipalSummary{
+			principal("prn_a", "agent", store.ModeEnforce, "1.00", 1, 1, 0, 0),
+		}},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Guard:  Guard{Operators: backend},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	mux := http.NewServeMux()
+	d.Routes(mux)
+	rec := request(t, mux, http.MethodGet, "/", "203.0.113.9:5000", func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+token)
+	})
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, "violet · viewer") {
+		t.Fatalf("viewer page status/body = %d/%q", rec.Code, body)
+	}
+	if strings.Contains(body, `hx-post="/admin/`) || !strings.Contains(body, "Admin only") {
+		t.Fatal("viewer dashboard exposed an admin mutation control")
 	}
 }

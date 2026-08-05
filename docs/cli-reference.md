@@ -14,7 +14,7 @@ Starts the proxy, dashboard, reservation sweeper, and selected datastore.
 |---|---|---|
 | `--addr` | `:4000` | Listen address. |
 | `--store` | `SPENDLEASE_STORE` or `./spendlease.db` | SQLite path or PostgreSQL DSN. |
-| `--admin-token` | `SPENDLEASE_ADMIN_TOKEN` | Credential for non-loopback dashboard and admin access. |
+| `--admin-token` | `SPENDLEASE_ADMIN_TOKEN` | Legacy shared credential for migration. Prefer named operator tokens. |
 | `--pricing` | embedded book | Directory containing price-book YAML. |
 | `--default-run-budget` | `10.00` | Budget for implicit runs used by principal-key compatibility requests. |
 | `--reservation-ttl` | `15m` | Maximum pending hold lifetime. |
@@ -58,6 +58,23 @@ spendlease keys principal set-mode --name NAME --mode observe|enforce [--store P
 
 `create` prints the new `slk_` principal key once. Agent applications should
 use leases instead. `set-mode` accepts the principal name, not its ID.
+
+## Operators
+
+```bash
+spendlease keys operator create --name NAME --role viewer|operator|admin [--store PATH_OR_DSN]
+spendlease keys operator list [--store PATH_OR_DSN]
+spendlease keys operator set-role --name NAME_OR_ID --role ROLE [--store PATH_OR_DSN]
+spendlease keys operator rotate --name NAME_OR_ID [--store PATH_OR_DSN]
+spendlease keys operator revoke --name NAME_OR_ID [--store PATH_OR_DSN]
+spendlease keys operator audit [--actor OPERATOR_ID] [--action ACTION] [--since RFC3339] [--limit 100]
+```
+
+`create` and `rotate` print an `slo_` token once. Only its SHA-256 hash is
+stored. `viewer` can read the dashboard and API, `operator` can also manage
+runs and leases, and `admin` can change enforcement, use the kill switch, and
+read the operator audit API. The final active admin cannot be revoked or
+demoted.
 
 ## Vendor credentials
 
@@ -186,7 +203,7 @@ spendlease ledger export --format csv --run run_... > ledger.csv
 | `SPENDLEASE_PREVIOUS_MASTER_KEY_FILE` | CLI and gateway | File containing the temporary previous key. |
 | `SPENDLEASE_PREVIOUS_MASTER_KEY_COMMAND` | CLI and gateway | JSON argv command that prints the temporary previous key. |
 | `SPENDLEASE_ENV` | CLI and gateway | Set to `production` to disable automatic development-key creation. |
-| `SPENDLEASE_ADMIN_TOKEN` | gateway | Protects non-loopback dashboard and admin requests. |
+| `SPENDLEASE_ADMIN_TOKEN` | gateway | Deprecated shared admin credential retained for migration to named operators. |
 | `SPENDLEASE_STORE` | CLI and gateway | Default SQLite path or PostgreSQL DSN; overridden by `--store`. |
 | `SPENDLEASE_LEASE_TOKEN` | Python and TypeScript helpers | Lease placed in vendor-client authentication options. |
 | `SPENDLEASE_URL` | Python and TypeScript helpers | Gateway URL; defaults to `http://localhost:4000`. |

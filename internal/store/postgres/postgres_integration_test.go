@@ -13,6 +13,7 @@ import (
 
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
+	"github.com/premhiru/spendlease/internal/operator"
 	"github.com/premhiru/spendlease/internal/store"
 	"github.com/premhiru/spendlease/internal/vault"
 )
@@ -48,6 +49,49 @@ func TestPostgresMultiInstanceGuarantees(t *testing.T) {
 	}
 	for _, st := range stores {
 		defer func(st *Store) { _ = st.Close() }(st)
+	}
+
+	operatorNow := time.Now().UTC()
+	operators := make([]operator.Operator, 2)
+	for i := range operators {
+		_, hash := operator.NewToken()
+		operators[i] = operator.Operator{
+			ID: operator.NewOperatorID(), Name: fmt.Sprintf("postgres-admin-%d-%s", i, operator.NewOperatorID()),
+			TokenHash: hash, Role: operator.RoleAdmin, CreatedAt: operatorNow, UpdatedAt: operatorNow,
+		}
+		if err := stores[i].CreateOperator(ctx, operators[i]); err != nil {
+			t.Fatalf("CreateOperator: %v", err)
+		}
+	}
+	disableErrs := make(chan error, 2)
+	for i := range operators {
+		go func(i int) { disableErrs <- stores[i].DisableOperator(ctx, operators[i].ID, time.Now().UTC()) }(i)
+	}
+	var disabled, protected int
+	for range operators {
+		err := <-disableErrs
+		switch {
+		case err == nil:
+			disabled++
+		case errors.Is(err, store.ErrConflict):
+			protected++
+		default:
+			t.Fatalf("DisableOperator: %v", err)
+		}
+	}
+	if disabled != 1 || protected != 1 {
+		t.Fatalf("concurrent final-admin result disabled/protected = %d/%d", disabled, protected)
+	}
+	audit := operator.AuditRecord{
+		ID: operator.NewAuditID(), RequestID: operator.NewAuditID(), ActorID: "postgres-test", ActorName: "postgres-test",
+		Role: operator.RoleAdmin, Phase: "result", Action: "integration", Resource: "postgres",
+		StatusCode: 200, CreatedAt: time.Now().UTC(),
+	}
+	if err := stores[0].AppendOperatorAudit(ctx, audit); err != nil {
+		t.Fatalf("AppendOperatorAudit: %v", err)
+	}
+	if records, err := stores[1].ListOperatorAudit(ctx, operator.AuditFilter{ActorID: "postgres-test"}); err != nil || len(records) != 1 {
+		t.Fatalf("ListOperatorAudit = (%d, %v)", len(records), err)
 	}
 
 	_, keyHash := store.NewPrincipalKey()

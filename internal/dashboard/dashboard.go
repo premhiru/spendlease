@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/premhiru/spendlease/internal/money"
+	"github.com/premhiru/spendlease/internal/operator"
 	"github.com/premhiru/spendlease/internal/store"
 	"github.com/premhiru/spendlease/web"
 )
@@ -108,9 +109,9 @@ func New(opts Options) (*Dashboard, error) {
 func (d *Dashboard) Routes(mux *http.ServeMux) {
 	mux.Handle("GET /{$}", d.guard.Protect(http.HandlerFunc(d.handlePage)))
 	mux.Handle("GET /table", d.guard.Protect(http.HandlerFunc(d.handleTable)))
-	mux.Handle("POST /admin/principals/{id}/mode", d.guard.Protect(http.HandlerFunc(d.handleSetMode)))
+	mux.Handle("POST /admin/principals/{id}/mode", d.guard.ProtectRole(operator.RoleAdmin, http.HandlerFunc(d.handleSetMode)))
 	if d.revoker != nil {
-		mux.Handle("POST /admin/principals/{id}/revoke", d.guard.Protect(http.HandlerFunc(d.handleRevoke)))
+		mux.Handle("POST /admin/principals/{id}/revoke", d.guard.ProtectRole(operator.RoleAdmin, http.HandlerFunc(d.handleRevoke)))
 	}
 
 	// Stylesheet and htmx. No secrets, and requiring credentials for them
@@ -140,6 +141,8 @@ func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
 // view is what the templates render.
 type view struct {
 	BuildLabel    string
+	OperatorLabel string
+	CanAdmin      bool
 	PricingLabel  string
 	PricingDetail string
 	Warning       string
@@ -263,6 +266,10 @@ func (d *Dashboard) build(r *http.Request) (view, error) {
 		PricingDetail: d.pricingDetail,
 		Warning:       d.warning,
 		EventFilter:   eventFilterView,
+	}
+	if identity, ok := operator.IdentityFromContext(ctx); ok {
+		v.OperatorLabel = identity.Name + " · " + string(identity.Role)
+		v.CanAdmin = identity.Role.Allows(operator.RoleAdmin)
 	}
 
 	for _, s := range summaries {

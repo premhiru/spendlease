@@ -151,25 +151,41 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	}
 
 	adminToken := resolveAdminToken(*adminTokenFlag)
+	operators, err := st.ListOperators(ctx)
+	if err != nil {
+		return err
+	}
+	activeOperators := 0
+	for _, op := range operators {
+		if op.Active() {
+			activeOperators++
+		}
+	}
+	if adminToken != "" {
+		logger.Warn("legacy admin token is enabled; migrate to named operator tokens", "environment", EnvAdminToken)
+	}
 	revocations := gateway.NewRevocationSet()
 	killSwitch := gateway.NewKillSwitch(st, revocations)
 	pricingMetadata := book.Metadata(time.Now())
-	guard := dashboard.Guard{Token: adminToken}
+	guard := dashboard.Guard{
+		Token: adminToken, Operators: st, Auditor: st,
+		OnAuditError: func(err error) { logger.Error("recording operator audit result", "error", err) },
+	}
 	dash, err := dashboard.New(dashboard.Options{
 		Store: st, Logger: logger, Version: version,
 		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
 		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
-		PricingModels: pricingMetadata.Models, Warning: dashboardWarning(*addr, adminToken),
+		PricingModels: pricingMetadata.Models, Warning: operatorDashboardWarning(*addr, activeOperators, adminToken),
 		Guard: guard, Revoker: killSwitch,
 	})
 	if err != nil {
 		return err
 	}
-	api, err := controlplane.New(controlplane.Options{Store: st, Revoker: killSwitch, Guard: guard, Logger: logger})
+	api, err := controlplane.New(controlplane.Options{Store: st, Audit: st, Revoker: killSwitch, Guard: guard, Logger: logger})
 	if err != nil {
 		return err
 	}
-	reportAdminAccess(stdout, *addr, adminToken)
+	reportOperatorAccess(stdout, *addr, activeOperators, adminToken)
 
 	gw, err := gateway.New(gateway.Options{
 		Principals:  st,
@@ -227,16 +243,20 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 
 // dashboardWarning returns the banner shown above the table, or empty.
 //
-// Access from outside the machine is refused without an admin token, so the
-// remaining risk is a token that is weak or widely shared. Saying so on the
-// page reaches somebody who has not read the deployment documentation.
-func dashboardWarning(addr, adminToken string) string {
-	if boundToLoopback(addr) || adminToken == "" {
+// Access from outside the machine is refused without a named operator or the
+// legacy token. The remaining transport and migration risks are stated on the
+// page where an operator will see them.
+func operatorDashboardWarning(addr string, activeOperators int, adminToken string) string {
+	if boundToLoopback(addr) || (activeOperators == 0 && adminToken == "") {
 		return ""
 	}
+	if adminToken == "" {
+		return "This gateway is reachable from the network. Named operator roles protect its controls, " +
+			"but they do not encrypt traffic. Put TLS at a trusted reverse proxy in front of this port."
+	}
 	return "This gateway is reachable from the network. The controls on this page can switch " +
-		"enforcement off, and the admin token is all that stands in front of them. Treat it " +
-		"like a password and put TLS in front of this port."
+		"enforcement off, and the legacy shared admin token is enabled. Migrate to named operators " +
+		"and put TLS in front of this port."
 }
 
 // boundToLoopback reports whether a listen address is local-only.
@@ -253,24 +273,28 @@ func boundToLoopback(addr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// reportAdminAccess tells the operator, at startup, whether the dashboard is
-// reachable and how.
-//
-// A gateway bound to every interface with no admin token serves the dashboard
-// to nobody but localhost. That is the safe outcome, and it is also
-// surprising, so it is said out loud rather than discovered as a 403.
+// reportAdminAccess preserves the legacy helper used by focused tests.
 func reportAdminAccess(w io.Writer, addr, adminToken string) {
+	reportOperatorAccess(w, addr, 0, adminToken)
+}
+
+func reportOperatorAccess(w io.Writer, addr string, activeOperators int, adminToken string) {
 	if boundToLoopback(addr) {
 		return
 	}
-	if adminToken == "" {
+	if activeOperators == 0 && adminToken == "" {
 		fmt.Fprintf(w,
-			"\nThe dashboard is bound to %s but no admin token is set, so it is reachable "+
-				"only from this machine.\nSet %s (or --admin-token) to open it to the network.\n\n",
+			"\nThe dashboard is bound to %s but no named operator exists, so it is reachable "+
+				"only from this machine.\nCreate one with `spendlease keys operator create --name <name> --role admin`.\n"+
+				"For migration only, %s (or --admin-token) still enables the legacy shared credential.\n\n",
 			addr, EnvAdminToken)
 		return
 	}
-	fmt.Fprintf(w, "\nDashboard reachable on %s. An admin token is required from off-machine.\n\n", addr)
+	if activeOperators > 0 {
+		fmt.Fprintf(w, "\nDashboard reachable on %s. A named operator token is required from off-machine.\n\n", addr)
+		return
+	}
+	fmt.Fprintf(w, "\nDashboard reachable on %s. A legacy admin token is required from off-machine.\n\n", addr)
 }
 
 // warnIfUnconfigured tells the operator, at startup rather than on the first

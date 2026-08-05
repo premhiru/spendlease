@@ -10,12 +10,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/premhiru/spendlease/internal/dashboard"
 	"github.com/premhiru/spendlease/internal/ledger"
 	"github.com/premhiru/spendlease/internal/money"
+	"github.com/premhiru/spendlease/internal/operator"
 	"github.com/premhiru/spendlease/internal/store"
 )
 
@@ -41,7 +43,10 @@ type LeaseRevoker interface {
 
 // Options configures the JSON control plane.
 type Options struct {
-	Store   Store
+	Store Store
+	Audit interface {
+		ListOperatorAudit(context.Context, operator.AuditFilter) ([]operator.AuditRecord, error)
+	}
 	Revoker LeaseRevoker
 	Guard   dashboard.Guard
 	Logger  *slog.Logger
@@ -49,7 +54,10 @@ type Options struct {
 
 // API serves guarded operator endpoints under /api/v1.
 type API struct {
-	store   Store
+	store Store
+	audit interface {
+		ListOperatorAudit(context.Context, operator.AuditFilter) ([]operator.AuditRecord, error)
+	}
 	revoker LeaseRevoker
 	guard   dashboard.Guard
 	logger  *slog.Logger
@@ -66,21 +74,54 @@ func New(opts Options) (*API, error) {
 	if opts.Logger == nil {
 		return nil, errors.New("controlplane: Logger is required")
 	}
-	return &API{store: opts.Store, revoker: opts.Revoker, guard: opts.Guard, logger: opts.Logger}, nil
+	return &API{store: opts.Store, audit: opts.Audit, revoker: opts.Revoker, guard: opts.Guard, logger: opts.Logger}, nil
 }
 
 // Routes registers every versioned JSON endpoint.
 func (a *API) Routes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/principals/{principal}/runs", a.guard.Protect(http.HandlerFunc(a.listRuns)))
-	mux.Handle("POST /api/v1/principals/{principal}/runs", a.guard.Protect(http.HandlerFunc(a.createRun)))
+	mux.Handle("POST /api/v1/principals/{principal}/runs", a.guard.ProtectRole(operator.RoleOperator, http.HandlerFunc(a.createRun)))
 	mux.Handle("GET /api/v1/runs/{run}", a.guard.Protect(http.HandlerFunc(a.getRun)))
-	mux.Handle("POST /api/v1/runs/{run}/close", a.guard.Protect(http.HandlerFunc(a.closeRun)))
+	mux.Handle("POST /api/v1/runs/{run}/close", a.guard.ProtectRole(operator.RoleOperator, http.HandlerFunc(a.closeRun)))
 	mux.Handle("GET /api/v1/runs/{run}/budget", a.guard.Protect(http.HandlerFunc(a.getBudget)))
 	mux.Handle("GET /api/v1/runs/{run}/leases", a.guard.Protect(http.HandlerFunc(a.listLeases)))
-	mux.Handle("POST /api/v1/runs/{run}/leases", a.guard.Protect(http.HandlerFunc(a.issueLease)))
-	mux.Handle("POST /api/v1/leases/{lease}/revoke", a.guard.Protect(http.HandlerFunc(a.revokeLease)))
+	mux.Handle("POST /api/v1/runs/{run}/leases", a.guard.ProtectRole(operator.RoleOperator, http.HandlerFunc(a.issueLease)))
+	mux.Handle("POST /api/v1/leases/{lease}/revoke", a.guard.ProtectRole(operator.RoleOperator, http.HandlerFunc(a.revokeLease)))
 	mux.Handle("GET /api/v1/ledger/verify", a.guard.Protect(http.HandlerFunc(a.verifyLedger)))
 	mux.Handle("GET /api/v1/ledger/export", a.guard.Protect(http.HandlerFunc(a.exportLedger)))
+	if a.audit != nil {
+		mux.Handle("GET /api/v1/operator-audit", a.guard.ProtectRole(operator.RoleAdmin, http.HandlerFunc(a.listOperatorAudit)))
+	}
+}
+
+func (a *API) listOperatorAudit(w http.ResponseWriter, r *http.Request) {
+	filter := operator.AuditFilter{
+		ActorID: strings.TrimSpace(r.URL.Query().Get("actor_id")),
+		Action:  strings.TrimSpace(r.URL.Query().Get("action")),
+		Limit:   100,
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		var err error
+		filter.Limit, err = strconv.Atoi(raw)
+		if err != nil || filter.Limit < 1 || filter.Limit > 1000 {
+			writeAPIError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 1000")
+			return
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("since")); raw != "" {
+		var err error
+		filter.Since, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "invalid_request", "since must be an RFC 3339 timestamp")
+			return
+		}
+	}
+	records, err := a.audit.ListOperatorAudit(r.Context(), filter)
+	if err != nil {
+		a.storeError(w, "listing operator audit", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"records": records})
 }
 
 type createRunRequest struct {

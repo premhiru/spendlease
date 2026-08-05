@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/premhiru/spendlease/internal/operator"
 	"github.com/premhiru/spendlease/internal/store"
 	"github.com/premhiru/spendlease/internal/store/postgres"
 	"github.com/premhiru/spendlease/internal/store/sqlite"
@@ -20,7 +21,7 @@ import (
 // These commands manage the local credential vault and authorization objects.
 func runKeys(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: expected one of principal, provider, master, run, lease, revoke", errUsage)
+		return fmt.Errorf("%w: expected one of principal, provider, master, operator, run, lease, revoke", errUsage)
 	}
 
 	switch args[0] {
@@ -30,6 +31,8 @@ func runKeys(args []string, stdout, stderr io.Writer) error {
 		return runKeysProvider(args[1:], stdout, stderr)
 	case "master":
 		return runKeysMaster(args[1:], stdout, stderr)
+	case "operator":
+		return runKeysOperator(args[1:], stdout, stderr)
 	case "run":
 		return runKeysRun(args[1:], stdout, stderr)
 	case "lease":
@@ -44,6 +47,7 @@ func runKeys(args []string, stdout, stderr io.Writer) error {
 type applicationStore interface {
 	store.Store
 	vault.CredentialStore
+	operator.Store
 	PrincipalSummaries(context.Context) ([]store.PrincipalSummary, error)
 	RunSummaries(context.Context, string) ([]store.RunSummary, error)
 }

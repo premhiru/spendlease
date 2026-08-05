@@ -56,7 +56,7 @@ misleading token charge to the ledger.
 ## Does the dashboard need internet access?
 
 No. Its HTML, CSS and htmx are embedded in the binary. Loopback access is
-credential-free; remote access requires an admin token and should be placed
+credential-free; remote access requires a named operator token and should be placed
 behind TLS.
 
 ## Can I export or verify the ledger from the CLI?
@@ -84,6 +84,14 @@ using workload identity. Master-key rotation uses a temporary previous-key
 fallback and re-encrypts the complete credential vault in one transaction.
 Follow the staged procedure under
 [Self-hosting](self-hosting.md#rotate-the-master-key).
+
+## Can several people administer one gateway safely?
+
+Yes. Give each person a named operator token and the narrowest useful role:
+`viewer`, `operator`, or `admin`. Tokens are shown once and stored only as
+hashes. HTTP mutations leave an append-only attempt and result trail, so a
+shared credential is not needed. The old `SPENDLEASE_ADMIN_TOKEN` remains only
+to make upgrades possible and should be removed after clients migrate.
 
 ## Why no LangChain or CrewAI integration?
 

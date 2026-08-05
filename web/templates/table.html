@@ -53,6 +53,7 @@ spendlease keys provider set openai --key sk-...</code></pre>
         </td>
 
         <td>
+		  {{ if $.CanAdmin }}
           {{/*
             The mode toggle is one click, because switching should not require
             reading documentation. It posts and swaps only this table, so the
@@ -68,6 +69,9 @@ spendlease keys provider set openai --key sk-...</code></pre>
             title="Switch to {{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }} mode">
             {{ .Mode }}
           </button>
+		  {{ else }}
+		  <span class="mode{{ if eq .Mode "enforce" }} enforce{{ end }}">{{ .Mode }}</span>
+		  {{ end }}
         </td>
 
         <td>
@@ -103,11 +107,15 @@ spendlease keys provider set openai --key sk-...</code></pre>
 
         <td class="seen">{{ .LastEvent }}</td>
         <td>
+		  {{ if $.CanAdmin }}
           {{ if .ActiveLeases }}
           <button class="kill" hx-post="/admin/principals/{{ .ID }}/revoke" hx-target="#table" hx-swap="outerHTML" hx-include="#event-filters" title="Revoke every active lease now">Revoke</button>
           {{ else }}
           <span class="muted-control">No active leases</span>
           {{ end }}
+		  {{ else }}
+		  <span class="muted-control">Admin only</span>
+		  {{ end }}
         </td>
       </tr>
       {{ end }}
