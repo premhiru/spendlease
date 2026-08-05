@@ -20,18 +20,17 @@ notices the vendor bill.
 ## Quickstart
 
 > [!NOTE]
-> `spendlease` is pre-v1. `v0.2.0-beta.1` will be the first complete project
-> beta and has not been released yet. Until it appears on the releases page,
-> evaluate `ghcr.io/premhiru/spendlease:edge` and pin the corresponding
-> `sha-...` image tag for repeatable work. The npm `0.2.0-beta.0` package is
-> only a registry bootstrap, not a project release.
+> `spendlease` is pre-v1. `v0.2.0-beta.1` is the current beta and is intended
+> for end-to-end evaluation, not an unqualified production rollout. Pin the
+> versioned container or the digest in the release's `container-image.txt`
+> rather than deploying the mutable `edge` image.
 
 The demo starts a temporary gateway, a mock provider, and three simulated
 agents. It does not need a vendor key and deletes its in-memory state when it
 stops:
 
 ```bash
-docker run --rm -p 4000:4000 ghcr.io/premhiru/spendlease:edge \
+docker run --rm -p 4000:4000 ghcr.io/premhiru/spendlease:0.2.0-beta.1 \
   demo --target http://0.0.0.0:4000
 ```
 
@@ -77,9 +76,10 @@ import { Lease } from "@spendlease/sdk";
 const client = new OpenAI(Lease.fromEnv().openAIOptions());
 ```
 
-Beta SDK packages are built from this repository and attached to the matching
-GitHub release. Once the registry publishers are active, install
-`spendlease==0.2.0b1` from PyPI or `@spendlease/sdk@0.2.0-beta.1` from npm.
+The beta SDK packages are available from the public registries and attached to
+the matching [GitHub release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1).
+Install `spendlease==0.2.0b1` from PyPI or
+`@spendlease/sdk@0.2.0-beta.1` from npm.
 You can also configure the vendor SDK directly:
 
 ```python
@@ -257,11 +257,12 @@ is intended for multi-instance deployments; SQLite remains the
 zero-configuration default. Multi-tenancy and the remaining production-roadmap
 items are not implemented yet.
 
-The project is still pre-v1. The mutable `edge` container tracks `main`, while
-every build also publishes an immutable `sha-...` tag. A tagged beta also
-publishes platform binaries, a digest-pinned container reference, Python and
-npm package artifacts, checksums, SPDX SBOMs, and signed provenance on the
-GitHub release.
+The project is still pre-v1. The current beta is
+[`v0.2.0-beta.1`](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1).
+It includes platform binaries, a digest-pinned multi-architecture container,
+Python and npm packages, checksums, SPDX SBOMs, and signed provenance. The
+mutable `edge` container continues to track `main`; every build also publishes
+an immutable `sha-...` tag.
 
 ## Contributing
 

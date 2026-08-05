@@ -14,11 +14,12 @@ The container registry publishes three useful kinds of tag:
 
 - `edge` follows `main` and may change at any time.
 - `sha-<commit>` identifies one immutable build.
-- Version tags are created for GitHub releases. `v0.2.0-beta.1` is the first
-  version intended for an end-to-end evaluation.
+- Version tags are created for GitHub releases. Container tag
+  `0.2.0-beta.1` corresponds to the current `v0.2.0-beta.1` release.
 
-Evaluate `edge`, then deploy the corresponding `sha-...` tag rather than a
-mutable tag. Source builds should likewise pin a commit.
+For the current beta, deploy the digest from the release's
+`container-image.txt`. Use `edge` only to evaluate unreleased `main`, then pin
+the corresponding `sha-...` tag. Source builds should likewise pin a commit.
 
 Tagged releases attach platform binaries and checksums, SPDX SBOMs, signed
 provenance and SBOM bundles, Python wheel/source archives, an npm tarball, and
@@ -62,14 +63,21 @@ This example uses SQLite. Create a volume for its database:
 docker volume create spendlease-data
 ```
 
+Load the immutable image reference published with the beta:
+
+```bash
+SPENDLEASE_IMAGE=$(curl -fsSL \
+  https://github.com/premhiru/spendlease/releases/download/v0.2.0-beta.1/container-image.txt)
+```
+
 Generate a master key and store the output in a secret manager:
 
 ```bash
-docker run --rm ghcr.io/premhiru/spendlease:edge keys master generate
+docker run --rm "$SPENDLEASE_IMAGE" keys master generate
 ```
 
-Start the gateway on loopback. Substitute the pinned `sha-...` tag selected
-above and provide the master key through your deployment's secret mechanism:
+Start the gateway on loopback and provide the master key through your
+deployment's secret mechanism:
 
 ```bash
 docker run -d --name spendlease \
@@ -78,7 +86,7 @@ docker run -d --name spendlease \
   -v spendlease-data:/data \
   -e SPENDLEASE_ENV=production \
   -e SPENDLEASE_MASTER_KEY="$SPENDLEASE_MASTER_KEY" \
-  ghcr.io/premhiru/spendlease:sha-...
+  "$SPENDLEASE_IMAGE"
 ```
 
 Check the process before adding credentials:

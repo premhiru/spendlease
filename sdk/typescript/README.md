@@ -3,7 +3,7 @@
 Thin, dependency-free configuration helpers for vendor SDKs and the
 spendlease admin surface. The package does not wrap model APIs.
 
-Install the beta from npm after its release, or from a checkout:
+Install the pinned beta from npm, or use a source checkout:
 
 ```bash
 npm install @spendlease/sdk@0.2.0-beta.1

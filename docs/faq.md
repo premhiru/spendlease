@@ -2,11 +2,13 @@
 
 ## Is spendlease ready for production?
 
-It is pre-v1. `v0.2.0-beta.1` is the first release intended for an end-to-end
-evaluation, including the encrypted vault, datastore-backed ledger, reserve/settle
-enforcement, short-lived leases, versioned operator API, and immediate kill
-switch. Pin a release digest or commit and evaluate it in observe mode before
-making it a production dependency.
+It is pre-v1. The current beta,
+[`v0.2.0-beta.1`](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1),
+is the first release intended for an end-to-end evaluation. It includes the
+encrypted vault, datastore-backed ledger, reserve/settle enforcement,
+short-lived leases, versioned operator API, and immediate kill switch. Pin the
+release digest or commit and evaluate it in observe mode before making it a
+production dependency.
 
 ## Is the configured budget a ceiling on my vendor invoice?
 

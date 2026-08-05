@@ -3,7 +3,7 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v1. This page documents the first usable beta surface. The operator API
+> Pre-v1. This page documents the `v0.2.0-beta.1` API surface. The operator API
 > is versioned under `/api/v1`; breaking changes will use a new path.
 
 ## Authentication

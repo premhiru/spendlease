@@ -14,12 +14,13 @@ We ask for 90 days before public disclosure, and will usually be much faster tha
 
 ## Supported versions
 
-There is no stable release. Security fixes are applied to the current `main`
-branch and the container built from it. The existing alpha tag predates the
-current gateway implementation.
+There is no stable release. Security fixes are applied to the current beta and
+the current `main` branch. The alpha tag predates the current gateway
+implementation.
 
 | Version | Supported |
 |---|---|
+| `v0.2.0-beta.1` / matching digest-pinned image | Yes |
 | Current `main` / matching `sha-...` image | Yes |
 | `edge` image | Yes, but mutable |
 | `v0.1.0-alpha.1` | No |
