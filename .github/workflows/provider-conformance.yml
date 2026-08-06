@@ -1,0 +1,52 @@
+name: Provider conformance smoke
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: provider-conformance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    name: Live OpenAI-compatible smoke
+    runs-on: ubuntu-latest
+    env:
+      SPENDLEASE_SMOKE_KIMI_KEY: ${{ secrets.SPENDLEASE_SMOKE_KIMI_KEY }}
+      SPENDLEASE_SMOKE_DEEPSEEK_KEY: ${{ secrets.SPENDLEASE_SMOKE_DEEPSEEK_KEY }}
+      SPENDLEASE_SMOKE_XAI_KEY: ${{ secrets.SPENDLEASE_SMOKE_XAI_KEY }}
+      SPENDLEASE_SMOKE_GEMINI_KEY: ${{ secrets.SPENDLEASE_SMOKE_GEMINI_KEY }}
+      SPENDLEASE_SMOKE_ZAI_KEY: ${{ secrets.SPENDLEASE_SMOKE_ZAI_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Detect configured providers
+        id: credentials
+        shell: bash
+        run: |
+          configured=0
+          for name in KIMI DEEPSEEK XAI GEMINI ZAI; do
+            variable="SPENDLEASE_SMOKE_${name}_KEY"
+            if [ -n "${!variable}" ]; then
+              echo "- ${name,,}" >> "$GITHUB_STEP_SUMMARY"
+              configured=1
+            fi
+          done
+          if [ "$configured" -eq 0 ]; then
+            echo "No provider smoke credentials are configured; no billable calls were made." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "configured=$configured" >> "$GITHUB_OUTPUT"
+
+      - name: Run low-cost streaming and non-streaming checks
+        if: steps.credentials.outputs.configured == '1'
+        run: go test -tags=live -count=1 -run TestLiveOpenAICompatibleProviders -v ./internal/providers

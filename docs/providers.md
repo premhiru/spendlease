@@ -12,22 +12,22 @@ provider-hosted tools, explicit premium processing options, and unknown billing
 shapes. Observe mode forwards unsupported traffic with
 `X-Spendlease-Accounting: unmetered`.
 
-| Provider | Status | Credential name | Application base URL | Default upstream |
-|---|---|---|---|---|
-| OpenAI | Certified | `openai` | `http://localhost:4000/v1` | `https://api.openai.com` |
-| Anthropic | Certified | `anthropic` | `http://localhost:4000` | `https://api.anthropic.com` |
-| Kimi | Beta | `kimi` | `http://localhost:4000/kimi/v1` | `https://api.moonshot.ai` |
-| DeepSeek | Beta | `deepseek` | `http://localhost:4000/deepseek/v1` | `https://api.deepseek.com` |
-| xAI | Beta | `xai` | `http://localhost:4000/xai/v1` | `https://api.x.ai` |
-| Gemini | Beta | `gemini` | `http://localhost:4000/gemini/v1beta/openai` | `https://generativelanguage.googleapis.com` |
-| Z.AI | Beta | `zai` | `http://localhost:4000/zai/api/paas/v4` | `https://api.z.ai` |
+| Provider | Certification | Verified | Credential name | Application base URL | Default upstream |
+|---|---|---:|---|---|---|
+| OpenAI | Native | 2026-08-06 | `openai` | `http://localhost:4000/v1` | `https://api.openai.com` |
+| Anthropic | Native | 2026-08-06 | `anthropic` | `http://localhost:4000` | `https://api.anthropic.com` |
+| Kimi | Compatible | 2026-08-06 | `kimi` | `http://localhost:4000/kimi/v1` | `https://api.moonshot.ai` |
+| DeepSeek | Compatible | 2026-08-06 | `deepseek` | `http://localhost:4000/deepseek/v1` | `https://api.deepseek.com` |
+| xAI | Compatible | 2026-08-06 | `xai` | `http://localhost:4000/xai/v1` | `https://api.x.ai` |
+| Gemini | Compatible | 2026-08-06 | `gemini` | `http://localhost:4000/gemini/v1beta/openai` | `https://generativelanguage.googleapis.com` |
+| Z.AI | Compatible | 2026-08-06 | `zai` | `http://localhost:4000/zai/api/paas/v4` | `https://api.z.ai` |
 
-**Certified** means the native vendor request and usage-response shapes have
-dedicated gateway tests and copy-paste examples in Python and TypeScript.
-**Beta** means routing, credential replacement, price-book entries, and the
-shared OpenAI-compatible accounting path are implemented, but provider-side
-behavior may change independently. Start every beta-provider workload in
-observe mode and compare it with the vendor console before enforcing a budget.
+**Native** means the vendor has a dedicated adapter, gateway integration tests,
+and copy-paste examples in Python and TypeScript. **Compatible** means the
+vendor uses the shared OpenAI-compatible adapter and has dated, vendor-documented
+fixtures for non-streaming usage, terminal streaming usage, cache counts, and
+reasoning counts. The verification date records when those documented shapes
+were last reviewed; it is not a promise that the vendor will never change.
 
 OpenAI and Anthropic can be inferred from their normal API paths. The five
 OpenAI-compatible providers use an explicit `/<provider>` prefix because their
@@ -67,9 +67,36 @@ print(response.choices[0].message.content)
 The lease must include every provider the application may call. A multi-vendor
 lease can use `--providers openai,anthropic,gemini`.
 
-Runnable native-client examples for both certified providers are in the
+Runnable native-client examples for both native-certified providers are in the
 [`examples`](https://github.com/premhiru/spendlease/tree/main/examples)
 directory.
+
+## Conformance evidence
+
+The compatible-provider fixtures live in
+[`internal/providers/testdata`](https://github.com/premhiru/spendlease/tree/main/internal/providers/testdata).
+Each fixture names its vendor source, provenance, and review date. The tests require both a
+streaming and non-streaming response for Kimi, DeepSeek, xAI, Gemini, and Z.AI,
+including the usage fields that affect billing.
+
+The repository also contains a weekly, opt-in live smoke workflow. It makes two
+minimal requests per configured provider: one ordinary response and one stream,
+both capped at one output token. Add any of these GitHub Actions secrets to
+enable that provider:
+
+```text
+SPENDLEASE_SMOKE_KIMI_KEY
+SPENDLEASE_SMOKE_DEEPSEEK_KEY
+SPENDLEASE_SMOKE_XAI_KEY
+SPENDLEASE_SMOKE_GEMINI_KEY
+SPENDLEASE_SMOKE_ZAI_KEY
+```
+
+Run **Provider conformance smoke** manually after adding a secret. With no
+secrets, the scheduled workflow makes no vendor calls and says so in its job
+summary. A skipped run is not live certification. Model and endpoint overrides
+are available when running the `live`-tagged Go test locally; see the test file
+for their environment-variable names.
 
 ## Pricing scope
 

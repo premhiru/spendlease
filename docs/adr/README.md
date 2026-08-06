@@ -38,3 +38,4 @@ and references for current behavior.
 | [0025](0025-dashboard-onboarding-is-a-guarded-control-plane.md) | Dashboard onboarding is a guarded control plane | Accepted; amends 0013, 0018, and 0021 |
 | [0026](0026-strict-enforcement-requires-request-bounds.md) | Strict enforcement requires request bounds | Accepted; clarifies 0008 and 0014 |
 | [0027](0027-explicit-pricing-modifiers-fail-closed.md) | Explicit pricing modifiers fail closed | Accepted; extends 0026 |
+| [0028](0028-provider-certification-is-evidence-based.md) | Provider certification is evidence-based | Accepted; extends 0006 and 0024 |

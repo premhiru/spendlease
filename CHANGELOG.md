@@ -13,6 +13,10 @@ the same version; Python prerelease spelling follows PEP 440.
 - Admins can store, replace, and remove provider API keys from the dashboard.
   The UI reports configuration status but never reads a key back from the
   encrypted credential vault.
+- Dated conformance fixtures now exercise streaming, non-streaming, cache, and
+  reasoning usage for Kimi, DeepSeek, xAI, Gemini, and Z.AI. An opt-in weekly
+  workflow can run low-cost live checks for provider secrets configured by the
+  repository owner.
 
 ### Changed
 
@@ -26,6 +30,10 @@ the same version; Python prerelease spelling follows PEP 440.
   Anthropic fast mode, service tiers, and US inference routing. Observe mode
   forwards these requests as unmetered traffic without a misleading ledger
   charge.
+- OpenAI-compatible settlement now accounts for reasoning tokens reported
+  outside `completion_tokens` when `total_tokens` proves they are additional.
+  Vendors that already include reasoning in their completion count are not
+  double charged.
 
 ## [0.2.0-beta.1] - 2026-08-05
 
