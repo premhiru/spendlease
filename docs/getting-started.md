@@ -1,189 +1,136 @@
-# Getting started
+# Send your first budgeted request
 
-This guide uses `v0.2.0-beta.2` to store an OpenAI key, create a budgeted run,
-issue a lease, and make one request through the gateway. Anthropic uses the
-same flow with a different provider name and base URL.
+This guide stores one real provider key, creates a $5 run, issues a 15-minute
+lease, and sends one request through spendlease. The example uses OpenAI; the
+same flow works for every [supported provider](providers.md).
 
-> [!NOTE]
-> `spendlease` is pre-v1. `v0.2.0-beta.2` is the current beta. Pin its verified
-> binary or the immutable container digest from `container-image.txt` while
-> evaluating it; use `edge` only when you deliberately want unreleased `main`.
-> The beta, current `main`, and `edge` default to strict enforcement, so the
-> examples below include the required explicit output limit.
+## Before you begin
 
-## Prerequisites
+You need:
 
-- An OpenAI API key
-- Python 3.9 or later for the Python example
+- a vendor API key;
+- the `v0.2.0-beta.2` spendlease binary on your `PATH`; and
+- Python 3.9 or later for the example request.
 
-## Install
+Download the binary and matching `.sha256` from the
+[`v0.2.0-beta.2` release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.2).
+For an evaluation, keep every command in the same working directory so it
+uses the same `./spendlease.db` file.
 
-Download the binary for your platform and its `.sha256` file from the
-[`v0.2.0-beta.2` release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.2),
-verify the checksum, and place `spendlease` (or `spendlease.exe`) on your
-`PATH`.
+!!! note "Use the dashboard if you prefer"
 
-To build from source instead, install Go 1.25.12 or later and run:
+    Run `spendlease serve`, open <http://localhost:4000>, store the provider
+    key under **Provider keys**, and use **Add an agent**. The form creates the
+    principal, first run, and lease in one step, then shows copyable examples.
+    The `sll_...` lease appears once. Continue at [make the
+    request](#6-make-the-request).
 
-```bash
-git clone https://github.com/premhiru/spendlease.git
-cd spendlease
-go install ./cmd/spendlease
-```
-
-If `spendlease` is not found afterwards, add Go's binary directory to your
-`PATH` or replace `spendlease` in the commands below with
-`go run ./cmd/spendlease`.
-
-## Try the demo first
-
-The demo runs the real gateway against a local mock provider. It creates three
-simulated agents, lets `retry-loop` exhaust its budget, and revokes that
-agent's lease:
+## 1. Create the agent identity
 
 ```bash
-spendlease demo
+spendlease keys principal create --name checkout-agent --mode observe
 ```
 
-Open the dashboard URL printed by the command. The demo stops after 30 seconds;
-use `--duration 0` to leave it running until Ctrl+C. Its database is in memory,
-so none of the demo state is reused below.
+The command creates a principal and prints a legacy `slk_...` bootstrap key.
+The application will not use that long-lived key; it will use a short-lived
+lease. Keep or discard the bootstrap key according to your compatibility
+needs, but never put it in source control.
 
-## Use the dashboard instead
-
-The numbered steps below show the CLI because those commands are easy to
-automate. For an interactive setup, start the persistent gateway first:
-
-```bash
-spendlease serve
-```
-
-Open <http://localhost:4000>. Under **Provider keys**, store the OpenAI key.
-Then use **Add an agent** to choose a name, mode, run budget, lease duration,
-and allowed providers. The dashboard creates the principal, first run, and
-lease together and shows the `sll_...` token once.
-
-Copy that lease into `SPENDLEASE_LEASE_TOKEN`, use the displayed provider base
-URL in the vendor SDK, and continue at [Make a request](#5-make-a-request).
-The provider key is never shown again. Dashboard-created principals do not
-expose the older `slk_...` compatibility key; use the CLI below only if a
-legacy integration still needs one.
-
-## 1. Create a principal
-
-A principal is the stable identity of an agent or service:
-
-```bash
-spendlease keys principal create --name checkout-agent
-```
-
-The command prints a principal ID and a one-time `slk_` key. Keep that key out
-of application environments. It is a long-lived compatibility and bootstrap
-credential; the application will use a short-lived `sll_` lease instead.
-
-New principals start in `observe` mode. Requests are priced and recorded, but
-budget overruns are not blocked until you switch the principal to `enforce`.
+`observe` is deliberate. Spendlease will calculate and record supported token
+spend without blocking the first workload while you validate its accounting.
 
 ## 2. Store the vendor key
 
 Piping the key keeps it out of shell history.
 
-On Bash or zsh:
+=== "Bash or zsh"
 
-```bash
-printf '%s' "$OPENAI_API_KEY" | spendlease keys provider set openai
-```
+    ```bash
+    printf '%s' "$OPENAI_API_KEY" | spendlease keys provider set openai
+    ```
 
-On PowerShell:
+=== "PowerShell"
 
-```powershell
-$env:OPENAI_API_KEY | spendlease keys provider set openai
-```
+    ```powershell
+    $env:OPENAI_API_KEY | spendlease keys provider set openai
+    ```
 
-You can also pass `--key sk-proj-...` directly. Confirm that the provider was
-stored without exposing its value:
+Confirm that the credential exists without revealing it:
 
 ```bash
 spendlease keys provider list
 ```
 
-For local development, spendlease creates a master key beside the SQLite
-database. Production deployments must provide the key directly, through a
-mounted secret file, or through a secret-manager/KMS command; see
-[Self-hosting](self-hosting.md#master-key).
+The vendor key is encrypted at rest. Development mode creates a local master
+key beside SQLite; production must use an explicit
+[master-key source](self-hosting.md#master-key).
 
-## 3. Create a run and issue a lease
-
-Create a run with a $25 budget:
+## 3. Create a run
 
 ```bash
-spendlease keys run create --principal checkout-agent --budget 25.00
+spendlease keys run create --principal checkout-agent --budget 5.00
 ```
 
-Copy the `run_...` ID from the output, then issue a 15-minute lease scoped to
-OpenAI:
+Copy the printed `run_...` ID. A run represents one task or execution and owns
+its budget. In a real orchestrator, create a new run for each unit of work
+rather than reusing one indefinitely.
+
+## 4. Issue a lease
+
+Replace `run_...` with the ID from the previous step:
 
 ```bash
-spendlease keys lease issue --run run_... --ttl 15m --providers openai
+spendlease keys lease issue \
+  --run run_... \
+  --ttl 15m \
+  --providers openai
 ```
 
-The lease token starts with `sll_` and is shown once. Set it in the shell that
-will run the application.
+The command prints an `sll_...` token once. It is not recoverable. Put it in
+the environment of the process that will call the provider.
 
-On Bash or zsh:
+=== "Bash or zsh"
 
-```bash
-export SPENDLEASE_LEASE_TOKEN=sll_...
-export SPENDLEASE_URL=http://localhost:4000
-```
+    ```bash
+    export SPENDLEASE_LEASE_TOKEN='sll_...'
+    export SPENDLEASE_URL='http://localhost:4000'
+    ```
 
-On PowerShell:
+=== "PowerShell"
 
-```powershell
-$env:SPENDLEASE_LEASE_TOKEN = "sll_..."
-$env:SPENDLEASE_URL = "http://localhost:4000"
-```
+    ```powershell
+    $env:SPENDLEASE_LEASE_TOKEN = 'sll_...'
+    $env:SPENDLEASE_URL = 'http://localhost:4000'
+    ```
 
-The lease expires after 15 minutes. Issue a new one if the example later
-returns `401 unauthenticated`.
+If you lose the token, issue another lease. Do not try to retrieve it from the
+database.
 
-## 4. Start the gateway
-
-Run this from the same directory as the earlier `keys` commands so every
-command uses the same `./spendlease.db` file:
+## 5. Start the gateway
 
 ```bash
 spendlease serve
 ```
 
-The gateway listens on <http://localhost:4000>. Leave it running and use a
-second terminal for the next step. The dashboard is available at the same URL.
-
-## 5. Make a request
-
-### Python helper
-
-Install the thin spendlease helper and the official OpenAI client:
+Leave this terminal open. In a second terminal, confirm both process and
+datastore readiness:
 
 ```bash
-python -m pip install 'spendlease==0.2.0b2' openai
+curl --fail http://localhost:4000/healthz
+curl --fail http://localhost:4000/readyz
 ```
 
-The relevant application code is:
+The dashboard is at <http://localhost:4000>.
 
-```python
-from openai import OpenAI
-from spendlease import Lease
+## 6. Make the request
 
-client = OpenAI(**Lease.from_env().openai_kwargs())
+Install the official OpenAI client:
+
+```bash
+python -m pip install openai
 ```
 
-The helper reads `SPENDLEASE_LEASE_TOKEN` and `SPENDLEASE_URL`. It only builds
-the OpenAI client options; it does not wrap the OpenAI API.
-
-### Configure OpenAI directly
-
-The helper is optional. Any OpenAI client can use the gateway directly:
+Create and run this small program:
 
 ```python
 import os
@@ -196,105 +143,113 @@ client = OpenAI(
 
 response = client.chat.completions.create(
     model="gpt-5.4-mini",
-    max_completion_tokens=512,
-    messages=[{"role": "user", "content": "hello"}],
+    max_completion_tokens=128,
+    messages=[{"role": "user", "content": "Reply with: spendlease works"}],
 )
+
 print(response.choices[0].message.content)
 ```
 
-For Anthropic, store the key with `keys provider set anthropic`, include
-`anthropic` in the lease's provider scope, and use
-`base_url="http://localhost:4000"`.
+The explicit output limit is important. Strict enforcement cannot reserve an
+upper bound for an output-producing request without one.
 
-Kimi, DeepSeek, xAI, Gemini, and Z.AI use their OpenAI-compatible APIs through
-an explicit provider prefix. [Providers](providers.md) lists the exact base
-URL and credential name for each one.
-
-### curl
+You can also use the spendlease helper, which only builds the client options:
 
 ```bash
-curl http://localhost:4000/v1/chat/completions \
-  -H "Authorization: Bearer $SPENDLEASE_LEASE_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gpt-5.4-mini","max_completion_tokens":512,"messages":[{"role":"user","content":"hello"}]}'
+python -m pip install 'spendlease==0.2.0b2' openai
 ```
 
-## 6. Turn on enforcement
+```python
+from openai import OpenAI
+from spendlease import Lease
 
-Check the dashboard and compare its totals with the vendor's usage. When the
-numbers look right for your workload, switch the principal to enforcement:
+client = OpenAI(**Lease.from_env().openai_kwargs())
+```
+
+## 7. Confirm the result
+
+Open the dashboard. You should see:
+
+- `checkout-agent` with its $5 run;
+- one allowed event for the selected model; and
+- settled spend below the original budget.
+
+For machine-readable verification:
+
+```bash
+spendlease ledger verify
+spendlease ledger export --format json
+```
+
+If the request does not appear, check its `X-Spendlease-Accounting` response
+header. `unmetered` means observe mode forwarded a request whose charge shape
+could not be represented safely.
+
+## 8. Prove enforcement before relying on it
+
+After comparing representative traffic with the vendor's usage, switch the
+principal to enforcement:
 
 ```bash
 spendlease keys principal set-mode --name checkout-agent --mode enforce
 ```
 
-Requests whose reservation does not fit the run budget now return
-`402 budget_exceeded` without reaching the vendor.
+Create a deliberately tiny run:
 
-On current `main` and `edge`, strict enforcement is the server default. It also returns `422
-spend_not_enforceable` for an unknown model or a request without an explicit
-output-token limit. Keep the limit in the example above when you enable it.
+```bash
+spendlease keys run create \
+  --principal checkout-agent \
+  --budget 0.000001
+```
 
-To revoke every active lease for this principal:
+Issue a new OpenAI lease for that `run_...` ID and replace
+`SPENDLEASE_LEASE_TOKEN` with the new token:
+
+```bash
+spendlease keys lease issue --run run_... --ttl 15m --providers openai
+```
+
+Run the same Python request again. Its reservation cannot fit, so it should
+return:
+
+```text
+HTTP 402
+X-Spendlease-Error: budget_exceeded
+```
+
+The provider is not contacted for that rejected request. Filter **Recent
+events** by the agent and **Budget blocked** to confirm the decision.
+
+To revoke all active leases immediately:
 
 ```bash
 spendlease keys revoke --all --principal checkout-agent
 ```
 
-Or use the JSON operator API from an orchestrator to create and close runs,
-issue or revoke individual leases, and inspect effective remaining budget.
-See [API reference](api-reference.md#json-operator-api) for curl examples and
-[SDKs and examples](sdks.md#admin-controls) for typed client methods.
+The next request with the old token should return `401 unauthenticated`.
 
-## Troubleshooting
+## Use another provider
 
-### `401 unauthenticated`
+Change three values: the credential name, the lease provider scope, and the
+application base URL.
 
-Check that the application is using the shown-once `sll_` lease token, not the
-vendor key or the long-lived `slk_` principal key. The lease may also have
-expired or been revoked; issue a fresh lease and retry.
+| Provider | Credential/scope | Base URL |
+|---|---|---|
+| Anthropic | `anthropic` | `http://localhost:4000` |
+| Kimi | `kimi` | `http://localhost:4000/kimi/v1` |
+| DeepSeek | `deepseek` | `http://localhost:4000/deepseek/v1` |
+| xAI | `xai` | `http://localhost:4000/xai/v1` |
+| Gemini | `gemini` | `http://localhost:4000/gemini/v1beta/openai` |
+| Z.AI | `zai` | `http://localhost:4000/zai/api/paas/v4` |
 
-### `403 lease_scope_denied`
-
-The lease does not include the provider selected by the request path. Issue a
-new lease with that provider in `--providers`; multiple names are a
-comma-separated list such as `--providers openai,anthropic,gemini`.
-
-### `402 budget_exceeded`
-
-The request's upper-bound reservation does not fit the run or one of its
-budgeted ancestors. Reduce the request's output limit, create a run with a
-larger budget, or temporarily return the principal to `observe` while checking
-the estimate.
-
-### `422 spend_not_enforceable`
-
-Strict enforcement could not establish a trustworthy upper bound. Check that
-the model appears in the active price book and set the endpoint's explicit
-output-token limit. Also remove premium processing options or select a reviewed
-standard-rate value from [Request pricing
-modifiers](pricing-book.md#request-pricing-modifiers). Use
-`--enforcement-policy=best-effort` only when a model or output-limit fallback
-estimate is acceptable; it does not allow unpriced billing modifiers.
-
-### `503 provider_credential_missing`
-
-Run `spendlease keys provider set openai` and make sure the command uses the
-same `--store` path as `spendlease serve`. A decryption error means
-`SPENDLEASE_MASTER_KEY` does not match the key used when the vendor credential
-was stored.
-
-### `404 unknown_route`
-
-The request path is not claimed by a provider adapter. Prefix the path with
-its provider name, such as `/openai`, `/anthropic`, or `/deepseek`; the prefix
-is removed before forwarding. See
-[API reference](api-reference.md#ambiguous-and-unknown-paths).
+Anthropic uses its native SDK. The other entries in the table use an
+OpenAI-compatible client. Exact examples and certification boundaries are in
+[Providers](providers.md).
 
 ## Next steps
 
-- [SDKs and examples](sdks.md) covers Python, TypeScript, and the admin client.
-- [Policy reference](policy-reference.md) documents budgets, lease scope, and
-  reservation settings.
-- [Self-hosting](self-hosting.md) covers persistent state, secrets, remote
-  dashboard access, backups, and upgrades.
+- [Understand principals, runs, leases, and reservations](concepts.md).
+- [Configure typed Python and TypeScript helpers](sdks.md).
+- [Review common errors and resolutions](errors.md).
+- [Complete the production checklist](production-checklist.md) before a real
+  rollout.
