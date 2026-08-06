@@ -127,6 +127,13 @@ func (p *Provider) ParseRequest(body []byte) providers.RequestInfo {
 		RequestBytes: int64(len(body)),
 	}
 	info.UnsupportedBilling = providers.UnsupportedBillingFeature(m)
+	if info.UnsupportedBilling == "" {
+		ordinaryTiers := []string{"default"}
+		if p.name == "gemini" {
+			ordinaryTiers = append(ordinaryTiers, "standard")
+		}
+		info.UnsupportedBilling = providers.UnsupportedBillingModifier(m, "service_tier", ordinaryTiers...)
+	}
 
 	// Usage on a streamed OpenAI response is opt-in. Whether the caller asked
 	// decides whether spendlease can record exact usage or has to estimate.

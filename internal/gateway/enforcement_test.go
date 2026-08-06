@@ -38,6 +38,9 @@ func TestEnforceModeRejectsUninspectableAndUnsupportedSpend(t *testing.T) {
 		{name: "image endpoint", path: "/v1/images/generations", body: `{"model":"gpt-image-1","prompt":"cat"}`},
 		{name: "media input", path: "/v1/chat/completions", body: `{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.test/cat.png"}}]}]}`},
 		{name: "provider tool fee", path: "/v1/responses", body: `{"model":"gpt-4o","tools":[{"type":"web_search_preview"}],"input":"news"}`},
+		{name: "priority processing", path: "/v1/chat/completions", body: `{"model":"gpt-4o","max_tokens":10,"service_tier":"priority","messages":[{"role":"user","content":"hello"}]}`},
+		{name: "Anthropic fast mode", path: "/v1/messages", body: `{"model":"claude-sonnet-5","max_tokens":10,"speed":"fast","messages":[{"role":"user","content":"hello"}]}`},
+		{name: "Anthropic US inference", path: "/v1/messages", body: `{"model":"claude-sonnet-5","max_tokens":10,"inference_geo":"us","messages":[{"role":"user","content":"hello"}]}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,6 +58,49 @@ func TestEnforceModeRejectsUninspectableAndUnsupportedSpend(t *testing.T) {
 	defer mu.Unlock()
 	if calls != 0 {
 		t.Fatalf("vendor was contacted %d times for unenforceable spend", calls)
+	}
+}
+
+func TestObserveModeMarksPremiumProcessingAsUnmetered(t *testing.T) {
+	t.Parallel()
+
+	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"usage":{"prompt_tokens":5,"completion_tokens":5}}`)
+	}, store.ModeObserve, money.MustParseUSD("1.00"))
+	resp := h.call(t, "/v1/chat/completions",
+		`{"model":"gpt-4o","max_tokens":10,"service_tier":"priority","messages":[{"role":"user","content":"hello"}]}`, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get(AccountingHeader); got != "unmetered" {
+		t.Fatalf("%s = %q, want unmetered", AccountingHeader, got)
+	}
+	entries, err := h.store.LedgerEntries(context.Background(), store.LedgerFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("premium request wrote %d misleading ledger entries", len(entries))
+	}
+}
+
+func TestBestEffortStillRejectsPremiumProcessing(t *testing.T) {
+	t.Parallel()
+
+	called := make(chan struct{}, 1)
+	h := newRecordingHarnessWithPolicy(t, func(w http.ResponseWriter, _ *http.Request) {
+		called <- struct{}{}
+		_, _ = io.WriteString(w, `{}`)
+	}, store.ModeEnforce, money.MustParseUSD("1.00"), EnforcementBestEffort)
+	resp := h.call(t, "/v1/chat/completions",
+		`{"model":"gpt-4o","service_tier":"priority","messages":[{"role":"user","content":"hello"}]}`, nil)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	select {
+	case <-called:
+		t.Fatal("best-effort policy forwarded an unpriced processing tier")
+	default:
 	}
 }
 

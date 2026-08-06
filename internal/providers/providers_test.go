@@ -250,6 +250,48 @@ func TestRequestBillingGuards(t *testing.T) {
 	}
 }
 
+func TestRequestPricingModifierGuards(t *testing.T) {
+	t.Parallel()
+
+	gemini, err := openai.NewCompatible("gemini", "https://generativelanguage.googleapis.com")
+	if err != nil {
+		t.Fatalf("NewCompatible: %v", err)
+	}
+	tests := []struct {
+		name        string
+		parse       func([]byte) providers.RequestInfo
+		body        string
+		unsupported bool
+	}{
+		{name: "OpenAI omitted tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o"}`},
+		{name: "OpenAI null tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o","service_tier":null}`},
+		{name: "OpenAI default tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o","service_tier":"default"}`},
+		{name: "OpenAI auto tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o","service_tier":"auto"}`, unsupported: true},
+		{name: "OpenAI priority tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o","service_tier":"priority"}`, unsupported: true},
+		{name: "OpenAI flex tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o","service_tier":"flex"}`, unsupported: true},
+		{name: "OpenAI unknown tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o","service_tier":"future"}`, unsupported: true},
+		{name: "OpenAI non-string tier", parse: openai.New().ParseRequest, body: `{"model":"gpt-4o","service_tier":1}`, unsupported: true},
+		{name: "Gemini standard tier", parse: gemini.ParseRequest, body: `{"model":"gemini-3.1-pro-preview","service_tier":"standard"}`},
+		{name: "Gemini priority tier", parse: gemini.ParseRequest, body: `{"model":"gemini-3.1-pro-preview","service_tier":"priority"}`, unsupported: true},
+		{name: "Anthropic omitted modifiers", parse: anthropic.New().ParseRequest, body: `{"model":"claude-sonnet-5"}`},
+		{name: "Anthropic ordinary modifiers", parse: anthropic.New().ParseRequest, body: `{"model":"claude-sonnet-5","service_tier":"standard_only","speed":"standard","inference_geo":"global"}`},
+		{name: "Anthropic auto tier", parse: anthropic.New().ParseRequest, body: `{"model":"claude-sonnet-5","service_tier":"auto"}`, unsupported: true},
+		{name: "Anthropic fast mode", parse: anthropic.New().ParseRequest, body: `{"model":"claude-sonnet-5","speed":"fast"}`, unsupported: true},
+		{name: "Anthropic US inference", parse: anthropic.New().ParseRequest, body: `{"model":"claude-sonnet-5","inference_geo":"us"}`, unsupported: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.parse([]byte(tt.body)).UnsupportedBilling
+			if tt.unsupported && got == "" {
+				t.Fatal("request was not marked unsupported")
+			}
+			if !tt.unsupported && got != "" {
+				t.Fatalf("ordinary request was marked unsupported: %s", got)
+			}
+		})
+	}
+}
+
 func TestOpenAICompatibleProviderUsesExplicitPrefix(t *testing.T) {
 	t.Parallel()
 

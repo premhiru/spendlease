@@ -113,6 +113,15 @@ func (p *Provider) ParseRequest(body []byte) providers.RequestInfo {
 		WantsUsage:   true,
 	}
 	info.UnsupportedBilling = providers.UnsupportedBillingFeature(m)
+	if info.UnsupportedBilling == "" {
+		info.UnsupportedBilling = providers.UnsupportedBillingModifier(m, "service_tier", "standard_only")
+	}
+	if info.UnsupportedBilling == "" {
+		info.UnsupportedBilling = providers.UnsupportedBillingModifier(m, "speed", "standard")
+	}
+	if info.UnsupportedBilling == "" {
+		info.UnsupportedBilling = providers.UnsupportedBillingModifier(m, "inference_geo", "global")
+	}
 	return info
 }
 

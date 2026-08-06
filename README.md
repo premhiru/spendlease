@@ -189,9 +189,10 @@ settle](docs/reserve-and-settle.md) explains the calculation and the behavior
 on disconnects and provider errors.
 
 Strict enforcement adds fail-closed checks for unknown models, missing output
-limits, media, provider-hosted tools, batches, oversized bodies, and other
-recognized unreviewed spend. Those requests return `422
-spend_not_enforceable`; observe mode forwards them with a visible warning.
+limits, explicit premium processing tiers, media, provider-hosted tools,
+batches, oversized bodies, and other recognized unreviewed spend. Those
+requests return `422 spend_not_enforceable`; observe mode forwards them with a
+visible warning.
 Operators who accept model and output-limit estimates can opt in with
 `spendlease serve --enforcement-policy=best-effort`.
 

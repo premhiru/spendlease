@@ -93,3 +93,4 @@ nav:
       - 24. Itemized usage and normalized reconciliation: adr/0024-itemized-usage-and-reconciliation.md
       - 25. Dashboard onboarding is a guarded control plane: adr/0025-dashboard-onboarding-is-a-guarded-control-plane.md
       - 26. Strict enforcement requires request bounds: adr/0026-strict-enforcement-requires-request-bounds.md
+      - 27. Explicit pricing modifiers fail closed: adr/0027-explicit-pricing-modifiers-fail-closed.md

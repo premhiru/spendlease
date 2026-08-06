@@ -40,6 +40,9 @@ spendlease serve --enforcement-policy=strict
 
 The dashboard names the running policy. Use `best-effort` only when keeping a
 new or unusual model available matters more than a strict upper bound.
+Both policies reject recognized premium or ambiguous request pricing
+modifiers. Best-effort relaxes only the model and output-limit checks; it does
+not turn an unmodeled vendor rate into a safe reservation.
 
 ## Run budget
 

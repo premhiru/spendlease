@@ -14,11 +14,12 @@ enforcement default; the tagged beta uses the behavior now named
 
 ## Is the configured budget a ceiling on my vendor invoice?
 
-Not in every billing scenario. The gateway enforces the base token rates in
-its price book. Cache-write and long-context multipliers, regional tiers, tool
-fees, and non-token charges are not modeled yet. Some omissions overcount and
-some undercount. Compare the ledger with the vendor bill in observe mode for
-the models and features your workload uses.
+Not in every billing scenario. The gateway enforces the token rates in its
+price book and rejects explicit premium or ambiguous processing modifiers
+before egress. It cannot inspect account-level defaults or private contracts,
+and batch, persistent cache storage, tool fees, and non-token charges are not
+modeled. Some omissions overcount and some undercount. Compare the ledger with
+the vendor bill in observe mode for the models and features your workload uses.
 
 ## Why does a new principal default to observe mode?
 
@@ -55,11 +56,11 @@ before the disconnect or records a marked estimate.
 
 The request uses an endpoint, feature, or body shape whose potential vendor
 charge cannot be bounded by the token price book. This includes an unknown
-model, a missing output limit, oversized or unparseable bodies, media, batches,
-and provider-hosted tools. Strict enforcement refuses it before the vendor is
-contacted. Observe mode can pass it through,
-but marks the response `X-Spendlease-Accounting: unmetered` and does not add a
-misleading token charge to the ledger.
+model, a missing output limit, explicit premium processing, oversized or
+unparseable bodies, media, batches, and provider-hosted tools. Strict
+enforcement refuses it before the vendor is contacted. Observe mode can pass
+it through, but marks the response `X-Spendlease-Accounting: unmetered` and
+does not add a misleading token charge to the ledger.
 
 ## Does the dashboard need internet access?
 
