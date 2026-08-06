@@ -5,7 +5,13 @@ the same version; Python prerelease spelling follows PEP 440.
 
 ## Unreleased
 
-No user-visible changes yet.
+### Changed
+
+- Reorganized the documentation around first-use, build, operations, and
+  reference tasks. Added a no-credential quickstart, actionable error guide,
+  production checklist, and evidence-based v1 readiness gates.
+- Shortened the repository landing page and separated the terminal-only
+  container demo from the local interactive dashboard path.
 
 ## [0.2.0-beta.2] - 2026-08-06
 

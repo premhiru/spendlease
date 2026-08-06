@@ -11,10 +11,14 @@ theme:
   name: material
   features:
     - navigation.instant
+    - navigation.tabs
     - navigation.sections
+    - navigation.footer
     - navigation.top
+    - toc.follow
     - content.action.edit
     - content.code.copy
+    - content.tabs.link
     - search.suggest
   palette:
     - media: "(prefers-color-scheme: light)"
@@ -35,6 +39,8 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -50,50 +56,59 @@ plugins:
 
 nav:
   - Home: index.md
-  - Getting started: getting-started.md
-  - Providers: providers.md
-  - CLI reference: cli-reference.md
-  - SDKs and examples: sdks.md
-  - Dashboard: dashboard.md
-  - Concepts: concepts.md
-  - Reserve and settle: reserve-and-settle.md
-  - Policy reference: policy-reference.md
-  - Price book: pricing-book.md
-  - Reconciliation: reconciliation.md
-  - Self-hosting: self-hosting.md
-  - Upgrade to beta: upgrading-to-beta.md
-  - Releasing: releasing.md
-  - API reference: api-reference.md
-  - FAQ: faq.md
-  - Decision records:
-      - Overview: adr/README.md
-      - 1. Record architecture decisions: adr/0001-record-architecture-decisions.md
-      - 2. Project name and module path: adr/0002-project-name-and-module-path.md
-      - 3. Money as int64 nanodollars: adr/0003-money-as-int64-nanodollars.md
-      - 4. Go version floor is 1.25: adr/0004-go-version-floor.md
-      - 5. Ledger integrity: adr/0005-ledger-integrity.md
-      - 6. Provider routing: adr/0006-provider-routing.md
-      - 7. Credential vault and master key: adr/0007-credential-vault-and-master-key.md
-      - 8. Token estimation: adr/0008-token-estimation.md
-      - 9. Dated price supersession: adr/0009-dated-price-supersession.md
-      - 10. Accounting observes the response: adr/0010-accounting-observes-the-response.md
-      - 11. Implicit runs: adr/0011-implicit-runs.md
-      - 12. Stream options injection: adr/0012-stream-options-injection.md
-      - 13. The dashboard is one table: adr/0013-the-dashboard-is-one-table.md
-      - 14. Atomic hierarchical budgets: adr/0014-budget-decisions-are-atomic-and-hierarchical.md
-      - 15. Reservations may precede leases: adr/0015-reservations-may-precede-leases.md
-      - 16. Memory-first durable revocation: adr/0016-revocation-is-memory-first-and-durable.md
-      - 17. Filter the operational event stream: adr/0017-filter-the-operational-event-stream.md
-      - 18. Version the operator control plane: adr/0018-version-the-operator-control-plane.md
-      - 19. PostgreSQL multi-instance storage: adr/0019-postgresql-multi-instance-storage.md
-      - 20. External key sources and rotation: adr/0020-external-key-sources-and-rotation.md
-      - 21. Named operators, RBAC, and audit: adr/0021-named-operators-rbac-and-audit.md
-      - 22. Operational signals and bounded networking: adr/0022-operational-signals-and-bounded-networking.md
-      - 23. Release artifacts are independently verifiable: adr/0023-release-artifacts-are-verifiable.md
-      - 24. Itemized usage and normalized reconciliation: adr/0024-itemized-usage-and-reconciliation.md
-      - 25. Dashboard onboarding is a guarded control plane: adr/0025-dashboard-onboarding-is-a-guarded-control-plane.md
-      - 26. Strict enforcement requires request bounds: adr/0026-strict-enforcement-requires-request-bounds.md
-      - 27. Explicit pricing modifiers fail closed: adr/0027-explicit-pricing-modifiers-fail-closed.md
-      - 28. Provider certification is evidence-based: adr/0028-provider-certification-is-evidence-based.md
-      - 29. Pricing freshness is explicit evidence: adr/0029-pricing-freshness-is-explicit-evidence.md
-      - 30. One-time leases include runnable examples: adr/0030-one-time-leases-include-runnable-examples.md
+  - Start:
+      - Quickstart: quickstart.md
+      - First real request: getting-started.md
+      - Choose a provider: providers.md
+      - Dashboard: dashboard.md
+  - Build:
+      - SDKs and examples: sdks.md
+      - Core concepts: concepts.md
+      - Reserve and settle: reserve-and-settle.md
+      - Policy and budgets: policy-reference.md
+      - Pricing and coverage: pricing-book.md
+  - Operate:
+      - Production checklist: production-checklist.md
+      - Self-hosting: self-hosting.md
+      - Reconciliation: reconciliation.md
+      - Upgrade from beta: upgrading-to-beta.md
+      - Troubleshooting: errors.md
+  - Reference:
+      - CLI: cli-reference.md
+      - API: api-reference.md
+      - FAQ: faq.md
+  - Project:
+      - v1 readiness: v1-readiness.md
+      - Releasing: releasing.md
+      - Decision records:
+          - Overview: adr/README.md
+          - 1. Record architecture decisions: adr/0001-record-architecture-decisions.md
+          - 2. Project name and module path: adr/0002-project-name-and-module-path.md
+          - 3. Money as int64 nanodollars: adr/0003-money-as-int64-nanodollars.md
+          - 4. Go version floor is 1.25: adr/0004-go-version-floor.md
+          - 5. Ledger integrity: adr/0005-ledger-integrity.md
+          - 6. Provider routing: adr/0006-provider-routing.md
+          - 7. Credential vault and master key: adr/0007-credential-vault-and-master-key.md
+          - 8. Token estimation: adr/0008-token-estimation.md
+          - 9. Dated price supersession: adr/0009-dated-price-supersession.md
+          - 10. Accounting observes the response: adr/0010-accounting-observes-the-response.md
+          - 11. Implicit runs: adr/0011-implicit-runs.md
+          - 12. Stream options injection: adr/0012-stream-options-injection.md
+          - 13. The dashboard is one table: adr/0013-the-dashboard-is-one-table.md
+          - 14. Atomic hierarchical budgets: adr/0014-budget-decisions-are-atomic-and-hierarchical.md
+          - 15. Reservations may precede leases: adr/0015-reservations-may-precede-leases.md
+          - 16. Memory-first durable revocation: adr/0016-revocation-is-memory-first-and-durable.md
+          - 17. Filter the operational event stream: adr/0017-filter-the-operational-event-stream.md
+          - 18. Version the operator control plane: adr/0018-version-the-operator-control-plane.md
+          - 19. PostgreSQL multi-instance storage: adr/0019-postgresql-multi-instance-storage.md
+          - 20. External key sources and rotation: adr/0020-external-key-sources-and-rotation.md
+          - 21. Named operators, RBAC, and audit: adr/0021-named-operators-rbac-and-audit.md
+          - 22. Operational signals and bounded networking: adr/0022-operational-signals-and-bounded-networking.md
+          - 23. Release artifacts are independently verifiable: adr/0023-release-artifacts-are-verifiable.md
+          - 24. Itemized usage and normalized reconciliation: adr/0024-itemized-usage-and-reconciliation.md
+          - 25. Dashboard onboarding is a guarded control plane: adr/0025-dashboard-onboarding-is-a-guarded-control-plane.md
+          - 26. Strict enforcement requires request bounds: adr/0026-strict-enforcement-requires-request-bounds.md
+          - 27. Explicit pricing modifiers fail closed: adr/0027-explicit-pricing-modifiers-fail-closed.md
+          - 28. Provider certification is evidence-based: adr/0028-provider-certification-is-evidence-based.md
+          - 29. Pricing freshness is explicit evidence: adr/0029-pricing-freshness-is-explicit-evidence.md
+          - 30. One-time leases include runnable examples: adr/0030-one-time-leases-include-runnable-examples.md
