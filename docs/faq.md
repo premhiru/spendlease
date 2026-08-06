@@ -3,14 +3,13 @@
 ## Is spendlease ready for production?
 
 It is pre-v1. The current beta,
-[`v0.2.0-beta.1`](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1),
+[`v0.2.0-beta.2`](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.2),
 is the first release intended for an end-to-end evaluation. It includes the
 encrypted vault, datastore-backed ledger, reserve/settle enforcement,
 short-lived leases, versioned operator API, and immediate kill switch. Pin the
 release digest or commit and evaluate it in observe mode before making it a
-production dependency. Current `main` and `edge` include the unreleased strict
-enforcement default; the tagged beta uses the behavior now named
-`best-effort`.
+production dependency. The beta, current `main`, and `edge` default to strict
+enforcement; best-effort estimates require an explicit server option.
 
 ## Is the configured budget a ceiling on my vendor invoice?
 

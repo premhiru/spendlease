@@ -5,6 +5,13 @@ the same version; Python prerelease spelling follows PEP 440.
 
 ## Unreleased
 
+No user-visible changes yet.
+
+## [0.2.0-beta.2] - 2026-08-06
+
+The second beta tightens enforcement, certifies compatible-provider
+accounting, and removes the remaining first-request setup guesswork.
+
 ### Added
 
 - The dashboard can create an agent, its first budgeted run, and a scoped
@@ -17,6 +24,13 @@ the same version; Python prerelease spelling follows PEP 440.
   reasoning usage for Kimi, DeepSeek, xAI, Gemini, and Z.AI. An opt-in weekly
   workflow can run low-cost live checks for provider secrets configured by the
   repository owner.
+- `spendlease pricing list`, `pricing show`, and `pricing verify` expose exact
+  active rates, provenance, and verification freshness. The dashboard warns
+  when evidence is missing or more than 45 days old, and a weekly workflow
+  owns one stale-pricing issue until review passes.
+- One-time dashboard lease results now include copyable environment,
+  installation, Python, JavaScript, and `curl` examples for every selected
+  provider.
 
 ### Changed
 
@@ -81,5 +95,6 @@ The first beta intended for an end-to-end, self-hosted evaluation.
 Initial public alpha with a local gateway, encrypted provider credentials,
 budgeted runs and leases, append-only spend ledger, dashboard, and SDK helpers.
 
+[0.2.0-beta.2]: https://github.com/premhiru/spendlease/compare/v0.2.0-beta.1...v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/premhiru/spendlease/compare/v0.1.0-alpha.1...v0.2.0-beta.1
 [0.1.0-alpha.1]: https://github.com/premhiru/spendlease/releases/tag/v0.1.0-alpha.1

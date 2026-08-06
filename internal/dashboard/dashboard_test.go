@@ -86,8 +86,10 @@ func newTestDashboardWithRevoker(t *testing.T, st *fakeStore, revoker PrincipalR
 	d, err := New(Options{
 		Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Version: "v-test",
 		PricingRevision: "abcdef0123456789", PricingEffective: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC),
-		PricingLoadedAt:  time.Date(2026, 8, 1, 12, 30, 0, 0, time.UTC),
-		PricingProviders: 2, PricingModels: 26, Revoker: revoker,
+		PricingLoadedAt:           time.Date(2026, 8, 1, 12, 30, 0, 0, time.UTC),
+		PricingOldestVerified:     time.Date(2026, 8, 6, 0, 0, 0, 0, time.UTC),
+		PricingVerificationMaxAge: 100 * 365 * 24 * time.Hour,
+		PricingProviders:          2, PricingModels: 26, Revoker: revoker,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -291,6 +293,7 @@ func TestDashboardExplainsBuildAndPriceBookFreshness(t *testing.T) {
 		"Build v-test",
 		"Price book abcdef01 · rates through 31 Jul 2026",
 		"Loaded 1 Aug 2026 12:30 UTC · 2 providers · 26 price entries",
+		"Pricing verified 6 Aug 2026",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard header is missing %q", want)
@@ -298,6 +301,22 @@ func TestDashboardExplainsBuildAndPriceBookFreshness(t *testing.T) {
 	}
 	if got := dashboardBuildLabel("dev"); got != "Local development build" {
 		t.Errorf("development build label = %q", got)
+	}
+}
+
+func TestPriceBookFreshnessWarnsWhenEvidenceIsOldOrMissing(t *testing.T) {
+	now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	label, detail, class := priceBookFreshness(time.Date(2026, 8, 6, 0, 0, 0, 0, time.UTC), 0, 0, now, 45*24*time.Hour)
+	if label != "Pricing verification stale" || !strings.Contains(detail, "pricing verify") || class != "freshness-warning" {
+		t.Fatalf("stale presentation = %q, %q, %q", label, detail, class)
+	}
+	label, detail, class = priceBookFreshness(time.Time{}, 3, 0, now, 45*24*time.Hour)
+	if label != "Pricing verification incomplete" || !strings.Contains(detail, "3 active price entries") || class != "freshness-warning" {
+		t.Fatalf("missing presentation = %q, %q, %q", label, detail, class)
+	}
+	label, detail, class = priceBookFreshness(time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC), 0, 1, now, 45*24*time.Hour)
+	if label != "Pricing verification invalid" || !strings.Contains(detail, "future vendor-review date") || class != "freshness-warning" {
+		t.Fatalf("future presentation = %q, %q, %q", label, detail, class)
 	}
 }
 

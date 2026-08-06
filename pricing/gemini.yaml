@@ -1,7 +1,8 @@
-# Gemini Developer API paid-tier standard text-token prices checked 2026-07-31.
+# Gemini Developer API paid-tier standard text-token prices checked 2026-08-06.
 # Batch, Flex, Priority, audio, cache storage and grounding charges are separate.
 version: 2
 effective: 2026-07-31
+verified: 2026-08-06
 providers:
   gemini:
     source: https://ai.google.dev/gemini-api/docs/pricing

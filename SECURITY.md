@@ -20,7 +20,7 @@ implementation.
 
 | Version | Supported |
 |---|---|
-| `v0.2.0-beta.1` / matching digest-pinned image | Yes |
+| `v0.2.0-beta.2` / matching digest-pinned image | Yes |
 | Current `main` / matching `sha-...` image | Yes |
 | `edge` image | Yes, but mutable |
 | `v0.1.0-alpha.1` | No |

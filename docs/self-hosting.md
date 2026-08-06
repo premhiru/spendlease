@@ -15,7 +15,7 @@ The container registry publishes three useful kinds of tag:
 - `edge` follows `main` and may change at any time.
 - `sha-<commit>` identifies one immutable build.
 - Version tags are created for GitHub releases. Container tag
-  `0.2.0-beta.1` corresponds to the current `v0.2.0-beta.1` release.
+  `0.2.0-beta.2` corresponds to the current `v0.2.0-beta.2` release.
 
 For the current beta, deploy the digest from the release's
 `container-image.txt`. Use `edge` only to evaluate unreleased `main`, then pin
@@ -31,11 +31,11 @@ remain available even when a registry is temporarily unavailable.
 Verify a downloaded binary before running it:
 
 ```bash
-sha256sum -c spendlease_v0.2.0-beta.1_linux_amd64.sha256
-gh attestation verify spendlease_v0.2.0-beta.1_linux_amd64 \
+sha256sum -c spendlease_v0.2.0-beta.2_linux_amd64.sha256
+gh attestation verify spendlease_v0.2.0-beta.2_linux_amd64 \
   --repo premhiru/spendlease \
   --signer-workflow premhiru/spendlease/.github/workflows/release.yml \
-  --source-ref refs/tags/v0.2.0-beta.1
+  --source-ref refs/tags/v0.2.0-beta.2
 ```
 
 The second command verifies signed SLSA provenance through GitHub. To verify
@@ -52,7 +52,7 @@ gh attestation verify \
   oci://ghcr.io/premhiru/spendlease@sha256:... \
   --repo premhiru/spendlease \
   --signer-workflow premhiru/spendlease/.github/workflows/release.yml \
-  --source-ref refs/tags/v0.2.0-beta.1
+  --source-ref refs/tags/v0.2.0-beta.2
 ```
 
 ## Run the container
@@ -67,7 +67,7 @@ Load the immutable image reference published with the beta:
 
 ```bash
 SPENDLEASE_IMAGE=$(curl -fsSL \
-  https://github.com/premhiru/spendlease/releases/download/v0.2.0-beta.1/container-image.txt)
+  https://github.com/premhiru/spendlease/releases/download/v0.2.0-beta.2/container-image.txt)
 ```
 
 Generate a master key and store the output in a secret manager:
@@ -384,7 +384,7 @@ spendlease ledger export --store /var/lib/spendlease/spendlease.db \
 ## Upgrades
 
 Deployments moving from the public alpha should follow the dedicated
-[`v0.2.0-beta.1` upgrade guide](upgrading-to-beta.md).
+[`v0.2.0-beta.2` upgrade guide](upgrading-to-beta.md).
 
 Before replacing a binary or container:
 

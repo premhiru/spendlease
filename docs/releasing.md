@@ -53,12 +53,12 @@ when either value is not exactly `true`.
    `sdk/python/src/spendlease/__init__.py`.
 2. Update the TypeScript version in `sdk/typescript/package.json` and its lock
    file.
-3. Use equivalent PEP 440 and SemVer versions. For example, Python `0.2.0b1`
-   matches npm `0.2.0-beta.1` and Git tag `v0.2.0-beta.1`.
+3. Use equivalent PEP 440 and SemVer versions. For example, Python `0.2.0b2`
+   matches npm `0.2.0-beta.2` and Git tag `v0.2.0-beta.2`.
 4. Add the version and user-visible changes to `CHANGELOG.md`, then run:
 
    ```bash
-   python scripts/release_preflight.py --tag v0.2.0-beta.1
+   python scripts/release_preflight.py --tag v0.2.0-beta.2
    ```
 
 5. Run the full checks documented in `CONTRIBUTING.md` and merge through the

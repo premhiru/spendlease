@@ -1,16 +1,15 @@
 # Getting started
 
-This guide uses `v0.2.0-beta.1` to store an OpenAI key, create a budgeted run,
+This guide uses `v0.2.0-beta.2` to store an OpenAI key, create a budgeted run,
 issue a lease, and make one request through the gateway. Anthropic uses the
 same flow with a different provider name and base URL.
 
 > [!NOTE]
-> `spendlease` is pre-v1. `v0.2.0-beta.1` is the current beta. Pin its verified
+> `spendlease` is pre-v1. `v0.2.0-beta.2` is the current beta. Pin its verified
 > binary or the immutable container digest from `container-image.txt` while
 > evaluating it; use `edge` only when you deliberately want unreleased `main`.
-> The tagged beta uses the behavior now named `best-effort`. Current `main`
-> and `edge` default to strict enforcement, so the examples below include an
-> explicit output limit and work with both versions.
+> The beta, current `main`, and `edge` default to strict enforcement, so the
+> examples below include the required explicit output limit.
 
 ## Prerequisites
 
@@ -20,7 +19,7 @@ same flow with a different provider name and base URL.
 ## Install
 
 Download the binary for your platform and its `.sha256` file from the
-[`v0.2.0-beta.1` release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1),
+[`v0.2.0-beta.2` release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.2),
 verify the checksum, and place `spendlease` (or `spendlease.exe`) on your
 `PATH`.
 
@@ -167,7 +166,7 @@ second terminal for the next step. The dashboard is available at the same URL.
 Install the thin spendlease helper and the official OpenAI client:
 
 ```bash
-python -m pip install 'spendlease==0.2.0b1' openai
+python -m pip install 'spendlease==0.2.0b2' openai
 ```
 
 The relevant application code is:

@@ -132,6 +132,11 @@ func TestDashboardCreatesAgentRunAndOneTimeLease(t *testing.T) {
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", got)
 	}
+	for _, want := range []string{"Make the first request", "SPENDLEASE_LEASE_TOKEN", "Python", "JavaScript", "curl"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("onboarding response is missing %q", want)
+		}
+	}
 
 	principals, err := h.store.ListPrincipals(context.Background())
 	if err != nil || len(principals) != 1 {

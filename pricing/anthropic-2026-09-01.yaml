@@ -16,6 +16,7 @@
 
 version: 2
 effective: 2026-09-01
+verified: 2026-08-06
 
 providers:
   anthropic:

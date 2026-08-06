@@ -35,6 +35,14 @@ import (
 // need to be rewritten.
 const SupportedVersion = 2
 
+// DefaultVerificationMaxAge is the age at which a price entry needs another
+// comparison with its vendor source. It is shared by the CLI, dashboard, and
+// scheduled repository check so operators see one consistent policy.
+const (
+	DefaultVerificationMaxAgeDays = 45
+	DefaultVerificationMaxAge     = DefaultVerificationMaxAgeDays * 24 * time.Hour
+)
+
 // Errors returned by this package.
 var (
 	// ErrNoPrices means the price book contained no usable files.
@@ -127,6 +135,11 @@ type File struct {
 	// Effective is the date these prices take effect. Prices are never
 	// overwritten; a change is a new file with a later effective date.
 	Effective time.Time `yaml:"effective"`
+	// Verified is the date a maintainer last compared every model in this file
+	// with the linked vendor source. It is deliberately separate from Effective:
+	// a future scheduled rate can be verified before it takes effect, and an
+	// unchanged rate still needs periodic review.
+	Verified time.Time `yaml:"verified"`
 	// Providers maps a provider name to its models.
 	Providers map[string]Provider `yaml:"providers"`
 
@@ -139,11 +152,14 @@ type File struct {
 
 // Metadata identifies the active price-book snapshot for operators.
 type Metadata struct {
-	Revision        string
-	LoadedAt        time.Time
-	LatestEffective time.Time
-	Providers       int
-	Models          int
+	Revision             string
+	LoadedAt             time.Time
+	LatestEffective      time.Time
+	OldestVerified       time.Time
+	UnverifiedModels     int
+	FutureVerifiedModels int
+	Providers            int
+	Models               int
 }
 
 // Price is a resolved price for one model at one moment.
@@ -169,6 +185,9 @@ type Price struct {
 	DefaultMaxTokens int64
 	// Effective is the date this price took effect.
 	Effective time.Time
+	// Verified is when this exact entry was last checked against Source. A zero
+	// value means the book predates verification metadata and must be reviewed.
+	Verified time.Time
 	// Source is the vendor pricing page this came from.
 	Source string
 	// Estimated is true when this price did not come from the book and a
@@ -453,6 +472,7 @@ func price(provider, model string, m Model, f File, source string) Price {
 		Free:                 m.Free,
 		DefaultMaxTokens:     m.DefaultMaxTokens,
 		Effective:            f.Effective,
+		Verified:             f.Verified,
 		Source:               source,
 	}
 }
@@ -567,6 +587,21 @@ func (b *Book) Providers() []string {
 	return out
 }
 
+// Entries returns the active canonical model entries at the supplied instant,
+// sorted by provider and model. Aliases resolve through LookupKnown but are not
+// counted as separate prices.
+func (b *Book) Entries(at time.Time) []Price {
+	var out []Price
+	for _, provider := range b.Providers() {
+		for _, model := range b.Models(provider, at) {
+			if p, known := b.LookupKnown(provider, model, at); known {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
 // LoadedAt reports when the current snapshot was read, for the dashboard and
 // for confirming a hot reload actually happened.
 func (b *Book) LoadedAt() time.Time {
@@ -611,8 +646,18 @@ func (b *Book) Metadata(at time.Time) Metadata {
 			metadata.LatestEffective = file.Effective
 		}
 	}
-	for _, models := range active {
-		metadata.Models += len(models)
+	for _, entry := range b.Entries(at) {
+		metadata.Models++
+		if entry.Verified.IsZero() {
+			metadata.UnverifiedModels++
+			continue
+		}
+		if entry.Verified.After(at) {
+			metadata.FutureVerifiedModels++
+		}
+		if metadata.OldestVerified.IsZero() || entry.Verified.Before(metadata.OldestVerified) {
+			metadata.OldestVerified = entry.Verified
+		}
 	}
 	return metadata
 }

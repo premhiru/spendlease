@@ -39,3 +39,5 @@ and references for current behavior.
 | [0026](0026-strict-enforcement-requires-request-bounds.md) | Strict enforcement requires request bounds | Accepted; clarifies 0008 and 0014 |
 | [0027](0027-explicit-pricing-modifiers-fail-closed.md) | Explicit pricing modifiers fail closed | Accepted; extends 0026 |
 | [0028](0028-provider-certification-is-evidence-based.md) | Provider certification is evidence-based | Accepted; extends 0006 and 0024 |
+| [0029](0029-pricing-freshness-is-explicit-evidence.md) | Pricing freshness is explicit evidence | Accepted; extends 0009 |
+| [0030](0030-one-time-leases-include-runnable-examples.md) | One-time leases include runnable examples | Accepted; extends 0025 and 0026 |

@@ -84,9 +84,48 @@
     <div><strong>{{ .Label }}</strong><code>{{ .Endpoint }}</code>{{ if not .Configured }}<span class="status warning">provider key needed</span>{{ end }}</div>
     {{ end }}
   </div>
-  <p class="section-hint">Use the lease as the vendor SDK API key. Use the provider URL above as its base URL.</p>
+  {{ template "provider-examples" .Examples }}
 </div>
 {{ end }}
+{{ end }}
+
+{{ define "provider-examples" }}
+<section class="provider-examples" aria-label="First request examples">
+  <div class="example-intro">
+    <h4>Make the first request</h4>
+    <p>Copy the environment values once, then choose the example for your client.</p>
+  </div>
+  {{ range . }}
+  <details class="provider-example"{{ if .Primary }} open{{ end }}>
+    <summary>
+      <span>{{ .Label }} · <code>{{ .Model }}</code></span>
+      {{ if not .Configured }}<span class="status warning">provider key needed</span>{{ end }}
+    </summary>
+    <div class="example-grid">
+      <article class="code-example">
+        <div><strong>Environment</strong><button type="button" data-copy-target="{{ .IDPrefix }}-env">Copy</button></div>
+        <pre><code id="{{ .IDPrefix }}-env">{{ .Environment }}</code></pre>
+      </article>
+      <article class="code-example">
+        <div><strong>Install</strong><button type="button" data-copy-target="{{ .IDPrefix }}-install">Copy</button></div>
+        <pre><code id="{{ .IDPrefix }}-install">{{ .Install }}</code></pre>
+      </article>
+      <article class="code-example">
+        <div><strong>Python</strong><button type="button" data-copy-target="{{ .IDPrefix }}-python">Copy</button></div>
+        <pre><code id="{{ .IDPrefix }}-python">{{ .Python }}</code></pre>
+      </article>
+      <article class="code-example">
+        <div><strong>JavaScript</strong><button type="button" data-copy-target="{{ .IDPrefix }}-javascript">Copy</button></div>
+        <pre><code id="{{ .IDPrefix }}-javascript">{{ .JavaScript }}</code></pre>
+      </article>
+      <article class="code-example wide">
+        <div><strong>curl</strong><button type="button" data-copy-target="{{ .IDPrefix }}-curl">Copy</button></div>
+        <pre><code id="{{ .IDPrefix }}-curl">{{ .Curl }}</code></pre>
+      </article>
+    </div>
+  </details>
+  {{ end }}
+</section>
 {{ end }}
 
 {{ define "provider-settings" }}
@@ -170,6 +209,7 @@
       <div><strong>{{ .Label }}</strong><code>{{ .Endpoint }}</code>{{ if not .Configured }}<span class="status warning">provider key needed</span>{{ end }}</div>
       {{ end }}
     </div>
+    {{ template "provider-examples" .Issued.Examples }}
   </div>
   {{ end }}
 

@@ -1,9 +1,10 @@
-# Anthropic standard first-party token prices checked 2026-07-31. The input
+# Anthropic standard first-party token prices checked 2026-08-06. The input
 # categories match the usage object: uncached input, 5m/1h cache creation,
 # cache reads, and output. Non-token tool fees and regional/speed multipliers
 # are not part of token accounting.
 version: 2
 effective: 2026-07-31
+verified: 2026-08-06
 providers:
   anthropic:
     source: https://platform.claude.com/docs/en/about-claude/pricing

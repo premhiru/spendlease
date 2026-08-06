@@ -1,0 +1,77 @@
+name: Pricing freshness
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      max_age_days:
+        description: Maximum vendor-verification age in days
+        required: false
+        default: "45"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pricing-freshness
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify price-book evidence
+    runs-on: ubuntu-latest
+    env:
+      MAX_AGE_DAYS: ${{ inputs.max_age_days || '45' }}
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_TITLE: Price book verification is stale
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check price-book structure and freshness
+        id: freshness
+        continue-on-error: true
+        run: go run ./cmd/spendlease pricing verify --max-age "${MAX_AGE_DAYS}d" --json > pricing-verification.json
+
+      - name: Open or refresh the stale-pricing issue
+        if: steps.freshness.outcome == 'failure'
+        run: |
+          {
+            echo 'The scheduled price-book check found active entries whose vendor verification is missing or older than the configured threshold.'
+            echo
+            echo "Maximum age: ${MAX_AGE_DAYS} days"
+            echo
+            echo '```json'
+            cat pricing-verification.json
+            echo '```'
+            echo
+            echo 'Compare the affected entries with their linked official sources, update each YAML `verified` date, and run `spendlease pricing verify` before closing this issue.'
+            echo
+            echo "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > issue-body.md
+
+          issue=$(gh issue list --state open --limit 100 --json number,title --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" | head -n1)
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --body-file issue-body.md
+          else
+            gh issue create --title "$ISSUE_TITLE" --body-file issue-body.md
+          fi
+
+      - name: Close a resolved stale-pricing issue
+        if: steps.freshness.outcome == 'success'
+        run: |
+          issue=$(gh issue list --state open --limit 100 --json number,title --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" | head -n1)
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "The scheduled verification now passes with a maximum age of ${MAX_AGE_DAYS} days. Closing automatically."
+            gh issue close "$issue" --reason completed
+          fi
+
+      - name: Fail when pricing evidence is stale
+        if: steps.freshness.outcome == 'failure'
+        run: exit 1

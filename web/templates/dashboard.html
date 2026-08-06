@@ -30,6 +30,7 @@
 	  {{ if .OperatorLabel }}<div>{{ .OperatorLabel }}</div>{{ end }}
       <div>{{ .BuildLabel }}</div>
       <div title="{{ .PricingDetail }}">{{ .PricingLabel }}</div>
+	  <div class="{{ .PricingFreshnessClass }}" title="{{ .PricingFreshnessDetail }}">{{ .PricingFreshnessLabel }}</div>
 	  <div>{{ .EnforcementLabel }} enforcement</div>
     </div>
   </header>

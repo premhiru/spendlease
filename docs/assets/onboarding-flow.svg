@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="230" viewBox="0 0 960 230" role="img" aria-labelledby="title desc">
+  <title id="title">Spendlease agent onboarding flow</title>
+  <desc id="desc">Four steps: add an agent, copy its one-time lease, make a provider request, and see an over-budget request blocked.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect width="960" height="230" rx="18" fill="url(#bg)"/>
+  <text x="30" y="35" fill="#e2e8f0" font-family="system-ui, sans-serif" font-size="18" font-weight="700">From agent to enforced request in four steps</text>
+
+  <g font-family="system-ui, sans-serif">
+    <g transform="translate(30 62)">
+      <rect width="190" height="125" rx="12" fill="#111a2b" stroke="#334155"/>
+      <circle cx="28" cy="29" r="16" fill="#2563eb"/>
+      <text x="28" y="35" text-anchor="middle" fill="white" font-size="16" font-weight="700">1</text>
+      <text x="52" y="34" fill="#f8fafc" font-size="16" font-weight="700">Add agent</text>
+      <text x="18" y="70" fill="#94a3b8" font-size="13">Choose provider, budget,</text>
+      <text x="18" y="90" fill="#94a3b8" font-size="13">mode, and lease lifetime.</text>
+      <rect x="18" y="103" width="154" height="8" rx="4" fill="#1e3a8a"/>
+    </g>
+    <g transform="translate(267 62)">
+      <rect width="190" height="125" rx="12" fill="#111a2b" stroke="#334155"/>
+      <circle cx="28" cy="29" r="16" fill="#7c3aed"/>
+      <text x="28" y="35" text-anchor="middle" fill="white" font-size="16" font-weight="700">2</text>
+      <text x="52" y="34" fill="#f8fafc" font-size="16" font-weight="700">Copy lease</text>
+      <text x="18" y="70" fill="#94a3b8" font-size="13">Copy the one-time token</text>
+      <text x="18" y="90" fill="#94a3b8" font-size="13">and ready-made example.</text>
+      <rect x="18" y="103" width="116" height="8" rx="4" fill="#4c1d95"/>
+      <rect x="140" y="100" width="32" height="14" rx="5" fill="#7c3aed"/>
+    </g>
+    <g transform="translate(504 62)">
+      <rect width="190" height="125" rx="12" fill="#111a2b" stroke="#334155"/>
+      <circle cx="28" cy="29" r="16" fill="#0891b2"/>
+      <text x="28" y="35" text-anchor="middle" fill="white" font-size="16" font-weight="700">3</text>
+      <text x="52" y="34" fill="#f8fafc" font-size="16" font-weight="700">Make request</text>
+      <text x="18" y="70" fill="#94a3b8" font-size="13">The vendor SDK sends the</text>
+      <text x="18" y="90" fill="#94a3b8" font-size="13">lease through Spendlease.</text>
+      <path d="M20 108 H168" stroke="#155e75" stroke-width="7" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(741 62)">
+      <rect width="190" height="125" rx="12" fill="#111a2b" stroke="#334155"/>
+      <circle cx="28" cy="29" r="16" fill="#dc2626"/>
+      <text x="28" y="35" text-anchor="middle" fill="white" font-size="16" font-weight="700">4</text>
+      <text x="52" y="34" fill="#f8fafc" font-size="16" font-weight="700">Budget blocks</text>
+      <text x="18" y="70" fill="#94a3b8" font-size="13">An over-budget call stops</text>
+      <text x="18" y="90" fill="#94a3b8" font-size="13">before reaching the vendor.</text>
+      <rect x="18" y="102" width="154" height="12" rx="6" fill="#7f1d1d"/>
+      <path d="M87 102 L103 114 M103 102 L87 114" stroke="#fecaca" stroke-width="3"/>
+    </g>
+  </g>
+
+  <path d="M224 124 H259 M461 124 H496 M698 124 H733" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <circle r="5" fill="#f8fafc">
+    <animateMotion dur="6s" repeatCount="indefinite" path="M220 124 H737"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.92;1" dur="6s" repeatCount="indefinite"/>
+  </circle>
+</svg>

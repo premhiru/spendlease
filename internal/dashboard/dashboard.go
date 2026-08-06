@@ -16,6 +16,7 @@ import (
 
 	"github.com/premhiru/spendlease/internal/money"
 	"github.com/premhiru/spendlease/internal/operator"
+	"github.com/premhiru/spendlease/internal/pricing"
 	"github.com/premhiru/spendlease/internal/store"
 	"github.com/premhiru/spendlease/web"
 )
@@ -51,6 +52,14 @@ type Options struct {
 	PricingEffective time.Time
 	// PricingLoadedAt is when the running process loaded those rates.
 	PricingLoadedAt time.Time
+	// PricingOldestVerified is the oldest vendor-review date among active model
+	// entries. PricingUnverifiedModels counts entries with no review evidence.
+	PricingOldestVerified       time.Time
+	PricingUnverifiedModels     int
+	PricingFutureVerifiedModels int
+	// PricingVerificationMaxAge controls when the header warns that the active
+	// entries need review. Zero uses the default 45-day review window.
+	PricingVerificationMaxAge time.Duration
 	// PricingProviders and PricingModels add coverage context to the tooltip.
 	PricingProviders int
 	PricingModels    int
@@ -92,6 +101,9 @@ type Dashboard struct {
 	version                string
 	pricingLabel           string
 	pricingDetail          string
+	pricingFreshnessLabel  string
+	pricingFreshnessDetail string
+	pricingFreshnessClass  string
 	enforcementLabel       string
 	enforcementOptionLabel string
 	warning                string
@@ -123,6 +135,13 @@ func New(opts Options) (*Dashboard, error) {
 		enforcementLabel = "best-effort"
 		enforcementOptionLabel = "Best-effort enforcement"
 	}
+	verificationAge := opts.PricingVerificationMaxAge
+	if verificationAge <= 0 {
+		verificationAge = pricing.DefaultVerificationMaxAge
+	}
+	freshnessLabel, freshnessDetail, freshnessClass := priceBookFreshness(
+		opts.PricingOldestVerified, opts.PricingUnverifiedModels, opts.PricingFutureVerifiedModels, time.Now(), verificationAge,
+	)
 	d := &Dashboard{
 		store:                  opts.Store,
 		logger:                 opts.Logger,
@@ -132,6 +151,9 @@ func New(opts Options) (*Dashboard, error) {
 		version:                opts.Version,
 		pricingLabel:           priceBookLabel(opts.PricingRevision, opts.PricingEffective),
 		pricingDetail:          priceBookDetail(opts.PricingLoadedAt, opts.PricingProviders, opts.PricingModels),
+		pricingFreshnessLabel:  freshnessLabel,
+		pricingFreshnessDetail: freshnessDetail,
+		pricingFreshnessClass:  freshnessClass,
 		enforcementLabel:       enforcementLabel,
 		enforcementOptionLabel: enforcementOptionLabel,
 		warning:                opts.Warning,
@@ -199,6 +221,9 @@ type view struct {
 	CanCredentials         bool
 	PricingLabel           string
 	PricingDetail          string
+	PricingFreshnessLabel  string
+	PricingFreshnessDetail string
+	PricingFreshnessClass  string
 	EnforcementLabel       string
 	EnforcementOptionLabel string
 	Warning                string
@@ -328,6 +353,9 @@ func (d *Dashboard) build(r *http.Request) (view, error) {
 		BuildLabel:             dashboardBuildLabel(d.version),
 		PricingLabel:           d.pricingLabel,
 		PricingDetail:          d.pricingDetail,
+		PricingFreshnessLabel:  d.pricingFreshnessLabel,
+		PricingFreshnessDetail: d.pricingFreshnessDetail,
+		PricingFreshnessClass:  d.pricingFreshnessClass,
 		EnforcementLabel:       d.enforcementLabel,
 		EnforcementOptionLabel: d.enforcementOptionLabel,
 		Warning:                d.warning,
@@ -525,6 +553,31 @@ func priceBookDetail(loadedAt time.Time, providers, models int) string {
 		return detail
 	}
 	return fmt.Sprintf("Loaded %s · %s", loadedAt.UTC().Format("2 Jan 2006 15:04 UTC"), detail)
+}
+
+func priceBookFreshness(oldest time.Time, unverified, future int, now time.Time, maxAge time.Duration) (string, string, string) {
+	if unverified > 0 {
+		noun, verb := "entries", "have"
+		if unverified == 1 {
+			noun, verb = "entry", "has"
+		}
+		return "Pricing verification incomplete",
+			fmt.Sprintf("%d active price %s %s no vendor-review date", unverified, noun, verb),
+			"freshness-warning"
+	}
+	if future > 0 {
+		return "Pricing verification invalid",
+			fmt.Sprintf("%d active price entries have a future vendor-review date", future),
+			"freshness-warning"
+	}
+	if oldest.IsZero() {
+		return "Pricing verification unavailable", "Active price entries have no vendor-review date", "freshness-warning"
+	}
+	date := oldest.UTC().Format("2 Jan 2006")
+	if now.Sub(oldest) > maxAge {
+		return "Pricing verification stale", fmt.Sprintf("Oldest active price was checked %s; run spendlease pricing verify", date), "freshness-warning"
+	}
+	return "Pricing verified " + date, "Oldest vendor review among active price entries", "freshness-ok"
 }
 
 func principalStatus(s store.PrincipalSummary) (string, string) {

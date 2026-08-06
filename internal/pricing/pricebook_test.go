@@ -91,7 +91,14 @@ func TestShippedPricesAreSane(t *testing.T) {
 			if p.Source == "" {
 				t.Errorf("%s/%s has no source URL", provider, model)
 			}
+			if p.Verified.IsZero() {
+				t.Errorf("%s/%s has no vendor verification date", provider, model)
+			}
 		}
+	}
+	metadata := b.Metadata(now)
+	if metadata.UnverifiedModels != 0 || metadata.OldestVerified.IsZero() {
+		t.Errorf("verification metadata = %+v, want every shipped entry verified", metadata)
 	}
 }
 

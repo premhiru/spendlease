@@ -118,7 +118,10 @@ func runDemo(args []string, stdout, stderr io.Writer) error {
 	dash, err := dashboard.New(dashboard.Options{
 		Store: st, Logger: logger, Version: version,
 		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
-		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
+		PricingOldestVerified:       pricingMetadata.OldestVerified,
+		PricingUnverifiedModels:     pricingMetadata.UnverifiedModels,
+		PricingFutureVerifiedModels: pricingMetadata.FutureVerifiedModels,
+		PricingLoadedAt:             pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
 		PricingModels: pricingMetadata.Models, Guard: guard, Revoker: killSwitch,
 		Manager: st, LeaseRevoker: killSwitch, CredentialStatus: v, Providers: registry.Names(),
 	})

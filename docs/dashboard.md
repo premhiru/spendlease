@@ -12,6 +12,12 @@ detail text gives the load time, provider count, and canonical price-entry
 count. The count describes the loaded snapshot, not every model currently sold
 by every vendor and not aliases that resolve to an entry.
 
+A separate verification line shows the oldest vendor-review date among active
+entries. It is highlighted when evidence is missing or more than 45 days old.
+Use `spendlease pricing verify` for the provider-level report; freshness means
+the checked date is current, not that Spendlease scraped or inferred a vendor
+price automatically.
+
 ## Table fields
 
 Rows are sorted by recorded spend, highest first.
@@ -54,6 +60,13 @@ transaction. A failure does not leave a half-created agent. The resulting
 `sll_...` lease appears once, beside the provider base URLs. Only its hash is
 stored, so closing or refreshing the result cannot reveal it again.
 
+The same one-time response contains copy buttons for environment values,
+dependency installation, Python, JavaScript, and `curl`. Each selected
+provider gets its own model and base URL. Anthropic examples use the native
+Anthropic client and `x-api-key`; the other six use their OpenAI-compatible
+clients and bearer authentication. Every request has an explicit output
+ceiling, so it works with the default strict enforcement policy.
+
 Dashboard-created principals deliberately do not expose their long-lived
 `slk_...` compatibility key. Applications should use leases. The CLI remains
 available for a legacy integration that still requires a principal key.
@@ -77,6 +90,8 @@ run prevents every lease on that run from authorizing more spend.
 
 New lease tokens are shown once. Existing lease rows contain identifiers,
 scope, ceilings, expiry, and status, never plaintext tokens.
+Freshly issued leases include the same provider-specific copyable examples as
+the initial agent workflow.
 
 ## Mode and kill controls
 

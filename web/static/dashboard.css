@@ -66,6 +66,8 @@ header { display: flex; align-items: baseline; justify-content: space-between; g
 h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
 .subtitle { margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--muted); }
 .meta { text-align: right; font-size: 0.75rem; color: var(--faint); }
+.meta .freshness-ok { color: var(--ok-text); }
+.meta .freshness-warning { color: var(--warn-text); font-weight: 700; }
 
 .warning {
   margin-bottom: 1.5rem;
@@ -400,6 +402,18 @@ tfoot .spend { color: var(--text); }
 .endpoint-list > div { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.75rem; }
 .endpoint-list strong { min-width: 5rem; }
 .endpoint-list code { overflow-wrap: anywhere; }
+.provider-examples { display: grid; gap: 0.65rem; margin-top: 1rem; }
+.example-intro h4 { margin: 0; }
+.example-intro p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.75rem; }
+.provider-example { border: 1px solid var(--line); border-radius: 0.65rem; background: var(--panel); }
+.provider-example summary { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.75rem; cursor: pointer; font-size: 0.8125rem; }
+.example-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; padding: 0 0.75rem 0.75rem; }
+.code-example { min-width: 0; border: 1px solid var(--line); border-radius: 0.5rem; overflow: hidden; background: var(--panel); }
+.code-example.wide { grid-column: 1 / -1; }
+.code-example > div { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; background: var(--head); font-size: 0.7rem; }
+.code-example button { min-height: auto; padding: 0.25rem 0.5rem; font-size: 0.6875rem; }
+.code-example pre { margin: 0; padding: 0.65rem; overflow: auto; max-height: 17rem; font-size: 0.7rem; line-height: 1.45; }
+.code-example code { white-space: pre; }
 .provider-grid { display: grid; grid-template-columns: repeat(3, minmax(14rem, 1fr)); gap: 0.75rem; margin-top: 1rem; }
 .provider-card { border: 1px solid var(--line); border-radius: 0.375rem; padding: 0.75rem; }
 .provider-card label { display: block; margin-top: 0.75rem; }
@@ -452,7 +466,8 @@ footer a { color: inherit; }
   .event-filters { grid-template-columns: 1fr; }
   .management-form,
   .provider-grid,
-  .lease-form { grid-template-columns: 1fr; }
+  .lease-form,
+  .example-grid { grid-template-columns: 1fr; }
   .secret-row,
   .inline-create-run { flex-direction: column; align-items: stretch; }
 }

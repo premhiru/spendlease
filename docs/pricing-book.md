@@ -4,7 +4,7 @@ The price book turns reported token counts into US dollars. It lives in
 [`/pricing`](https://github.com/premhiru/spendlease/tree/main/pricing) as dated
 YAML files and contains selected models from all seven supported providers.
 
-The shipped rates were checked on 2026-07-31 against the official pricing
+The shipped rates were checked on 2026-08-06 against the official pricing
 pages for [OpenAI](https://developers.openai.com/api/docs/pricing),
 [Anthropic](https://platform.claude.com/docs/en/about-claude/pricing),
 [Kimi](https://platform.kimi.ai/),
@@ -20,6 +20,12 @@ Future-dated files do not change the active revision until their date arrives.
 Use that revision when comparing two deployments; a raw model count cannot
 identify which rates either one loaded.
 
+The dashboard separately shows the oldest vendor-verification date among the
+active entries. It turns amber when any entry has no verification date or the
+oldest check is more than 45 days old. Effective and verified dates answer
+different questions: one controls which rate is charged, while the other says
+when a maintainer last compared that entry with its linked source.
+
 > [!WARNING]
 > A spendlease budget covers only charges represented by the price book.
 > Strict enforcement blocks unknown models, missing output limits, and known
@@ -33,6 +39,7 @@ identify which rates either one loaded.
 ```yaml
 version: 2
 effective: 2026-07-31
+verified: 2026-08-06
 
 providers:
   deepseek:
@@ -49,6 +56,7 @@ providers:
 |---|---|
 | `version` | Schema version. The current schema is `2`; version `1` files remain readable for price history. |
 | `effective` | Date on which these prices take effect. Required. |
+| `verified` | Date every model in this file was last compared with `source`. Older books without it still load but fail freshness verification. |
 | `source` | Vendor pricing page used to verify the rates. Required. |
 | `input_per_1m` | Ordinary uncached input price per million tokens. |
 | `cached_input_per_1m` | Optional cache-hit price. It falls back to the ordinary input rate when omitted. |
@@ -71,6 +79,30 @@ It is not the model's output limit. Observe mode and explicitly enabled
 best-effort enforcement use it when a request does not say how much output it
 wants. Strict enforcement rejects that request instead, because a practical
 default is not a guaranteed upper bound.
+
+## Inspect and verify prices
+
+The release binary exposes the exact embedded snapshot; `--pricing DIR` can
+inspect an operator-supplied replacement instead:
+
+```bash
+spendlease pricing list
+spendlease pricing list --provider gemini --json
+spendlease pricing show openai/gpt-5.4-nano
+spendlease pricing verify --max-age 45d
+```
+
+`list` shows canonical entries rather than aliases. `show` includes every
+applicable cache and long-context rate, the source, effective date, and
+verification date. `verify` first loads the whole book—so malformed files and
+invalid rates fail—then returns a non-zero exit when an active entry is
+unverified or older than the chosen window. It does not scrape vendor sites or
+claim that an automated comparison occurred.
+
+The repository runs that command every Monday. A stale result opens or updates
+one GitHub issue containing the JSON report; a later passing run closes the
+same issue. No vendor credential is needed and the workflow makes no billable
+API calls.
 
 ## Superseding a price
 
@@ -190,8 +222,10 @@ does not make it safe to reserve before egress.
 1. Add a dated YAML file containing only the models whose rates changed. Do
    not rewrite an older effective rate.
 2. Use the date the price takes effect, not the date of the pull request.
-3. Link the official vendor pricing page in the pull-request description.
-4. Run `make test`. The loader validates the schema, source, model fields, and
+3. Set `verified` to the date every entry in that file was compared with the
+   linked official source.
+4. Link the official vendor pricing page in the pull-request description.
+5. Run `spendlease pricing verify` and `make test`. The loader validates the schema, source, model fields, and
    units before a book can be used.
 
 See [CONTRIBUTING](https://github.com/premhiru/spendlease/blob/main/CONTRIBUTING.md#price-book-updates).

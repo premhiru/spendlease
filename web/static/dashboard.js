@@ -14,6 +14,25 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const snippetButton = event.target.closest("[data-copy-target]");
+  if (snippetButton) {
+    const target = document.getElementById(snippetButton.dataset.copyTarget);
+    if (!target) return;
+    const value = target.value || target.textContent;
+    try {
+      await navigator.clipboard.writeText(value);
+      snippetButton.textContent = "Copied";
+    } catch (_) {
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      snippetButton.textContent = "Press Ctrl+C";
+    }
+    return;
+  }
+
   const closeButton = event.target.closest("[data-close-access]");
   if (closeButton) {
     const workspace = closeButton.closest("#agent-access");
