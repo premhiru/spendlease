@@ -8,6 +8,9 @@ same flow with a different provider name and base URL.
 > `spendlease` is pre-v1. `v0.2.0-beta.1` is the current beta. Pin its verified
 > binary or the immutable container digest from `container-image.txt` while
 > evaluating it; use `edge` only when you deliberately want unreleased `main`.
+> The tagged beta uses the behavior now named `best-effort`. Current `main`
+> and `edge` default to strict enforcement, so the examples below include an
+> explicit output limit and work with both versions.
 
 ## Prerequisites
 
@@ -194,6 +197,7 @@ client = OpenAI(
 
 response = client.chat.completions.create(
     model="gpt-5.4-mini",
+    max_completion_tokens=512,
     messages=[{"role": "user", "content": "hello"}],
 )
 print(response.choices[0].message.content)
@@ -213,7 +217,7 @@ URL and credential name for each one.
 curl http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $SPENDLEASE_LEASE_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model":"gpt-5.4-mini","max_completion_tokens":512,"messages":[{"role":"user","content":"hello"}]}'
 ```
 
 ## 6. Turn on enforcement
@@ -226,8 +230,13 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 ```
 
 Requests whose reservation does not fit the run budget now return
-`402 budget_exceeded` without reaching the vendor. To revoke every active
-lease for this principal:
+`402 budget_exceeded` without reaching the vendor.
+
+On current `main` and `edge`, strict enforcement is the server default. It also returns `422
+spend_not_enforceable` for an unknown model or a request without an explicit
+output-token limit. Keep the limit in the example above when you enable it.
+
+To revoke every active lease for this principal:
 
 ```bash
 spendlease keys revoke --all --principal checkout-agent
@@ -258,6 +267,13 @@ The request's upper-bound reservation does not fit the run or one of its
 budgeted ancestors. Reduce the request's output limit, create a run with a
 larger budget, or temporarily return the principal to `observe` while checking
 the estimate.
+
+### `422 spend_not_enforceable`
+
+Strict enforcement could not establish a trustworthy upper bound. Check that
+the model appears in the active price book and set the endpoint's explicit
+output-token limit. Use `--enforcement-policy=best-effort` only when a fallback
+estimate is acceptable.
 
 ### `503 provider_credential_missing`
 

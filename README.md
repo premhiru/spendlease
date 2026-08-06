@@ -24,6 +24,10 @@ notices the vendor bill.
 > for end-to-end evaluation, not an unqualified production rollout. Pin the
 > versioned container or the digest in the release's `container-image.txt`
 > rather than deploying the mutable `edge` image.
+>
+> Current `main` and `:edge` default to strict enforcement. The tagged
+> `v0.2.0-beta.1` binary predates that change and uses the behavior now named
+> `best-effort`. The next beta will carry the strict default.
 
 The demo starts a temporary gateway, a mock provider, and three simulated
 agents. It does not need a vendor key and deletes its in-memory state when it
@@ -122,7 +126,10 @@ PowerShell uses `$env:SPENDLEASE_LEASE_TOKEN = "sll_..."` and
 the first command is a long-lived bootstrap credential; applications should
 use the lease token printed by `keys lease issue`.
 
-Every new principal starts in **observe mode**: everything passes through, nothing is blocked, all of it is recorded. Flip to enforcement when you trust the numbers, with one API call or one toggle in the dashboard.
+Every new principal starts in **observe mode**: everything passes through,
+nothing is blocked, and supported token spend is recorded. Flip to enforcement
+when you trust the numbers. The default `strict` policy only forwards requests
+whose model price and output ceiling are known.
 
 ```bash
 spendlease keys principal set-mode --name checkout-agent --mode enforce
@@ -130,7 +137,7 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 
 ## What it does
 
-- **Enforces a price-book budget before egress.** Token cost is reserved against a run at request time and settled from reported usage. A reservation that does not fit returns a `402` naming the limiting run and shortfall.
+- **Enforces a price-book budget before egress.** Strict enforcement requires a priced model and an explicit output ceiling, reserves that bound against the run, and settles reported usage. A reservation that does not fit returns a `402` naming the limiting run and shortfall.
 - **Holds your vendor credentials.** AES-256-GCM at rest, keyed by `SPENDLEASE_MASTER_KEY`. The gateway swaps the lease token for the real key at egress.
 - **Attributes recorded token cost.** Every ledger entry names its principal, run, provider, and model. Child runs draw from their own budget and every budgeted ancestor.
 - **Rejects revoked leases on the next request.** `POST /admin/principals/{id}/revoke` invalidates every lease for that principal against an in-memory revocation set. `spendlease keys revoke --all` provides the same control from the CLI.
@@ -160,7 +167,7 @@ flowchart LR
 
     subgraph SL ["spendlease"]
         direction TB
-        G["Gateway"] --> P["Policy<br/>observe / enforce"]
+        G["Gateway"] --> P["Policy<br/>observe / strict / best-effort"]
         P --> R["Reserve<br/>estimate + hold"]
         R --> V["Vault<br/>AES-256-GCM"]
         V --> S["Settle<br/>actual usage"]
@@ -181,10 +188,12 @@ difference. [Reserve and
 settle](docs/reserve-and-settle.md) explains the calculation and the behavior
 on disconnects and provider errors.
 
-Enforce mode only forwards routes and request features whose billing model it
-can bound. Media, provider-hosted tools, batches, oversized bodies, and other
-unreviewed spend return `422 spend_not_enforceable`; observe mode forwards
-them with `X-Spendlease-Accounting: unmetered` and a warning.
+Strict enforcement adds fail-closed checks for unknown models, missing output
+limits, media, provider-hosted tools, batches, oversized bodies, and other
+recognized unreviewed spend. Those requests return `422
+spend_not_enforceable`; observe mode forwards them with a visible warning.
+Operators who accept model and output-limit estimates can opt in with
+`spendlease serve --enforcement-policy=best-effort`.
 
 > [!IMPORTANT]
 > For OpenAI-compatible streaming endpoints, `spendlease` injects `stream_options: {include_usage: true}` when you have not set it, so it can read actual token counts. The extra usage chunk that produces is withheld from the stream you receive, so what you read is byte-identical to what you would have read without spendlease in the path.
@@ -220,8 +229,9 @@ providers:
         default_max_tokens: 4096
 ```
 
-Unknown models never silently cost zero. They log a warning, apply a
-conservative built-in fallback rate, and mark the ledger entry `estimated: true`.
+Unknown models never silently cost zero. Strict enforcement rejects them
+before egress. Observe and explicitly enabled best-effort enforcement apply a
+fallback rate, log a warning, and mark the ledger entry `estimated: true`.
 
 Vendor prices change often. Price book updates are plain YAML and are a useful
 first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).

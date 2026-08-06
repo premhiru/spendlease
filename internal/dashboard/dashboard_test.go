@@ -471,6 +471,35 @@ func TestModeToggle(t *testing.T) {
 	}
 }
 
+func TestDashboardNamesRuntimeEnforcementPolicy(t *testing.T) {
+	t.Parallel()
+
+	for _, policy := range []string{"strict", "best-effort"} {
+		t.Run(policy, func(t *testing.T) {
+			t.Parallel()
+			st := &fakeStore{summaries: []store.PrincipalSummary{
+				principal("prn_a", "agent", store.ModeEnforce, "1.00", 1, 1, 0, 0),
+			}}
+			d, err := New(Options{
+				Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+				EnforcementPolicy: policy,
+			})
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			mux := http.NewServeMux()
+			d.Routes(mux)
+			body := get(t, mux, "/").Body.String()
+			if !strings.Contains(body, policy+" enforcement") {
+				t.Errorf("dashboard does not name %s policy", policy)
+			}
+			if strings.Contains(body, ">enforce</") {
+				t.Error("dashboard exposes the ambiguous persisted mode instead of the runtime policy")
+			}
+		})
+	}
+}
+
 // TestAgentNamesAreEscaped guards against a principal name becoming script.
 //
 // Names are chosen by whoever creates the principal, which in a multi-user

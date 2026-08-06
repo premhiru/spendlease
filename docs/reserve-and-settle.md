@@ -17,7 +17,7 @@ model, principal and run, then calculates:
 
 ```text
 input_tokens  = inspected request bytes + provider-framing safety allowance
-output_tokens = request output ceiling, or the model's configured default
+output_tokens = explicit request output ceiling
 reserved      = input cost + maximum output cost
 ```
 
@@ -26,10 +26,11 @@ vendor-reported token counts, so over-reserving does not increase the recorded
 charge. Embeddings reserve input only. The gateway understands
 `max_tokens`, `max_completion_tokens`, and `max_output_tokens`.
 
-A missing `max_tokens` never means infinity. The active price-book entry
-supplies `default_max_tokens`; an unknown model uses the built-in fallback
-rates and fallback output ceiling. Unknown models are marked estimated in the
-ledger and produce a warning, but they never cost zero.
+Strict enforcement requires an explicit output ceiling and a model in the
+active price book. Missing limits and unknown models return `422
+spend_not_enforceable` before egress. Observe mode and explicitly enabled
+best-effort enforcement use `default_max_tokens` and the built-in unknown-model
+fallback; those ledger entries are marked estimated where appropriate.
 
 The default reservation TTL is 15 minutes. The `--reservation-ttl` flag
 changes it. A background sweep, every 30 seconds by default, expires abandoned
@@ -62,8 +63,10 @@ requests.
   budget is logged as `would_block`, which lets an operator validate prices
   before putting the gateway in the blocking path.
 - `enforce` inserts the reservation only when every applicable budget can
-  cover it. Otherwise the vendor is never contacted and the client receives
-  `402 Payment Required`.
+  cover it. Under the default `strict` policy it also requires a price-book
+  model and explicit output ceiling. Otherwise the vendor is never contacted.
+- `--enforcement-policy=best-effort` keeps budget blocking but permits the
+  documented model-rate and output-ceiling estimates.
 
 If a request cannot be inspected or has an unsupported billing dimension,
 enforce mode returns `422 spend_not_enforceable` before egress. Observe mode

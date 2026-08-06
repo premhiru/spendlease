@@ -54,6 +54,10 @@ type Options struct {
 	// PricingProviders and PricingModels add coverage context to the tooltip.
 	PricingProviders int
 	PricingModels    int
+	// EnforcementPolicy is the runtime behavior used by principals whose
+	// persisted mode is enforce. It is rendered explicitly so operators can
+	// distinguish strict bounds from best-effort estimates.
+	EnforcementPolicy string
 	// Warning, if set, is displayed above the table. It carries the reason a
 	// deployment is not production-ready rather than leaving it implicit.
 	Warning string
@@ -80,22 +84,24 @@ type Options struct {
 
 // Dashboard serves the spend table.
 type Dashboard struct {
-	store            SummaryStore
-	logger           *slog.Logger
-	tmpl             *template.Template
-	static           http.Handler
-	guard            Guard
-	version          string
-	pricingLabel     string
-	pricingDetail    string
-	warning          string
-	revoker          PrincipalRevoker
-	manager          AgentManager
-	leaseRevoker     LeaseRevoker
-	credentials      ProviderCredentials
-	credentialStatus ProviderStatusSource
-	providers        []string
-	providerSet      map[string]struct{}
+	store                  SummaryStore
+	logger                 *slog.Logger
+	tmpl                   *template.Template
+	static                 http.Handler
+	guard                  Guard
+	version                string
+	pricingLabel           string
+	pricingDetail          string
+	enforcementLabel       string
+	enforcementOptionLabel string
+	warning                string
+	revoker                PrincipalRevoker
+	manager                AgentManager
+	leaseRevoker           LeaseRevoker
+	credentials            ProviderCredentials
+	credentialStatus       ProviderStatusSource
+	providers              []string
+	providerSet            map[string]struct{}
 }
 
 // New parses the templates and returns a dashboard.
@@ -111,23 +117,31 @@ func New(opts Options) (*Dashboard, error) {
 	if credentialStatus == nil {
 		credentialStatus, _ = opts.Credentials.(ProviderStatusSource)
 	}
+	enforcementLabel := "strict"
+	enforcementOptionLabel := "Strict enforcement"
+	if strings.EqualFold(strings.TrimSpace(opts.EnforcementPolicy), "best-effort") {
+		enforcementLabel = "best-effort"
+		enforcementOptionLabel = "Best-effort enforcement"
+	}
 	d := &Dashboard{
-		store:            opts.Store,
-		logger:           opts.Logger,
-		tmpl:             tmpl,
-		static:           http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
-		guard:            opts.Guard,
-		version:          opts.Version,
-		pricingLabel:     priceBookLabel(opts.PricingRevision, opts.PricingEffective),
-		pricingDetail:    priceBookDetail(opts.PricingLoadedAt, opts.PricingProviders, opts.PricingModels),
-		warning:          opts.Warning,
-		revoker:          opts.Revoker,
-		manager:          opts.Manager,
-		leaseRevoker:     opts.LeaseRevoker,
-		credentials:      opts.Credentials,
-		credentialStatus: credentialStatus,
-		providers:        normalizeProviderNames(opts.Providers),
-		providerSet:      make(map[string]struct{}),
+		store:                  opts.Store,
+		logger:                 opts.Logger,
+		tmpl:                   tmpl,
+		static:                 http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))),
+		guard:                  opts.Guard,
+		version:                opts.Version,
+		pricingLabel:           priceBookLabel(opts.PricingRevision, opts.PricingEffective),
+		pricingDetail:          priceBookDetail(opts.PricingLoadedAt, opts.PricingProviders, opts.PricingModels),
+		enforcementLabel:       enforcementLabel,
+		enforcementOptionLabel: enforcementOptionLabel,
+		warning:                opts.Warning,
+		revoker:                opts.Revoker,
+		manager:                opts.Manager,
+		leaseRevoker:           opts.LeaseRevoker,
+		credentials:            opts.Credentials,
+		credentialStatus:       credentialStatus,
+		providers:              normalizeProviderNames(opts.Providers),
+		providerSet:            make(map[string]struct{}),
 	}
 	for _, name := range d.providers {
 		d.providerSet[name] = struct{}{}
@@ -176,22 +190,24 @@ func (d *Dashboard) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 // view is what the templates render.
 type view struct {
-	BuildLabel       string
-	OperatorLabel    string
-	CanAdmin         bool
-	CanOperate       bool
-	CanManage        bool
-	CanOnboard       bool
-	CanCredentials   bool
-	PricingLabel     string
-	PricingDetail    string
-	Warning          string
-	Principals       []row
-	Total            money.Nanos
-	Notice           string
-	Events           []eventRow
-	EventFilter      eventFilterView
-	ProviderSettings providerSettingsView
+	BuildLabel             string
+	OperatorLabel          string
+	CanAdmin               bool
+	CanOperate             bool
+	CanManage              bool
+	CanOnboard             bool
+	CanCredentials         bool
+	PricingLabel           string
+	PricingDetail          string
+	EnforcementLabel       string
+	EnforcementOptionLabel string
+	Warning                string
+	Principals             []row
+	Total                  money.Nanos
+	Notice                 string
+	Events                 []eventRow
+	EventFilter            eventFilterView
+	ProviderSettings       providerSettingsView
 }
 
 type eventFilterView struct {
@@ -309,11 +325,13 @@ func (d *Dashboard) build(r *http.Request) (view, error) {
 	now := time.Now()
 	eventFilter, eventFilterView := parseEventFilter(r, now)
 	v := view{
-		BuildLabel:    dashboardBuildLabel(d.version),
-		PricingLabel:  d.pricingLabel,
-		PricingDetail: d.pricingDetail,
-		Warning:       d.warning,
-		EventFilter:   eventFilterView,
+		BuildLabel:             dashboardBuildLabel(d.version),
+		PricingLabel:           d.pricingLabel,
+		PricingDetail:          d.pricingDetail,
+		EnforcementLabel:       d.enforcementLabel,
+		EnforcementOptionLabel: d.enforcementOptionLabel,
+		Warning:                d.warning,
+		EventFilter:            eventFilterView,
 	}
 	if identity, ok := operator.IdentityFromContext(ctx); ok {
 		v.OperatorLabel = identity.Name + " · " + string(identity.Role)

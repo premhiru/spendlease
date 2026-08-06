@@ -344,6 +344,21 @@ func TestUnknownModelWarnsOnce(t *testing.T) {
 	}
 }
 
+func TestLookupKnownDoesNotApplyOrWarnAboutFallback(t *testing.T) {
+	t.Parallel()
+
+	warned := false
+	b := loadTestBook(t, map[string]string{"book.yaml": basicBook}, Options{
+		Warn: func(_, _ string) { warned = true },
+	})
+	if got, known := b.LookupKnown("openai", "not-priced", date(2026, time.August, 1)); known || got != (Price{}) {
+		t.Fatalf("LookupKnown = (%+v, %v), want zero price and false", got, known)
+	}
+	if warned {
+		t.Fatal("strict coverage lookup logged that a fallback was used")
+	}
+}
+
 // TestUnknownModelNeverCostsZero is the specific failure the fallback exists
 // to prevent.
 func TestUnknownModelNeverCostsZero(t *testing.T) {

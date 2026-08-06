@@ -183,17 +183,41 @@ func TestEnforceModeReturnsStructured402BeforeEgress(t *testing.T) {
 	}
 }
 
-func TestMissingMaxTokensStillCreatesBoundedReservation(t *testing.T) {
+func TestStrictEnforcementRejectsMissingOutputLimit(t *testing.T) {
+	t.Parallel()
+
+	called := make(chan struct{}, 1)
+	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) {
+		called <- struct{}{}
+		_, _ = io.WriteString(w, `{}`)
+	}, store.ModeEnforce, money.MustParseUSD("1.00"))
+
+	resp := h.call(t, "/v1/chat/completions",
+		`{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}`, nil)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Spendlease-Error"); got != ErrTypeSpendNotEnforceable {
+		t.Errorf("X-Spendlease-Error = %q, want %q", got, ErrTypeSpendNotEnforceable)
+	}
+	select {
+	case <-called:
+		t.Fatal("request without an output limit reached the vendor")
+	default:
+	}
+}
+
+func TestBestEffortMissingMaxTokensCreatesBoundedReservation(t *testing.T) {
 	t.Parallel()
 
 	arrived := make(chan struct{})
 	release := make(chan struct{})
-	h := newRecordingHarnessWith(t, func(w http.ResponseWriter, _ *http.Request) {
+	h := newRecordingHarnessWithPolicy(t, func(w http.ResponseWriter, _ *http.Request) {
 		close(arrived)
 		<-release
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"usage":{"prompt_tokens":1,"completion_tokens":1}}`)
-	}, store.ModeEnforce, money.MustParseUSD("1.00"))
+	}, store.ModeEnforce, money.MustParseUSD("1.00"), EnforcementBestEffort)
 
 	req, err := http.NewRequest(http.MethodPost, h.gateway.URL+"/v1/chat/completions",
 		strings.NewReader(`{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}`))
@@ -241,7 +265,7 @@ func TestMissingMaxTokensStillCreatesBoundedReservation(t *testing.T) {
 	}
 }
 
-func TestUnknownModelUsesFallbackInsteadOfZero(t *testing.T) {
+func TestStrictEnforcementRejectsUnknownModel(t *testing.T) {
 	t.Parallel()
 
 	called := make(chan struct{}, 1)
@@ -249,6 +273,38 @@ func TestUnknownModelUsesFallbackInsteadOfZero(t *testing.T) {
 		called <- struct{}{}
 		_, _ = io.WriteString(w, `{}`)
 	}, store.ModeEnforce, money.Nano)
+
+	resp := h.call(t, "/v1/chat/completions",
+		`{"model":"future-model-that-is-not-priced","max_tokens":1000,"messages":[{"role":"user","content":"hello"}]}`, nil)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	select {
+	case <-called:
+		t.Fatal("unknown model silently cost zero and reached the vendor")
+	default:
+	}
+}
+
+func TestEnforcementPolicyValidation(t *testing.T) {
+	t.Parallel()
+
+	if !EnforcementStrict.Valid() || !EnforcementBestEffort.Valid() {
+		t.Fatal("documented enforcement policies are not valid")
+	}
+	if EnforcementPolicy("").Valid() || EnforcementPolicy("sometimes").Valid() {
+		t.Fatal("unknown enforcement policy is valid")
+	}
+}
+
+func TestBestEffortUnknownModelUsesFallbackInsteadOfZero(t *testing.T) {
+	t.Parallel()
+
+	called := make(chan struct{}, 1)
+	h := newRecordingHarnessWithPolicy(t, func(w http.ResponseWriter, _ *http.Request) {
+		called <- struct{}{}
+		_, _ = io.WriteString(w, `{}`)
+	}, store.ModeEnforce, money.Nano, EnforcementBestEffort)
 
 	resp := h.call(t, "/v1/chat/completions",
 		`{"model":"future-model-that-is-not-priced","max_tokens":1000,"messages":[{"role":"user","content":"hello"}]}`, nil)

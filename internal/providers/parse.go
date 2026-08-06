@@ -11,8 +11,9 @@ type RequestInfo struct {
 	// Model is the requested model identifier, empty if the request did not
 	// name one.
 	Model string
-	// MaxTokens is the caller's output ceiling, zero if unspecified. Zero
-	// means the price book's per-model default applies.
+	// MaxTokens is the caller's output ceiling, zero if unspecified. Strict
+	// enforcement rejects zero; observe and best-effort policy use the price
+	// book's per-model default.
 	MaxTokens int64
 	// Stream is true when the caller asked for a streamed response.
 	Stream bool

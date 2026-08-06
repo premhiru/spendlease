@@ -4,8 +4,8 @@ The dashboard is served at the gateway root, usually
 <http://localhost:4000>. It is a current operational summary, not an invoice
 or historical reporting interface.
 
-The header identifies the running build and the exact active price-book
-revision. A locally compiled binary says `Local development build`; release
+The header identifies the running build, enforcement policy, and exact active
+price-book revision. A locally compiled binary says `Local development build`; release
 builds show their version. The price-book label includes the first eight
 characters of a SHA-256 revision and the newest active effective date. Its
 detail text gives the load time, provider count, and canonical price-entry
@@ -19,7 +19,7 @@ Rows are sorted by recorded spend, highest first.
 | Column | Meaning |
 |---|---|
 | Agent | Principal name and `prn_...` ID. |
-| Mode | Current `observe` or `enforce` policy. Click to switch modes. |
+| Mode | `observe`, or the running enforcement policy (`strict` or `best-effort`). Click to switch the persisted principal mode. |
 | Status | Whether the principal has an active lease, only revoked leases, only expired leases, or no leases yet. |
 | Leases | Counts of active, revoked, and expired credentials. |
 | Runs | Number of runs owned by the principal. |
@@ -38,7 +38,7 @@ focus so a control is not replaced during a click.
 principal was in observe mode. The request was forwarded and settled; the
 badge shows what enforcement would have rejected.
 
-Before switching to `enforce`, compare the dashboard with the vendor's own
+Before switching to enforcement, compare the dashboard with the vendor's own
 usage and billing data. The spend column covers the price-book token charges
 documented under [Price book](pricing-book.md#what-is-not-modeled), not every
 possible vendor fee.
@@ -80,7 +80,9 @@ scope, ceilings, expiry, and status, never plaintext tokens.
 
 ## Mode and kill controls
 
-Clicking the mode value alternates between `observe` and `enforce`. It calls:
+Clicking the mode value alternates between `observe` and the running
+enforcement policy. The persisted API value remains `enforce`; the dashboard
+shows whether that means `strict` or `best-effort` for this server. It calls:
 
 ```text
 POST /admin/principals/{id}/mode

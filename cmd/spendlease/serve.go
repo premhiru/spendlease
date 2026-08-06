@@ -54,6 +54,8 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	geminiBase := fs.String("gemini-url", defaultGeminiURL, "Gemini upstream base URL")
 	zaiBase := fs.String("zai-url", defaultZAIURL, "Z.AI upstream base URL")
 	pricingDir := fs.String("pricing", "", "directory of price book YAML (default: the copy embedded in this binary)")
+	enforcementPolicyFlag := fs.String("enforcement-policy", string(gateway.EnforcementStrict),
+		"strict or best-effort behavior for enforce-mode principals")
 	defaultBudget := fs.String("default-run-budget", "10.00",
 		"budget on a principal's implicit run")
 	reservationTTL := fs.Duration("reservation-ttl", gateway.DefaultReservationTTL,
@@ -124,6 +126,10 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	summarisePriceBook(stdout, book)
+	enforcementPolicy := gateway.EnforcementPolicy(strings.ToLower(strings.TrimSpace(*enforcementPolicyFlag)))
+	if !enforcementPolicy.Valid() {
+		return fmt.Errorf("%w: -enforcement-policy must be strict or best-effort", errUsage)
+	}
 	if *reservationTTL <= 0 {
 		return fmt.Errorf("%w: -reservation-ttl must be positive", errUsage)
 	}
@@ -224,8 +230,9 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		Store: st, Logger: logger, Version: version,
 		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
 		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
-		PricingModels: pricingMetadata.Models, Warning: operatorDashboardWarning(*addr, activeOperators, adminToken),
-		Guard: guard, Revoker: killSwitch, Manager: st, LeaseRevoker: killSwitch,
+		PricingModels: pricingMetadata.Models, EnforcementPolicy: string(enforcementPolicy),
+		Warning: operatorDashboardWarning(*addr, activeOperators, adminToken),
+		Guard:   guard, Revoker: killSwitch, Manager: st, LeaseRevoker: killSwitch,
 		Credentials: v, CredentialStatus: v, Providers: registry.Names(),
 	})
 	if err != nil {
@@ -236,6 +243,7 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	reportOperatorAccess(stdout, *addr, activeOperators, adminToken)
+	fmt.Fprintf(stdout, "Enforcement policy: %s\n", enforcementPolicy)
 
 	upstreamTransport := &http.Transport{
 		Proxy:             http.ProxyFromEnvironment,
@@ -246,12 +254,14 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 	}
 	defer upstreamTransport.CloseIdleConnections()
 	gw, err := gateway.New(gateway.Options{
-		Principals:      st,
-		Leases:          st,
-		Revocations:     revocations,
-		Credentials:     v,
-		Registry:        registry,
-		Recorder:        gateway.NewRecorder(st, book, budget, logger, *reservationTTL),
+		Principals:  st,
+		Leases:      st,
+		Revocations: revocations,
+		Credentials: v,
+		Registry:    registry,
+		Recorder: gateway.NewRecorderWithOptions(st, book, budget, logger, gateway.RecorderOptions{
+			ReservationTTL: *reservationTTL, EnforcementPolicy: enforcementPolicy,
+		}),
 		Dashboard:       gateway.RouteGroup{dash, api, telemetry},
 		Logger:          logger,
 		Transport:       upstreamTransport,

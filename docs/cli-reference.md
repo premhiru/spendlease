@@ -16,6 +16,7 @@ Starts the proxy, dashboard, reservation sweeper, and selected datastore.
 | `--store` | `SPENDLEASE_STORE` or `./spendlease.db` | SQLite path or PostgreSQL DSN. |
 | `--admin-token` | `SPENDLEASE_ADMIN_TOKEN` | Legacy shared credential for migration. Prefer named operator tokens. |
 | `--pricing` | embedded book | Directory containing price-book YAML. |
+| `--enforcement-policy` | `strict` | `strict` rejects unknown models and missing output limits; `best-effort` permits documented fallback estimates. |
 | `--default-run-budget` | `10.00` | Budget for implicit runs used by principal-key compatibility requests. |
 | `--reservation-ttl` | `15m` | Maximum pending hold lifetime. |
 | `--reservation-sweep-interval` | `30s` | Expired-hold scan interval. |

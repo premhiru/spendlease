@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -56,6 +57,7 @@ type Recorder struct {
 	store  LedgerStore
 	book   *pricing.Book
 	logger *slog.Logger
+	policy EnforcementPolicy
 
 	// defaultRunBudget is given to an implicit run and enforced when the
 	// principal is in enforce mode.
@@ -65,6 +67,31 @@ type Recorder struct {
 
 // DefaultReservationTTL bounds a hold left behind by a vanished request.
 const DefaultReservationTTL = 15 * time.Minute
+
+// EnforcementPolicy controls how enforce-mode principals handle requests
+// whose cost cannot be bounded from the active price book and request body.
+type EnforcementPolicy string
+
+const (
+	// EnforcementStrict fails closed unless the model is priced and the
+	// caller supplies an explicit output ceiling for output-producing calls.
+	EnforcementStrict EnforcementPolicy = "strict"
+	// EnforcementBestEffort preserves the pre-beta fallback behavior: unknown
+	// models use the configured fallback price and missing output ceilings use
+	// the price book's default_max_tokens value.
+	EnforcementBestEffort EnforcementPolicy = "best-effort"
+)
+
+// Valid reports whether p is a supported enforcement policy.
+func (p EnforcementPolicy) Valid() bool {
+	return p == EnforcementStrict || p == EnforcementBestEffort
+}
+
+// RecorderOptions configures reservation behavior.
+type RecorderOptions struct {
+	ReservationTTL    time.Duration
+	EnforcementPolicy EnforcementPolicy
+}
 
 // NewRecorder returns a recorder.
 func NewRecorder(
@@ -78,10 +105,52 @@ func NewRecorder(
 	if len(reservationTTL) > 0 && reservationTTL[0] > 0 {
 		ttl = reservationTTL[0]
 	}
+	return NewRecorderWithOptions(st, book, budget, logger, RecorderOptions{
+		ReservationTTL: ttl,
+	})
+}
+
+// NewRecorderWithOptions returns a recorder with explicit enforcement
+// behavior. An empty or invalid policy is strict so callers fail closed.
+func NewRecorderWithOptions(
+	st LedgerStore,
+	book *pricing.Book,
+	budget money.Nanos,
+	logger *slog.Logger,
+	opts RecorderOptions,
+) *Recorder {
+	ttl := opts.ReservationTTL
+	if ttl <= 0 {
+		ttl = DefaultReservationTTL
+	}
+	policy := opts.EnforcementPolicy
+	if !policy.Valid() {
+		policy = EnforcementStrict
+	}
 	return &Recorder{
-		store: st, book: book, logger: logger,
+		store: st, book: book, logger: logger, policy: policy,
 		defaultRunBudget: budget, reservationTTL: ttl,
 	}
+}
+
+// StrictUnenforceableReason explains why strict enforcement cannot establish
+// a trustworthy upper bound. Observe and best-effort modes deliberately
+// return an empty reason so their existing estimation behavior is preserved.
+func (r *Recorder) StrictUnenforceableReason(
+	p store.Principal,
+	provider string,
+	request providers.RequestInfo,
+) string {
+	if p.Mode != store.ModeEnforce || r.policy != EnforcementStrict {
+		return ""
+	}
+	if _, known := r.book.LookupKnown(provider, request.Model, time.Now()); !known {
+		return fmt.Sprintf("model %q is not in the active %s price book", request.Model, provider)
+	}
+	if !request.NoOutput && request.MaxTokens <= 0 {
+		return "the request does not set an explicit output-token limit"
+	}
+	return ""
 }
 
 // observation is everything known about one completed request.

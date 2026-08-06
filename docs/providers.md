@@ -5,10 +5,11 @@ The provider name is also the value used when storing a credential and scoping
 a lease.
 
 Provider routing and billing certification are separate. The gateway can pass
-through more routes than it can safely price. Enforce mode supports ordinary
-text generation and embeddings, permits reviewed no-spend routes, and blocks
-media, batches, provider-hosted tools, and unknown billing shapes. Observe
-mode forwards unsupported traffic with `X-Spendlease-Accounting: unmetered`.
+through more routes than it can safely price. Strict enforcement supports
+ordinary text generation and embeddings with known models and explicit output
+limits, permits reviewed no-spend routes, and blocks media, batches,
+provider-hosted tools, and unknown billing shapes. Observe mode forwards
+unsupported traffic with `X-Spendlease-Accounting: unmetered`.
 
 | Provider | Status | Credential name | Application base URL | Default upstream |
 |---|---|---|---|---|
@@ -56,6 +57,7 @@ client = OpenAI(
 
 response = client.chat.completions.create(
     model="deepseek-v4-flash",
+    max_completion_tokens=512,
     messages=[{"role": "user", "content": "hello"}],
 )
 print(response.choices[0].message.content)
