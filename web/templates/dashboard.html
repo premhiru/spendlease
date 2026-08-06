@@ -30,6 +30,7 @@
 	  {{ if .OperatorLabel }}<div>{{ .OperatorLabel }}</div>{{ end }}
       <div>{{ .BuildLabel }}</div>
       <div title="{{ .PricingDetail }}">{{ .PricingLabel }}</div>
+	  <div>{{ .EnforcementLabel }} enforcement</div>
     </div>
   </header>
 
@@ -58,8 +59,8 @@
 
   <footer>
     <p>
-      Observe mode records what would have been blocked. Enforce mode rejects
-      over-budget reservations before they reach the vendor.
+      Observe mode records what would have been blocked. {{ .EnforcementOptionLabel }} rejects
+      requests that cannot be bounded and over-budget reservations before they reach the vendor.
     </p>
     <p><a href="https://premhiru.github.io/spendlease">Documentation</a></p>
   </footer>

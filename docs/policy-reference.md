@@ -9,7 +9,7 @@ and the price book supplies reservation defaults.
 | Value | Default | Behavior |
 |---|---:|---|
 | `observe` | yes | Price, reserve and settle supported token spend, but never reject for budget. Unsupported billing shapes pass through as visibly unmetered traffic. |
-| `enforce` | no | Reject a reservation that does not fit with `402 budget_exceeded`. Datastore decision failures fail closed. |
+| `enforce` | no | Apply the server's enforcement policy, reject a reservation that does not fit with `402 budget_exceeded`, and fail closed on datastore decision errors. |
 
 Change mode from the dashboard, with the CLI:
 
@@ -22,6 +22,24 @@ or through `POST /admin/principals/{id}/mode`. The admin guard described in
 
 Mode is read when the request authenticates. An already-authorized in-flight
 request is settled normally if the mode changes before its response finishes.
+
+## Enforcement policy
+
+The server chooses how an `enforce` principal handles estimates:
+
+| Value | Default | Behavior |
+|---|---:|---|
+| `strict` | yes | Require a model in the active price book and an explicit output-token limit for output-producing requests. Otherwise return `422 spend_not_enforceable` before egress. |
+| `best-effort` | no | Allow unknown-model fallback prices and the price book's `default_max_tokens` when the request supplies no limit. Budget decisions still block, but the reservation is an estimate rather than a bound for the modeled token rates. |
+
+Choose the policy at startup:
+
+```bash
+spendlease serve --enforcement-policy=strict
+```
+
+The dashboard names the running policy. Use `best-effort` only when keeping a
+new or unusual model available matters more than a strict upper bound.
 
 ## Run budget
 
@@ -88,10 +106,12 @@ These are gateway lifecycle settings rather than per-principal policy:
 |---|---:|---|
 | `--reservation-ttl` | `15m` | Maximum lifetime of an in-flight hold before it may be reclaimed. |
 | `--reservation-sweep-interval` | `30s` | How often expired pending holds are reclaimed. |
+| `--enforcement-policy` | `strict` | Whether enforce-mode principals require trustworthy request bounds or accept fallback estimates. |
 
-The price book's model-level `default_max_tokens` is used when a request omits
-its output ceiling. Unknown models use the built-in fallback input/output
-rates and fallback ceiling; they are never treated as free.
+In observe and best-effort enforcement, the price book's model-level
+`default_max_tokens` is used when a request omits its output ceiling. Unknown
+models use the built-in fallback rates and fallback ceiling. Strict
+enforcement rejects both cases before egress.
 
 ## Not implemented
 

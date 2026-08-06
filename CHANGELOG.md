@@ -14,6 +14,14 @@ the same version; Python prerelease spelling follows PEP 440.
   The UI reports configuration status but never reads a key back from the
   encrypted credential vault.
 
+### Changed
+
+- Enforce-mode principals now fail closed by default when a model is absent
+  from the active price book or an output-producing request supplies no token
+  ceiling. `--enforcement-policy=best-effort` explicitly restores fallback
+  model prices and price-book output defaults, and the dashboard names the
+  running policy.
+
 ## [0.2.0-beta.1] - 2026-08-05
 
 The first beta intended for an end-to-end, self-hosted evaluation.

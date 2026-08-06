@@ -8,7 +8,9 @@ is the first release intended for an end-to-end evaluation. It includes the
 encrypted vault, datastore-backed ledger, reserve/settle enforcement,
 short-lived leases, versioned operator API, and immediate kill switch. Pin the
 release digest or commit and evaluate it in observe mode before making it a
-production dependency.
+production dependency. Current `main` and `edge` include the unreleased strict
+enforcement default; the tagged beta uses the behavior now named
+`best-effort`.
 
 ## Is the configured budget a ceiling on my vendor invoice?
 
@@ -27,9 +29,12 @@ workload expectations, switch the principal to enforce mode.
 
 ## What happens when `max_tokens` is missing?
 
-The active price-book entry provides `default_max_tokens`. Unknown models use
-the fallback ceiling. A reservation is always bounded; missing the field never
-means unlimited output and never reserves the run's entire remaining budget.
+Strict enforcement returns `422 spend_not_enforceable` before contacting the
+vendor. Set `max_tokens`, `max_completion_tokens`, or `max_output_tokens`, as
+accepted by the provider endpoint. Observe mode and explicitly enabled
+best-effort enforcement use the active price-book entry's
+`default_max_tokens`, which is a practical estimate rather than a guaranteed
+vendor output limit.
 
 ## Why did I receive `402 Payment Required`?
 
@@ -49,9 +54,10 @@ before the disconnect or records a marked estimate.
 ## What does `422 spend_not_enforceable` mean?
 
 The request uses an endpoint, feature, or body shape whose potential vendor
-charge cannot be bounded by the token price book. This includes oversized or
-unparseable bodies, media, batches, and provider-hosted tools. Enforce mode
-refuses it before the vendor is contacted. Observe mode can pass it through,
+charge cannot be bounded by the token price book. This includes an unknown
+model, a missing output limit, oversized or unparseable bodies, media, batches,
+and provider-hosted tools. Strict enforcement refuses it before the vendor is
+contacted. Observe mode can pass it through,
 but marks the response `X-Spendlease-Accounting: unmetered` and does not add a
 misleading token charge to the ledger.
 

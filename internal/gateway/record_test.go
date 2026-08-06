@@ -45,6 +45,16 @@ func newRecordingHarnessWith(
 	mode store.Mode,
 	budget money.Nanos,
 ) *recordingHarness {
+	return newRecordingHarnessWithPolicy(t, upstream, mode, budget, EnforcementStrict)
+}
+
+func newRecordingHarnessWithPolicy(
+	t *testing.T,
+	upstream http.HandlerFunc,
+	mode store.Mode,
+	budget money.Nanos,
+	policy EnforcementPolicy,
+) *recordingHarness {
 	t.Helper()
 
 	ctx := context.Background()
@@ -94,8 +104,10 @@ func newRecordingHarnessWith(
 		Revocations: revocations,
 		Credentials: &fakeCredentials{keys: map[string]string{"openai": testVendor, "anthropic": testVendor}},
 		Registry:    registry,
-		Recorder:    NewRecorder(st, book, budget, logger),
-		Logger:      logger,
+		Recorder: NewRecorderWithOptions(st, book, budget, logger, RecorderOptions{
+			EnforcementPolicy: policy,
+		}),
+		Logger: logger,
 	})
 	if err != nil {
 		t.Fatalf("gateway: %v", err)

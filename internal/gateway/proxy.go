@@ -133,6 +133,11 @@ func (g *Gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	reservationID := ""
 	if g.recorder != nil && metered {
+		if reason := g.recorder.StrictUnenforceableReason(principal, provider.Name(), requestInfo); reason != "" {
+			g.observeUnenforceable(principal, provider.Name(), reason)
+			writeUnenforceableSpend(w, g.logger, principal, provider.Name(), reason)
+			return
+		}
 		reservation, decision, reserveErr := g.recorder.Reserve(ctx, principal, provider.Name(), requestInfo)
 		if reserveErr != nil {
 			g.logger.Error("could not make budget decision",
@@ -297,9 +302,10 @@ func writeUnenforceableSpend(
 		Type:      ErrTypeSpendNotEnforceable,
 		Principal: p.ID,
 		Provider:  provider,
-		Message:   "This request may incur spend that spendlease cannot conservatively reserve.",
-		Resolution: "Use a supported text-token request, reduce the request below the inspection limit, " +
-			"or switch to observe mode only if unmetered spend is acceptable.",
+		Message:   "This request may incur spend that spendlease cannot conservatively reserve: " + reason + ".",
+		Resolution: "Use a supported text-token request with a price-book model and an explicit output-token limit. " +
+			"Best-effort policy relaxes only the model and output-limit checks. " +
+			"Use observe mode only if estimated or unmetered spend is acceptable.",
 		Docs: DocsBase + "/pricing-book/",
 	})
 	logger.Warn("blocked spend that cannot be enforced",

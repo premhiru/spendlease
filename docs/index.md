@@ -11,6 +11,8 @@ append-only ledger.
     `v0.2.0-beta.1` is the current release and the first intended for an
     end-to-end evaluation. It is not a stable v1 API. Use the release's
     immutable container digest or a pinned commit for repeatable evaluation.
+    Current `main` and `:edge` default to strict enforcement; the tagged beta
+    predates that change and uses the behavior now named `best-effort`.
 
 ## The problem
 

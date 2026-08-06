@@ -70,11 +70,11 @@ spendlease keys provider set openai --key sk-...</code></pre>
             hx-target="#table"
             hx-swap="outerHTML"
             hx-include="#event-filters"
-            title="Switch to {{ if eq .Mode "observe" }}enforce{{ else }}observe{{ end }} mode">
-            {{ .Mode }}
+            title="Switch to {{ if eq .Mode "observe" }}{{ $.EnforcementLabel }} enforcement{{ else }}observe mode{{ end }}">
+            {{ if eq .Mode "enforce" }}{{ $.EnforcementLabel }}{{ else }}observe{{ end }}
           </button>
 		  {{ else }}
-		  <span class="mode{{ if eq .Mode "enforce" }} enforce{{ end }}">{{ .Mode }}</span>
+		  <span class="mode{{ if eq .Mode "enforce" }} enforce{{ end }}">{{ if eq .Mode "enforce" }}{{ $.EnforcementLabel }}{{ else }}observe{{ end }}</span>
 		  {{ end }}
         </td>
 

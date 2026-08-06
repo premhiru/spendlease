@@ -22,7 +22,8 @@ identify which rates either one loaded.
 
 > [!WARNING]
 > A spendlease budget covers only charges represented by the price book.
-> Enforce mode blocks known unsupported billing surfaces before egress, but
+> Strict enforcement blocks unknown models, missing output limits, and known
+> unsupported billing surfaces before egress, but
 > vendor pricing can still change and negotiated or regional rates can differ.
 > Use observe mode and compare the ledger with the vendor console before
 > enabling enforcement.
@@ -60,16 +61,16 @@ providers:
 | `long_cache_write_per_1m` | Cache-write rate after the threshold. |
 | `long_output_per_1m` | Output rate after the threshold. |
 | `free` | Must be `true` when a model is intentionally zero-priced; omitted or accidental zero rates are rejected. |
-| `default_max_tokens` | Output ceiling reserved when the request supplies none. Must be positive. |
+| `default_max_tokens` | Output ceiling used by observe and best-effort policy when the request supplies none. Must be positive. |
 | `aliases` | Optional alternate model identifiers that resolve to this entry. |
 | `note` | Optional context such as a deprecation or introductory rate. |
 
 ### `default_max_tokens` is a reservation default
 
-It is not the model's output limit. It is the amount held against a run's
-budget when a request does not say how much output it wants. Reserving a full
-model output window would make ordinary concurrent requests needlessly block;
-reserving nothing would allow an unbounded completion through.
+It is not the model's output limit. Observe mode and explicitly enabled
+best-effort enforcement use it when a request does not say how much output it
+wants. Strict enforcement rejects that request instead, because a practical
+default is not a guaranteed upper bound.
 
 ## Superseding a price
 
@@ -84,7 +85,10 @@ entry alone.
 
 ## Unknown models
 
-A model the book does not contain is not treated as free. Instead:
+A model the book does not contain is never treated as free. Under the default
+strict policy, an enforce-mode request is rejected with `422
+spend_not_enforceable` before egress. In observe mode or with
+`--enforcement-policy=best-effort`:
 
 1. The gateway logs one warning for the unknown model.
 2. It applies a fallback of $15 per million input tokens, $75 per million
@@ -92,7 +96,8 @@ A model the book does not contain is not treated as free. Instead:
 3. It marks the ledger entry `estimated: true`.
 
 The fallback prevents silent zero-cost accounting, but it is not guaranteed to
-exceed the real price. Add the model before relying on enforcement.
+exceed the real price. Add the model to the price book rather than using
+best-effort policy for a hard limit.
 
 ## Cost calculation
 

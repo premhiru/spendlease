@@ -164,8 +164,8 @@ type Price struct {
 	LongOutputPer1M      money.Nanos
 	// Free is true only for a model explicitly marked as zero-priced.
 	Free bool
-	// DefaultMaxTokens is the output ceiling to assume when a request does
-	// not specify one.
+	// DefaultMaxTokens is the output ceiling to assume in observe or
+	// best-effort policy when a request does not specify one.
 	DefaultMaxTokens int64
 	// Effective is the date this price took effect.
 	Effective time.Time
@@ -191,10 +191,10 @@ type Fallback struct {
 	DefaultMaxTokens int64
 }
 
-// DefaultFallback is a fixed conservative rate for unknown models. It avoids
-// treating an unrecognised model as free, but it is not guaranteed to exceed
-// every vendor price. Callers can identify the estimate on the ledger entry
-// and the gateway logs a warning when the fallback is selected.
+// DefaultFallback is a fixed estimate for unknown models in observe and
+// best-effort policy. It avoids treating an unrecognised model as free, but it
+// is not guaranteed to exceed every vendor price. Strict enforcement rejects
+// the model instead.
 var DefaultFallback = Fallback{
 	InputPer1M:       money.MustParseUSD("15.00"),
 	OutputPer1M:      money.MustParseUSD("75.00"),
@@ -392,9 +392,20 @@ func (f File) validate() error {
 // The bool reports whether the price came from the book. A false result with
 // a usable Price means the fallback was applied and Estimated is set.
 func (b *Book) Lookup(provider, model string, at time.Time) (Price, bool) {
+	if p, known := b.LookupKnown(provider, model, at); known {
+		return p, true
+	}
+	b.warnUnknown(provider, model)
+	return b.fallbackPrice(provider, model), false
+}
+
+// LookupKnown resolves only explicit price-book entries and aliases. It does
+// not apply or warn about the fallback, which lets strict authorization check
+// coverage without logging that a rejected request used an estimate.
+func (b *Book) LookupKnown(provider, model string, at time.Time) (Price, bool) {
 	snap := b.snapshot.Load()
 	if snap == nil {
-		return b.fallbackPrice(provider, model), false
+		return Price{}, false
 	}
 
 	for i := len(snap.files) - 1; i >= 0; i-- {
@@ -418,8 +429,7 @@ func (b *Book) Lookup(provider, model string, at time.Time) (Price, bool) {
 		}
 	}
 
-	b.warnUnknown(provider, model)
-	return b.fallbackPrice(provider, model), false
+	return Price{}, false
 }
 
 // price builds a resolved Price from a book entry.

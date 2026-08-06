@@ -3,8 +3,10 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v1. This page documents the `v0.2.0-beta.1` API surface. The operator API
-> is versioned under `/api/v1`; breaking changes will use a new path.
+> Pre-v1. This page documents current `main`, including the unreleased strict
+> enforcement policy. The tagged `v0.2.0-beta.1` release uses the behavior now
+> named `best-effort`. The operator API is versioned under `/api/v1`; breaking
+> changes will use a new path.
 
 ## Authentication
 
@@ -41,8 +43,8 @@ Naming a run that does not exist, or one belonging to a different principal, ret
 
 Every supported token-billed request creates a bounded reservation before it
 reaches the vendor. The gateway uses inspected request bytes plus a framing
-allowance for the input ceiling, then uses the request's output ceiling or the
-price book's `default_max_tokens`. It atomically checks settled spend plus
+allowance for the input ceiling and the request's explicit output ceiling. It
+atomically checks settled spend plus
 pending holds against the run and every budgeted ancestor.
 
 Observe-mode principals always pass; a would-block decision is logged. An
@@ -50,9 +52,11 @@ enforce-mode request that does not fit returns `402 budget_exceeded` and the
 vendor is not contacted. See [reserve and settle](reserve-and-settle.md) for
 the formula, concurrency guarantee and lifecycle.
 
-Routes or request features with unsupported billing dimensions return `422
-spend_not_enforceable` in enforce mode. Observe mode forwards them without a
-reservation or ledger entry and sets `X-Spendlease-Accounting: unmetered`.
+Under the default strict policy, an unknown model, missing output limit, or
+unsupported billing dimension returns `422 spend_not_enforceable` in enforce
+mode. Observe mode forwards unknown models and missing limits using documented
+fallback estimates. Unsupported shapes pass without a reservation or ledger
+entry and set `X-Spendlease-Accounting: unmetered`.
 
 ## Accounting
 
@@ -81,7 +85,7 @@ Token counts come from the vendor where it reports them. An entry is marked
 | Streaming, Anthropic | Reported usage |
 | Streaming, OpenAI-compatible provider | Reported usage; `stream_options` is injected if needed |
 | Vendor reports no usage even when asked | Estimated |
-| Model not in the price book | Estimated, at the fallback rate |
+| Model not in the price book | Rejected by strict enforcement; estimated in observe or best-effort policy |
 | Client disconnected mid-response | Estimated, from partial usage |
 
 Unsupported endpoints or billing features in observe mode are unmetered and
@@ -94,6 +98,7 @@ do not produce a misleading token ledger entry.
 | Chat completions, legacy completions, Responses, Anthropic Messages | Input and output token reservation |
 | Embeddings | Input token reservation only |
 | Model listing and Anthropic token counting | No-spend route; no reservation |
+| Unknown model or missing output limit | Rejected by strict enforcement; estimated in observe or best-effort policy |
 | Images, audio, media inputs, message batches, provider-hosted tools, unknown explicit-prefix routes | Rejected in enforce mode; explicitly unmetered in observe mode |
 
 The inspected request-body limit is 8 MiB. Larger bodies remain pass-through

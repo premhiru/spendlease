@@ -36,3 +36,4 @@ and references for current behavior.
 | [0023](0023-release-artifacts-are-verifiable.md) | Release artifacts are independently verifiable | Accepted; amends 0004 |
 | [0024](0024-itemized-usage-and-reconciliation.md) | Itemized usage and normalized reconciliation | Accepted; amends 0005 |
 | [0025](0025-dashboard-onboarding-is-a-guarded-control-plane.md) | Dashboard onboarding is a guarded control plane | Accepted; amends 0013, 0018, and 0021 |
+| [0026](0026-strict-enforcement-requires-request-bounds.md) | Strict enforcement requires request bounds | Accepted; clarifies 0008 and 0014 |

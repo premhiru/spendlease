@@ -58,7 +58,9 @@ blocked.
 A principal carries a **mode**:
 
 - **`observe`** — everything passes through and nothing is blocked, but all of it is recorded. This is the default for every new principal.
-- **`enforce`** — reservations can reject a request.
+- **`enforce`** — reservations can reject a request. The server's `strict`
+  policy requires a known model and explicit output ceiling; `best-effort`
+  permits documented estimates.
 
 Observe mode lets an operator compare spendlease's estimates with real
 workload behavior before enabling a blocking policy. The dashboard marks
