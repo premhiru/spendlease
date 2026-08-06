@@ -1,0 +1,201 @@
+[
+  {
+    "provider": "kimi",
+    "kind": "non_stream",
+    "verified_on": "2026-08-06",
+    "source": "https://platform.kimi.ai/docs/api/chat",
+    "provenance": "sanitized_documented_example",
+    "response": {
+      "id": "cmpl-sanitized-kimi",
+      "object": "chat.completion",
+      "model": "kimi-k2.6",
+      "choices": [{"index": 0, "message": {"role": "assistant", "content": "2"}, "finish_reason": "stop"}],
+      "usage": {"prompt_tokens": 19, "completion_tokens": 21, "total_tokens": 40, "cached_tokens": 10}
+    },
+    "expected": {"input_tokens": 9, "cached_input_tokens": 10, "output_tokens": 21, "usage_only": false}
+  },
+  {
+    "provider": "kimi",
+    "kind": "stream",
+    "verified_on": "2026-08-06",
+    "source": "https://platform.kimi.ai/docs/api/chat",
+    "provenance": "sanitized_documented_example",
+    "response": {
+      "id": "cmpl-sanitized-kimi-stream",
+      "object": "chat.completion.chunk",
+      "model": "kimi-k2.6",
+      "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+      "usage": {"prompt_tokens": 19, "completion_tokens": 13, "total_tokens": 32, "cached_tokens": 12}
+    },
+    "expected": {"input_tokens": 7, "cached_input_tokens": 12, "output_tokens": 13, "usage_only": false}
+  },
+  {
+    "provider": "deepseek",
+    "kind": "non_stream",
+    "verified_on": "2026-08-06",
+    "source": "https://api-docs.deepseek.com/api/create-chat-completion",
+    "provenance": "vendor_documented_schema",
+    "response": {
+      "id": "chatcmpl-sanitized-deepseek",
+      "object": "chat.completion",
+      "model": "deepseek-v4-flash",
+      "choices": [{"index": 0, "message": {"role": "assistant", "content": "2", "reasoning_content": ""}, "finish_reason": "stop"}],
+      "usage": {
+        "prompt_tokens": 12,
+        "prompt_cache_hit_tokens": 7,
+        "prompt_cache_miss_tokens": 5,
+        "completion_tokens": 9,
+        "total_tokens": 21,
+        "completion_tokens_details": {"reasoning_tokens": 4}
+      }
+    },
+    "expected": {"input_tokens": 5, "cached_input_tokens": 7, "output_tokens": 9, "usage_only": false}
+  },
+  {
+    "provider": "deepseek",
+    "kind": "stream",
+    "verified_on": "2026-08-06",
+    "source": "https://api-docs.deepseek.com/api/create-chat-completion",
+    "provenance": "vendor_documented_schema",
+    "response": {
+      "id": "chatcmpl-sanitized-deepseek-stream",
+      "object": "chat.completion.chunk",
+      "model": "deepseek-v4-flash",
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 14,
+        "prompt_cache_hit_tokens": 8,
+        "prompt_cache_miss_tokens": 6,
+        "completion_tokens": 3,
+        "total_tokens": 17,
+        "completion_tokens_details": {"reasoning_tokens": 1}
+      }
+    },
+    "expected": {"input_tokens": 6, "cached_input_tokens": 8, "output_tokens": 3, "usage_only": true}
+  },
+  {
+    "provider": "xai",
+    "kind": "non_stream",
+    "verified_on": "2026-08-06",
+    "source": "https://docs.x.ai/developers/advanced-api-usage/deferred-chat-completions",
+    "provenance": "sanitized_documented_example",
+    "response": {
+      "id": "chat-sanitized-xai",
+      "object": "chat.completion",
+      "model": "grok-4.5",
+      "choices": [{"index": 0, "message": {"role": "assistant", "content": "42", "reasoning_content": "sanitized"}, "finish_reason": "stop"}],
+      "usage": {
+        "prompt_tokens": 26,
+        "completion_tokens": 168,
+        "total_tokens": 498,
+        "prompt_tokens_details": {"cached_tokens": 4},
+        "completion_tokens_details": {"reasoning_tokens": 304}
+      }
+    },
+    "expected": {"input_tokens": 22, "cached_input_tokens": 4, "output_tokens": 472, "usage_only": false}
+  },
+  {
+    "provider": "xai",
+    "kind": "stream",
+    "verified_on": "2026-08-06",
+    "source": "https://docs.x.ai/developers/advanced-api-usage/prompt-caching/usage-and-pricing",
+    "provenance": "vendor_documented_schema",
+    "response": {
+      "id": "chat-sanitized-xai-stream",
+      "object": "chat.completion.chunk",
+      "model": "grok-4.5",
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 125,
+        "completion_tokens": 48,
+        "total_tokens": 173,
+        "prompt_tokens_details": {"cached_tokens": 98},
+        "completion_tokens_details": {"reasoning_tokens": 0}
+      }
+    },
+    "expected": {"input_tokens": 27, "cached_input_tokens": 98, "output_tokens": 48, "usage_only": true}
+  },
+  {
+    "provider": "gemini",
+    "kind": "non_stream",
+    "verified_on": "2026-08-06",
+    "source": "https://ai.google.dev/gemini-api/docs/openai",
+    "provenance": "vendor_documented_schema",
+    "response": {
+      "id": "chatcmpl-sanitized-gemini",
+      "object": "chat.completion",
+      "model": "gemini-3.1-pro-preview",
+      "choices": [{"index": 0, "message": {"role": "assistant", "content": "2"}, "finish_reason": "stop"}],
+      "usage": {
+        "prompt_tokens": 1486,
+        "completion_tokens": 651,
+        "total_tokens": 2137,
+        "prompt_tokens_details": {"cached_tokens": 1408},
+        "completion_tokens_details": {"reasoning_tokens": 512}
+      }
+    },
+    "expected": {"input_tokens": 78, "cached_input_tokens": 1408, "output_tokens": 651, "usage_only": false}
+  },
+  {
+    "provider": "gemini",
+    "kind": "stream",
+    "verified_on": "2026-08-06",
+    "source": "https://ai.google.dev/gemini-api/docs/openai",
+    "provenance": "vendor_documented_schema",
+    "response": {
+      "id": "chatcmpl-sanitized-gemini-stream",
+      "object": "chat.completion.chunk",
+      "model": "gemini-3.1-flash-lite",
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 32,
+        "completion_tokens": 8,
+        "total_tokens": 40,
+        "prompt_tokens_details": {"cached_tokens": 16},
+        "completion_tokens_details": {"reasoning_tokens": 5}
+      }
+    },
+    "expected": {"input_tokens": 16, "cached_input_tokens": 16, "output_tokens": 8, "usage_only": true}
+  },
+  {
+    "provider": "zai",
+    "kind": "non_stream",
+    "verified_on": "2026-08-06",
+    "source": "https://docs.z.ai/guides/capabilities/cache",
+    "provenance": "sanitized_documented_example",
+    "response": {
+      "id": "chatcmpl-sanitized-zai",
+      "object": "chat.completion",
+      "model": "glm-5",
+      "choices": [{"index": 0, "message": {"role": "assistant", "content": "2"}, "finish_reason": "stop"}],
+      "usage": {
+        "prompt_tokens": 1200,
+        "completion_tokens": 300,
+        "total_tokens": 1500,
+        "prompt_tokens_details": {"cached_tokens": 800}
+      }
+    },
+    "expected": {"input_tokens": 400, "cached_input_tokens": 800, "output_tokens": 300, "usage_only": false}
+  },
+  {
+    "provider": "zai",
+    "kind": "stream",
+    "verified_on": "2026-08-06",
+    "source": "https://docs.z.ai/api-reference/llm/chat-completion",
+    "provenance": "vendor_documented_schema",
+    "response": {
+      "id": "chatcmpl-sanitized-zai-stream",
+      "object": "chat.completion.chunk",
+      "model": "glm-5",
+      "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 9,
+        "total_tokens": 19,
+        "prompt_tokens_details": {"cached_tokens": 3},
+        "completion_tokens_details": {"reasoning_tokens": 5}
+      }
+    },
+    "expected": {"input_tokens": 7, "cached_input_tokens": 3, "output_tokens": 9, "usage_only": false}
+  }
+]

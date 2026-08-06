@@ -147,6 +147,9 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **Exposes production signals.** Separate liveness and datastore readiness endpoints, bounded-label Prometheus metrics, concurrency and network timeouts, and signed asynchronous alert webhooks make failure visible without putting monitoring on the request path.
 - **Verifies, exports, and reconciles audit data.** Versioned ledger entries preserve itemized usage and pricing provenance. The CLI compares a normalized vendor statement without losing money precision or rewriting history.
 - **Forwards SSE without response buffering.** Chunks are flushed as they arrive while usage events are observed for settlement.
+- **Checks compatible-provider billing shapes.** Dated Kimi, DeepSeek, xAI,
+  Gemini, and Z.AI fixtures cover streaming, cache, and reasoning usage, with
+  an opt-in live smoke workflow for configured provider accounts.
 
 ## What it does not do
 
@@ -157,7 +160,12 @@ spendlease keys principal set-mode --name checkout-agent --mode enforce
 - **No anomaly detection or least-cost routing.** It enforces the budget you set; it will not second-guess your model choice.
 - **No payment rails.** It authorizes spend against vendor accounts you already have. It does not move money.
 - **Not a proxy for correctness.** It counts dollars, not tokens-well-spent.
-- **Not a complete vendor-invoice ceiling.** Standard text-token rates, reported cache usage, and documented long-context tiers are modeled. Batch, flex, fast, priority, regional, cache-storage, tool, media, and other non-token charges are not. Validate a workload in observe mode before relying on enforcement.
+- **Not a complete vendor-invoice ceiling.** Standard text-token rates,
+  reported cache and reasoning usage, and documented long-context tiers are
+  modeled. Explicit premium processing modifiers are blocked, but account
+  defaults, negotiated rates, batch, cache-storage, tool, media, and other
+  non-token charges remain outside the ledger. Validate a workload in observe
+  mode before relying on enforcement.
 
 ## How it works
 

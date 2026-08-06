@@ -127,11 +127,29 @@ func OpenAIUsageFrom(m map[string]any) (Usage, bool) {
 		uncached = 0
 	}
 
+	output := IntField(raw, "completion_tokens", "output_tokens")
+	reasoning := int64(0)
+	if details, ok := raw["completion_tokens_details"].(map[string]any); ok {
+		reasoning = IntField(details, "reasoning_tokens")
+	}
+	if details, ok := raw["output_tokens_details"].(map[string]any); ok {
+		if n := IntField(details, "reasoning_tokens"); n > reasoning {
+			reasoning = n
+		}
+	}
+	// OpenAI-compatible vendors disagree about completion_tokens: most include
+	// reasoning in that total, while xAI can report reasoning alongside it.
+	// total_tokens disambiguates the two shapes without a provider-specific
+	// guess. Add reasoning only when it is exactly the unaccounted remainder.
+	if total := IntField(raw, "total_tokens"); reasoning > 0 && total-prompt-output == reasoning {
+		output += reasoning
+	}
+
 	u := Usage{
 		InputTokens:        uncached,
 		CachedInputTokens:  cached,
 		CacheWrite5mTokens: cacheWrite,
-		OutputTokens:       IntField(raw, "completion_tokens", "output_tokens"),
+		OutputTokens:       output,
 	}
 	return u, !u.IsZero()
 }

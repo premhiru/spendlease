@@ -117,6 +117,14 @@ rates apply to that request. Missing cache fields fall back to the ordinary
 input rate, which keeps older version 1 files and providers without separate
 cache reporting safe.
 
+Some OpenAI-compatible vendors include reasoning tokens in
+`completion_tokens`; others report them beside that count. Spendlease compares
+the reported prompt, completion, reasoning, and total counts. Reasoning is
+added to billed output only when it exactly accounts for the otherwise missing
+tokens, which prevents both dropped reasoning spend and double counting. The
+dated cases are covered by the [provider conformance
+fixtures](providers.md#conformance-evidence).
+
 Costs use integer nanodollars throughout. Decimal prices are parsed directly,
 never through floating point, and token multiplication rounds half-up. See
 [ADR-0003](adr/0003-money-as-int64-nanodollars.md).

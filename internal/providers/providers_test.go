@@ -1,14 +1,32 @@
 package providers_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/premhiru/spendlease/internal/providers"
 	"github.com/premhiru/spendlease/internal/providers/anthropic"
 	"github.com/premhiru/spendlease/internal/providers/openai"
 )
+
+type conformanceFixture struct {
+	Provider   string          `json:"provider"`
+	Kind       string          `json:"kind"`
+	VerifiedOn string          `json:"verified_on"`
+	Source     string          `json:"source"`
+	Provenance string          `json:"provenance"`
+	Response   json.RawMessage `json:"response"`
+	Expected   struct {
+		Input       int64 `json:"input_tokens"`
+		CachedInput int64 `json:"cached_input_tokens"`
+		Output      int64 `json:"output_tokens"`
+		UsageOnly   bool  `json:"usage_only"`
+	} `json:"expected"`
+}
 
 func newRegistry(t *testing.T) *providers.Registry {
 	t.Helper()
@@ -289,6 +307,68 @@ func TestRequestPricingModifierGuards(t *testing.T) {
 				t.Fatalf("ordinary request was marked unsupported: %s", got)
 			}
 		})
+	}
+}
+
+func TestOpenAICompatibleConformanceFixtures(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile(filepath.Join("testdata", "openai-compatible-conformance.json"))
+	if err != nil {
+		t.Fatalf("read fixtures: %v", err)
+	}
+	var fixtures []conformanceFixture
+	if err := json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatalf("decode fixtures: %v", err)
+	}
+
+	wantKinds := map[string]map[string]bool{
+		"kimi": {}, "deepseek": {}, "xai": {}, "gemini": {}, "zai": {},
+	}
+	for _, fixture := range fixtures {
+		fixture := fixture
+		t.Run(fixture.Provider+"/"+fixture.Kind, func(t *testing.T) {
+			if fixture.VerifiedOn == "" || fixture.Source == "" || fixture.Provenance == "" {
+				t.Fatal("fixture is missing verification provenance")
+			}
+			kinds, ok := wantKinds[fixture.Provider]
+			if !ok {
+				t.Fatalf("unexpected provider %q", fixture.Provider)
+			}
+			kinds[fixture.Kind] = true
+
+			adapter, err := openai.NewCompatible(fixture.Provider, "https://example.test")
+			if err != nil {
+				t.Fatalf("NewCompatible: %v", err)
+			}
+			var usage providers.Usage
+			var found bool
+			switch fixture.Kind {
+			case "non_stream":
+				usage, found = adapter.UsageFromResponse(fixture.Response)
+			case "stream":
+				usage, found = adapter.UsageFromStreamEvent(fixture.Response)
+			default:
+				t.Fatalf("unknown fixture kind %q", fixture.Kind)
+			}
+			if !found {
+				t.Fatal("adapter did not find usage")
+			}
+			if usage.InputTokens != fixture.Expected.Input ||
+				usage.CachedInputTokens != fixture.Expected.CachedInput ||
+				usage.OutputTokens != fixture.Expected.Output {
+				t.Fatalf("usage = %+v, want input=%d cached=%d output=%d",
+					usage, fixture.Expected.Input, fixture.Expected.CachedInput, fixture.Expected.Output)
+			}
+			if got := adapter.IsUsageOnlyEvent(fixture.Response); got != fixture.Expected.UsageOnly {
+				t.Fatalf("usage-only = %t, want %t", got, fixture.Expected.UsageOnly)
+			}
+		})
+	}
+	for provider, kinds := range wantKinds {
+		if !kinds["non_stream"] || !kinds["stream"] {
+			t.Errorf("%s fixture coverage = %v, want streaming and non-streaming", provider, kinds)
+		}
 	}
 }
 
