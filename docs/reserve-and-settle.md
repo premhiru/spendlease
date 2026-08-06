@@ -7,7 +7,9 @@ calculated token charge.
 
 Reservations use the active price book. Enforce mode refuses request shapes
 with charges outside that model, including media, batches and provider-hosted
-tool fees. Observe mode may forward them as explicitly unmetered traffic; see
+tool fees. It also refuses explicit processing tiers or routing options that
+can change token prices. Observe mode may forward them as explicitly unmetered
+traffic; see
 [Price book](pricing-book.md#what-is-not-modeled).
 
 ## The reservation
@@ -72,6 +74,10 @@ If a request cannot be inspected or has an unsupported billing dimension,
 enforce mode returns `422 spend_not_enforceable` before egress. Observe mode
 forwards it without a reservation or ledger charge, logs the reason, and sets
 `X-Spendlease-Accounting: unmetered` on the response.
+
+For the accepted standard-rate modifier values and the boundary around
+account-level vendor defaults, see [Request pricing
+modifiers](pricing-book.md#request-pricing-modifiers).
 
 Example:
 

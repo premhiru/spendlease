@@ -21,6 +21,11 @@ the same version; Python prerelease spelling follows PEP 440.
   ceiling. `--enforcement-policy=best-effort` explicitly restores fallback
   model prices and price-book output defaults, and the dashboard names the
   running policy.
+- Explicit premium or ambiguous request pricing modifiers now fail closed
+  before egress. This covers OpenAI-compatible `service_tier` values and
+  Anthropic fast mode, service tiers, and US inference routing. Observe mode
+  forwards these requests as unmetered traffic without a misleading ledger
+  charge.
 
 ## [0.2.0-beta.1] - 2026-08-05
 

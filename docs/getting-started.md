@@ -272,8 +272,11 @@ the estimate.
 
 Strict enforcement could not establish a trustworthy upper bound. Check that
 the model appears in the active price book and set the endpoint's explicit
-output-token limit. Use `--enforcement-policy=best-effort` only when a fallback
-estimate is acceptable.
+output-token limit. Also remove premium processing options or select a reviewed
+standard-rate value from [Request pricing
+modifiers](pricing-book.md#request-pricing-modifiers). Use
+`--enforcement-policy=best-effort` only when a model or output-limit fallback
+estimate is acceptable; it does not allow unpriced billing modifiers.
 
 ### `503 provider_credential_missing`
 

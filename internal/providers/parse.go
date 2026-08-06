@@ -2,6 +2,7 @@ package providers
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 // RequestInfo is what the gateway needs to know about a request before it is
@@ -229,6 +230,27 @@ func UnsupportedBillingFeature(m map[string]any) string {
 		}
 	}
 	return ""
+}
+
+// UnsupportedBillingModifier rejects an explicit request modifier unless its
+// value is known to use the ordinary token rates represented by the price
+// book. An omitted or null modifier leaves the provider's account-level
+// default in place; spendlease cannot inspect that external configuration.
+func UnsupportedBillingModifier(m map[string]any, field string, ordinaryValues ...string) string {
+	raw, present := m[field]
+	if !present || raw == nil {
+		return ""
+	}
+	value, ok := raw.(string)
+	if ok {
+		for _, ordinary := range ordinaryValues {
+			if value == ordinary {
+				return ""
+			}
+		}
+		return fmt.Sprintf("%s %q can select provider pricing outside the token price book", field, value)
+	}
+	return fmt.Sprintf("%s has an unreviewed value that may select provider pricing outside the token price book", field)
 }
 
 func containsTypeValue(v any, types map[string]bool) bool {

@@ -131,16 +131,47 @@ by reported usage when the request finishes. When settlement has no usage,
 the marked estimate still uses the documented `chars/4` heuristic. See
 [ADR-0008](adr/0008-token-estimation.md).
 
+## Request pricing modifiers
+
+The gateway inspects request fields that can select a different processing
+rate. In enforce mode, it accepts an omitted or null modifier and these
+reviewed standard-rate values:
+
+| Provider shape | Field | Accepted explicit value |
+|---|---|---|
+| OpenAI-compatible | `service_tier` | `default` |
+| Gemini OpenAI compatibility | `service_tier` | `default`, `standard` |
+| Anthropic | `service_tier` | `standard_only` |
+| Anthropic | `speed` | `standard` |
+| Anthropic | `inference_geo` | `global` |
+
+Any other explicit value, including `auto`, `priority`, `flex`, `fast`, or
+`us`, returns `422 spend_not_enforceable` before egress. Observe mode forwards
+the request as unmetered and writes no ledger entry. The guard follows the
+vendors' current documentation for [OpenAI service
+tiers](https://platform.openai.com/docs/api-reference/responses/create#responses-create-service_tier),
+[xAI priority processing](https://docs.x.ai/developers/advanced-api-usage/priority-processing),
+[Gemini processing options](https://ai.google.dev/gemini-api/docs/optimization),
+and [Anthropic service tiers, fast mode, and regional
+pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+
+Omission cannot prove that an account or project uses standard pricing: vendor
+defaults and private contracts live outside the request. Validate those
+settings against the vendor console before enabling enforcement. See
+[ADR-0027](adr/0027-explicit-pricing-modifiers-fail-closed.md).
+
 ## What is not modeled
 
-- Batch, flex, fast, priority, and regional processing rates.
+- Account- or project-level processing defaults, negotiated rates, and custom
+  regional endpoints.
+- Batch processing rates.
 - Persistent cache-storage charges.
 - Tool, search, container, and grounding charges billed per call.
 - Image, audio, video, and other media-specific rates.
 - Non-token services such as search APIs, scrapers, and data APIs.
 
-Known unsupported endpoints and request features are rejected in enforce mode
-with `422 spend_not_enforceable`. Observe mode forwards them, marks the
+Known unsupported endpoints and explicit pricing modifiers are rejected in
+enforce mode with `422 spend_not_enforceable`. Observe mode forwards them, marks the
 response `X-Spendlease-Accounting: unmetered`, and does not create a misleading
 token ledger entry. A normalized vendor statement may still name those units
 for [reconciliation](reconciliation.md); making a unit visible after the fact

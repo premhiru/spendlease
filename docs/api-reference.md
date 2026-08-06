@@ -68,10 +68,12 @@ and hash-chained.
 
 The cost is exact for the price-book rate and token counts used in the
 calculation. Reported cache usage and documented long-context tiers are
-included. It may not equal the complete vendor charge because batch, speed,
-regional, cache-storage, tool, media, and other non-token charges are not
-modeled. The `estimated` field identifies missing token usage or an unknown
-model; it does not flag every unmodeled billing dimension. See
+included. Explicit premium processing modifiers are rejected rather than
+priced at the standard rate. The ledger may still differ from the complete
+vendor charge because account defaults, negotiated rates, batch,
+cache-storage, tool, media, and other non-token charges are not modeled. The
+`estimated` field identifies missing token usage or an unknown model; it does
+not flag every unmodeled billing dimension. See
 [Price book](pricing-book.md#what-is-not-modeled).
 
 **Failed requests are not charged.** A non-2xx from the vendor produces no entry, because vendors do not bill for failures.
@@ -99,6 +101,7 @@ do not produce a misleading token ledger entry.
 | Embeddings | Input token reservation only |
 | Model listing and Anthropic token counting | No-spend route; no reservation |
 | Unknown model or missing output limit | Rejected by strict enforcement; estimated in observe or best-effort policy |
+| Premium or ambiguous request processing tier | Rejected in enforce mode; explicitly unmetered in observe mode |
 | Images, audio, media inputs, message batches, provider-hosted tools, unknown explicit-prefix routes | Rejected in enforce mode; explicitly unmetered in observe mode |
 
 The inspected request-body limit is 8 MiB. Larger bodies remain pass-through

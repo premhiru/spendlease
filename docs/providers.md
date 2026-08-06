@@ -8,8 +8,9 @@ Provider routing and billing certification are separate. The gateway can pass
 through more routes than it can safely price. Strict enforcement supports
 ordinary text generation and embeddings with known models and explicit output
 limits, permits reviewed no-spend routes, and blocks media, batches,
-provider-hosted tools, and unknown billing shapes. Observe mode forwards
-unsupported traffic with `X-Spendlease-Accounting: unmetered`.
+provider-hosted tools, explicit premium processing options, and unknown billing
+shapes. Observe mode forwards unsupported traffic with
+`X-Spendlease-Accounting: unmetered`.
 
 | Provider | Status | Credential name | Application base URL | Default upstream |
 |---|---|---|---|---|
@@ -77,13 +78,14 @@ providers. It prices ordinary input, reported cache hits, reported cache
 writes, output, and documented long-context tiers when the response exposes
 the required token counts.
 
-It does not try to reproduce every invoice line. Batch, flex, fast, priority,
-regional, cache-storage, tool, image, audio, grounding, and other non-token
-charges remain outside the budget calculation. Known unsupported shapes are
-refused before egress in enforce mode rather than being assigned a misleading
-token cost. Start a new workload in observe mode and compare its ledger entries
-with the provider console before turning on enforcement. See [Price
-book](pricing-book.md) for the exact fields and source links.
+It does not try to reproduce every invoice line. Explicit `service_tier`
+values other than reviewed standard-rate values are refused before egress in
+enforce mode. Anthropic fast mode and US inference routing are handled the same
+way. Account-level defaults, negotiated rates, batch pricing, cache storage,
+tool, image, audio, grounding, and other non-token charges remain outside the
+budget calculation. Start a new workload in observe mode and compare its
+ledger entries with the provider console before turning on enforcement. See
+[Price book](pricing-book.md) for the exact fields and source links.
 
 ## Override an upstream
 
