@@ -1,8 +1,9 @@
-# OpenAI standard synchronous text-token prices checked 2026-07-31.
+# OpenAI standard synchronous text-token prices checked 2026-08-06.
 # Cache writes are reported separately only by the GPT-5.6 family. Long-context
 # pricing applies to the whole request once input reaches 272,001 tokens.
 version: 2
 effective: 2026-07-31
+verified: 2026-08-06
 providers:
   openai:
     source: https://developers.openai.com/api/docs/pricing

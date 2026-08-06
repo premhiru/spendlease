@@ -4,8 +4,8 @@ The SDKs validate an `sll_` lease token, normalize the gateway URL, and build
 configuration for the official vendor clients. They do not wrap model APIs,
 retry requests, or add framework integrations.
 
-The current beta packages are Python `0.2.0b1` and TypeScript
-`0.2.0-beta.1`. Both are published through trusted publishing and are also
+The current beta packages are Python `0.2.0b2` and TypeScript
+`0.2.0-beta.2`. Both are published through trusted publishing and are also
 attached to the matching GitHub release.
 
 Set the lease issued by `spendlease keys lease issue` before running an
@@ -28,7 +28,7 @@ $env:SPENDLEASE_URL = "http://localhost:4000"
 Install the pinned beta from PyPI:
 
 ```bash
-python -m pip install 'spendlease==0.2.0b1' openai
+python -m pip install 'spendlease==0.2.0b2' openai
 # From a source checkout instead:
 python -m pip install ./sdk/python openai
 ```
@@ -51,7 +51,7 @@ openai = OpenAI(**lease.openai_kwargs())
 Install the pinned beta from npm:
 
 ```bash
-npm install @spendlease/sdk@0.2.0-beta.1 openai
+npm install @spendlease/sdk@0.2.0-beta.2 openai
 # From a source checkout instead:
 npm install ./sdk/typescript openai
 ```

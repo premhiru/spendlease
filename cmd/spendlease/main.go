@@ -7,6 +7,7 @@
 //	demo      run a simulated agent fleet against a mock provider
 //	keys      manage principals, runs and leases
 //	ledger    verify, export, or reconcile the append-only spend ledger
+//	pricing   inspect and verify the embedded price book
 //	version   print version information
 //
 // Run "spendlease <command> -h" for the flags of an individual command.
@@ -62,6 +63,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = runKeys(rest, stdout, stderr)
 	case "ledger":
 		err = runLedger(rest, stdout, stderr)
+	case "pricing":
+		err = runPricing(rest, stdout, stderr)
 	case "version":
 		err = runVersion(rest, stdout)
 	case "help", "-h", "--help":
@@ -99,6 +102,7 @@ Commands:
   demo      Run a simulated agent fleet against a mock provider
   keys      Manage principals, operators, credentials, runs, leases, and revocation
   ledger    Verify, export, or reconcile the append-only spend ledger
+  pricing   List, inspect, or verify price-book entries
   version   Print version information
 
 Getting started:

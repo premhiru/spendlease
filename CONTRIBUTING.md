@@ -55,6 +55,7 @@ The price book lives in [`/pricing`](pricing/) as plain YAML:
 ```yaml
 version: 1
 effective: 2026-07-01
+verified: 2026-08-06
 providers:
   openai:
     source: https://developers.openai.com/api/docs/pricing
@@ -65,7 +66,7 @@ providers:
         default_max_tokens: 4096
 ```
 
-`source` is required: a price without a link to the vendor's pricing page cannot be reviewed. `default_max_tokens` is the output ceiling assumed when a request does not specify one — a *reservation* default, not the model's output limit.
+`source` is required: a price without a link to the vendor's pricing page cannot be reviewed. `verified` records when every entry in that file was last compared with the source. `default_max_tokens` is the output ceiling assumed when a request does not specify one — a *reservation* default, not the model's output limit.
 
 To submit an update:
 
@@ -75,8 +76,9 @@ To submit an update:
    an older effective price.
 2. Set `effective` to the date the price actually takes effect, not today's
    date. A future-dated file is ignored until that date.
-3. Link the vendor's public pricing page in the PR description.
-4. Run `make test`.
+3. Set `verified` to the date you checked every entry in the new file.
+4. Link the vendor's public pricing page in the PR description.
+5. Run `spendlease pricing verify` and `make test`.
 
 The test suite validates the shipped price book, so a mistake fails CI rather than reaching an invoice. It catches a missing `source`, an absent or non-positive `default_max_tokens`, a rate that is not a number, output priced below input, and prices large enough to suggest a units error — such as a per-thousand-token price entered into a per-million field.
 

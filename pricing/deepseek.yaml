@@ -1,6 +1,7 @@
-# DeepSeek standard text-token prices checked 2026-07-31.
+# DeepSeek standard text-token prices checked 2026-08-06.
 version: 2
 effective: 2026-07-31
+verified: 2026-08-06
 providers:
   deepseek:
     source: https://api-docs.deepseek.com/quick_start/pricing

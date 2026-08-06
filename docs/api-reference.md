@@ -3,9 +3,9 @@
 The HTTP surface as it exists today.
 
 > [!NOTE]
-> Pre-v1. This page documents current `main`, including the unreleased strict
-> enforcement policy. The tagged `v0.2.0-beta.1` release uses the behavior now
-> named `best-effort`. The operator API is versioned under `/api/v1`; breaking
+> Pre-v1. This page documents `v0.2.0-beta.2` and current `main`. Strict
+> enforcement is the default; best-effort estimates require an explicit
+> server option. The operator API is versioned under `/api/v1`; breaking
 > changes will use a new path.
 
 ## Authentication

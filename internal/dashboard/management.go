@@ -75,6 +75,7 @@ type createdAgentView struct {
 	Token       string
 	ExpiresAt   string
 	Endpoints   []providerStatus
+	Examples    []providerExample
 }
 
 type agentAccessView struct {
@@ -110,6 +111,7 @@ type issuedLeaseView struct {
 	RunID     string
 	ExpiresAt string
 	Endpoints []providerStatus
+	Examples  []providerExample
 }
 
 func (d *Dashboard) managementRoutes(mux *http.ServeMux) {
@@ -263,6 +265,7 @@ func (d *Dashboard) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	d.renderManagement(w, "onboarding-result", createdAgentView{
 		Name: name, PrincipalID: principal.ID, RunID: run.ID, Mode: mode, Budget: budget.String(),
 		Token: token, ExpiresAt: lease.ExpiresAt.Format("2 Jan 2006 15:04 UTC"), Endpoints: d.endpointStatuses(r, providers),
+		Examples: d.providerExamples(r, providers, token, "created-"+run.ID),
 	}, http.StatusCreated)
 }
 
@@ -418,6 +421,7 @@ func (d *Dashboard) handleIssueLease(w http.ResponseWriter, r *http.Request) {
 	}
 	v.Issued = &issuedLeaseView{
 		Token: token, RunID: run.ID, ExpiresAt: lease.ExpiresAt.Format("2 Jan 2006 15:04 UTC"), Endpoints: d.endpointStatuses(r, providers),
+		Examples: d.providerExamples(r, providers, token, "issued-"+lease.ID),
 	}
 	d.renderManagement(w, "agent-access", v, http.StatusCreated)
 }

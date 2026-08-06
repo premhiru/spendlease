@@ -172,6 +172,34 @@ spendlease keys master rotate --confirm [--store PATH_OR_DSN]
 Rotation refuses to run without `--confirm` and a configured previous key. See
 [Self-hosting](self-hosting.md#rotate-the-master-key) for the staged procedure.
 
+## Pricing
+
+List the canonical active price entries, optionally for one provider or as
+structured JSON:
+
+```bash
+spendlease pricing list [--provider NAME] [--at YYYY-MM-DD] [--json] [--pricing DIR]
+```
+
+Inspect the full rate and provenance record for one model:
+
+```bash
+spendlease pricing show [--at YYYY-MM-DD] [--json] PROVIDER/MODEL
+```
+
+Validate every YAML file and require current vendor-review evidence for all
+active entries:
+
+```bash
+spendlease pricing verify [--max-age 45d] [--at YYYY-MM-DD] [--json] [--pricing DIR]
+```
+
+`--at` resolves scheduled rates and freshness on a UTC calendar date. The
+default is today. `verify` exits non-zero for malformed price data, missing
+`verified` dates, or entries older than `--max-age`; it does not contact vendor
+sites. The default 45-day threshold matches the dashboard and scheduled
+repository check.
+
 ## Ledger
 
 Verify the complete append-only hash chain:

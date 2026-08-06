@@ -6,7 +6,7 @@ spendlease admin surface. The package does not wrap model APIs.
 Install the pinned beta from npm, or use a source checkout:
 
 ```bash
-npm install @spendlease/sdk@0.2.0-beta.1
+npm install @spendlease/sdk@0.2.0-beta.2
 # From a checkout instead:
 npm install ./sdk/typescript openai
 ```

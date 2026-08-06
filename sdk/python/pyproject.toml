@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spendlease"
-version = "0.2.0b1"
+version = "0.2.0b2"
 description = "Thin Python helpers for the spendlease spend authorization gateway"
 readme = "README.md"
 requires-python = ">=3.9"

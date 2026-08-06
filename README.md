@@ -20,21 +20,21 @@ notices the vendor bill.
 ## Quickstart
 
 > [!NOTE]
-> `spendlease` is pre-v1. `v0.2.0-beta.1` is the current beta and is intended
+> `spendlease` is pre-v1. `v0.2.0-beta.2` is the current beta and is intended
 > for end-to-end evaluation, not an unqualified production rollout. Pin the
 > versioned container or the digest in the release's `container-image.txt`
 > rather than deploying the mutable `edge` image.
 >
-> Current `main` and `:edge` default to strict enforcement. The tagged
-> `v0.2.0-beta.1` binary predates that change and uses the behavior now named
-> `best-effort`. The next beta will carry the strict default.
+> `v0.2.0-beta.2`, current `main`, and `:edge` default to strict enforcement.
+> Best-effort fallback pricing remains available only through the explicit
+> `--enforcement-policy=best-effort` startup option.
 
 The demo starts a temporary gateway, a mock provider, and three simulated
 agents. It does not need a vendor key and deletes its in-memory state when it
 stops:
 
 ```bash
-docker run --rm -p 4000:4000 ghcr.io/premhiru/spendlease:0.2.0-beta.1 \
+docker run --rm -p 4000:4000 ghcr.io/premhiru/spendlease:0.2.0-beta.2 \
   demo --target http://0.0.0.0:4000
 ```
 
@@ -42,6 +42,8 @@ It launches a mock provider and three leased agents, including a runaway retry
 loop. Visit the printed dashboard URL to watch spend accumulate, the budget
 block requests, and the kill switch revoke the loop's lease. The demo uses an
 in-memory database and removes all state when it exits.
+
+![Add an agent, copy its lease, make a request, and block an over-budget call](docs/assets/onboarding-flow.svg)
 
 To run the demo from source instead:
 
@@ -55,6 +57,11 @@ leases, and the environment variables used by an application. The dashboard
 can create the agent, budget, and one-time lease in one form. The CLI handles
 the same bootstrap for scripts, while the JSON API manages runs and leases
 after an identity exists.
+
+After the dashboard creates or issues a lease, it generates copyable
+environment-variable, Python, JavaScript, and `curl` examples for every
+selected provider. The token and examples are part of the same one-time
+response and disappear on refresh.
 
 ## Integration
 
@@ -84,9 +91,9 @@ const client = new OpenAI(Lease.fromEnv().openAIOptions());
 ```
 
 The beta SDK packages are available from the public registries and attached to
-the matching [GitHub release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1).
-Install `spendlease==0.2.0b1` from PyPI or
-`@spendlease/sdk@0.2.0-beta.1` from npm.
+the matching [GitHub release](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.2).
+Install `spendlease==0.2.0b2` from PyPI or
+`@spendlease/sdk@0.2.0-beta.2` from npm.
 You can also configure the vendor SDK directly:
 
 ```python
@@ -228,6 +235,7 @@ actually loaded rather than relying on a model count.
 ```yaml
 version: 2
 effective: 2026-07-31
+verified: 2026-08-06
 providers:
   deepseek:
     models:
@@ -243,7 +251,12 @@ before egress. Observe and explicitly enabled best-effort enforcement apply a
 fallback rate, log a warning, and mark the ledger entry `estimated: true`.
 
 Vendor prices change often. Price book updates are plain YAML and are a useful
-first contribution; see [CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
+first contribution. Inspect the embedded snapshot with `spendlease pricing
+list`, inspect one entry with `spendlease pricing show PROVIDER/MODEL`, and
+check its 45-day review window with `spendlease pricing verify`. The dashboard
+warns when active pricing evidence becomes stale, and a weekly workflow opens
+one tracking issue if maintainers do not refresh it. See
+[CONTRIBUTING](CONTRIBUTING.md#price-book-updates).
 
 ## Documentation
 
@@ -280,7 +293,7 @@ zero-configuration default. Multi-tenancy and the remaining production-roadmap
 items are not implemented yet.
 
 The project is still pre-v1. The current beta is
-[`v0.2.0-beta.1`](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.1).
+[`v0.2.0-beta.2`](https://github.com/premhiru/spendlease/releases/tag/v0.2.0-beta.2).
 It includes platform binaries, a digest-pinned multi-architecture container,
 Python and npm packages, checksums, SPDX SBOMs, and signed provenance. The
 mutable `edge` container continues to track `main`; every build also publishes

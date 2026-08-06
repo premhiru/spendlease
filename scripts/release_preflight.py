@@ -27,7 +27,7 @@ def release_tag(python_version: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", help="tag being released, such as v0.2.0-beta.1")
+    parser.add_argument("--tag", help="tag being released, such as v0.2.0-beta.2")
     args = parser.parse_args()
 
     pyproject = tomllib.loads((ROOT / "sdk/python/pyproject.toml").read_text(encoding="utf-8"))

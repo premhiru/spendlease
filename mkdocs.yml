@@ -95,3 +95,5 @@ nav:
       - 26. Strict enforcement requires request bounds: adr/0026-strict-enforcement-requires-request-bounds.md
       - 27. Explicit pricing modifiers fail closed: adr/0027-explicit-pricing-modifiers-fail-closed.md
       - 28. Provider certification is evidence-based: adr/0028-provider-certification-is-evidence-based.md
+      - 29. Pricing freshness is explicit evidence: adr/0029-pricing-freshness-is-explicit-evidence.md
+      - 30. One-time leases include runnable examples: adr/0030-one-time-leases-include-runnable-examples.md

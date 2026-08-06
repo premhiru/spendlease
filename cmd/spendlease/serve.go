@@ -230,9 +230,12 @@ func runServe(args []string, stdout, stderr io.Writer) error {
 		Store: st, Logger: logger, Version: version,
 		PricingRevision: pricingMetadata.Revision, PricingEffective: pricingMetadata.LatestEffective,
 		PricingLoadedAt: pricingMetadata.LoadedAt, PricingProviders: pricingMetadata.Providers,
-		PricingModels: pricingMetadata.Models, EnforcementPolicy: string(enforcementPolicy),
-		Warning: operatorDashboardWarning(*addr, activeOperators, adminToken),
-		Guard:   guard, Revoker: killSwitch, Manager: st, LeaseRevoker: killSwitch,
+		PricingModels: pricingMetadata.Models, PricingOldestVerified: pricingMetadata.OldestVerified,
+		PricingUnverifiedModels:     pricingMetadata.UnverifiedModels,
+		PricingFutureVerifiedModels: pricingMetadata.FutureVerifiedModels,
+		EnforcementPolicy:           string(enforcementPolicy),
+		Warning:                     operatorDashboardWarning(*addr, activeOperators, adminToken),
+		Guard:                       guard, Revoker: killSwitch, Manager: st, LeaseRevoker: killSwitch,
 		Credentials: v, CredentialStatus: v, Providers: registry.Names(),
 	})
 	if err != nil {

@@ -7,7 +7,7 @@ official OpenAI and Anthropic clients the correct gateway URL and lease token.
 Install the pinned beta from PyPI, or use a source checkout:
 
 ```bash
-python -m pip install 'spendlease==0.2.0b1'
+python -m pip install 'spendlease==0.2.0b2'
 # From a checkout instead:
 python -m pip install ./sdk/python openai
 ```

@@ -1,7 +1,8 @@
-# xAI standard text-token prices checked 2026-07-31. Long-context rates apply
+# xAI standard text-token prices checked 2026-08-06. Long-context rates apply
 # to the whole request at 200,000 prompt tokens.
 version: 2
 effective: 2026-07-31
+verified: 2026-08-06
 providers:
   xai:
     source: https://docs.x.ai/developers/pricing

@@ -1,12 +1,21 @@
-# Upgrade to `v0.2.0-beta.1`
+# Upgrade to `v0.2.0-beta.2`
 
-This release is a forward-only upgrade from `v0.1.0-alpha.1`. It keeps existing
-ledger hashes valid, but it adds database columns and tables that the alpha
-binary does not understand. Do not downgrade an upgraded database.
+This release is a forward-only upgrade from `v0.1.0-alpha.1` or
+`v0.2.0-beta.1`. It keeps existing ledger hashes valid. The alpha-to-beta
+upgrade adds database columns and tables that the alpha binary does not
+understand, so do not point an alpha binary at an upgraded database.
+
+An upgrade from `v0.2.0-beta.1` does not add a database migration. It changes
+the default enforce-mode policy from best-effort to strict: unknown models,
+missing output ceilings, and explicit unsupported pricing tiers are rejected
+before egress. Add an explicit output limit to every enforce-mode request, or
+start temporarily with `--enforcement-policy=best-effort` while correcting the
+client. Run `spendlease pricing verify` after upgrading to confirm the embedded
+price evidence.
 
 ## Before the maintenance window
 
-1. Record the exact alpha image digest or binary checksum.
+1. Record the exact old image digest or binary checksum.
 2. Back up the database and the matching master key separately.
 3. Run `spendlease ledger verify` with the alpha binary and retain the result.
 4. Prepare an explicit master-key source. Production mode no longer creates a
