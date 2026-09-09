@@ -2,7 +2,7 @@
 # CGO is disabled throughout — the SQLite driver is pure Go (modernc.org/sqlite)
 # precisely so this image needs no libc and no build toolchain at runtime.
 
-FROM golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 AS build
+FROM golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS build
 
 ARG VERSION=dev
 ARG COMMIT=none
